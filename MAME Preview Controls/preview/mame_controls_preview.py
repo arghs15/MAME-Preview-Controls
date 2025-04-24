@@ -5052,9 +5052,26 @@ class PreviewWindow(QMainWindow):
             self.save_global_text_settings()
             print("Text settings updated and saved globally")
     
-    # Improved update_text_settings to ensure font size is applied to all controls
     def update_text_settings(self, settings):
         """Update text settings and properly apply to all controls with global saving"""
+        # First, capture the current uppercase state before updating
+        old_uppercase = self.text_settings.get("use_uppercase", False)
+        new_uppercase = settings.get("use_uppercase", old_uppercase)
+        uppercase_changed = old_uppercase != new_uppercase
+        
+        if uppercase_changed:
+            print(f"Uppercase setting changing from {old_uppercase} to {new_uppercase}")
+            
+            # Special handling for first run - ensure we have original case data
+            if not hasattr(self, '_original_case_data'):
+                self._original_case_data = {}
+                # Store original lowercase versions of all control text
+                for control_name, control_data in self.control_labels.items():
+                    if 'action' in control_data:
+                        # Store the lowercase version
+                        self._original_case_data[control_name] = control_data['action'].lower()
+                        print(f"Stored original case for {control_name}: {self._original_case_data[control_name]}")
+        
         # Update local settings with merge
         self.text_settings.update(settings)
         
@@ -5066,8 +5083,13 @@ class PreviewWindow(QMainWindow):
         # Reload and register the font
         self.load_and_register_fonts()
         
-        # Apply to existing controls
-        self.apply_text_settings()
+        # Force immediate recreation of control labels to handle case change correctly
+        if uppercase_changed:
+            # This approach ensures case changes apply immediately, even on first run
+            self.recreate_control_labels_with_case()
+        else:
+            # Normal update for other changes
+            self.apply_text_settings(uppercase_changed=uppercase_changed)
         
         # Save to file
         try:
@@ -5090,9 +5112,65 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
         
         print(f"Text settings updated and applied: {self.text_settings}")
-    
-    # 16. Modify the apply_text_settings method to not update shadows
-    def apply_text_settings(self):
+
+    def recreate_control_labels_with_case(self):
+        """Recreate all control labels with proper case handling"""
+        # Get current settings
+        use_uppercase = self.text_settings.get("use_uppercase", False)
+        
+        # Process each control label
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data and 'action' in control_data:
+                label = control_data['label']
+                
+                # Get the correct case version of the action text
+                if hasattr(self, '_original_case_data') and control_name in self._original_case_data:
+                    # Use the stored original case
+                    original_text = self._original_case_data[control_name]
+                else:
+                    # If no stored original, use current and force lowercase
+                    original_text = control_data['action'].lower()
+                    # Store for future use
+                    if not hasattr(self, '_original_case_data'):
+                        self._original_case_data = {}
+                    self._original_case_data[control_name] = original_text
+                
+                # Apply uppercase if needed
+                if use_uppercase:
+                    action_text = original_text.upper()
+                else:
+                    action_text = original_text
+                
+                # Update the stored action with the proper case
+                control_data['action'] = action_text
+                
+                # Apply to label
+                prefix = control_data.get('prefix', '')
+                if self.text_settings.get("show_button_prefix", True) and prefix:
+                    display_text = f"{prefix}: {action_text}"
+                else:
+                    display_text = action_text
+                
+                # Update the text
+                label.setText(display_text)
+                
+                # Parse text correctly for specialized labels
+                if hasattr(label, 'parse_text'):
+                    try:
+                        label.parse_text(display_text)
+                    except Exception as e:
+                        print(f"Error parsing text for {control_name}: {e}")
+                
+                # Force repaint
+                label.update()
+        
+        # Force a canvas update to ensure all changes are visible
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+            
+        print(f"Recreated all control labels with {'uppercase' if use_uppercase else 'lowercase'} text")
+
+    def apply_text_settings(self, uppercase_changed=False):
         """Apply current text settings to all controls with both font and gradient support"""
         # Import QTimer at the beginning of the method
         from PyQt5.QtCore import QTimer
@@ -5228,9 +5306,6 @@ class PreviewWindow(QMainWindow):
                                 if font_loaded:
                                     break
         
-        # Determine if we need to recreate labels based on gradient settings
-        need_to_recreate = False
-        
         # Now apply the font and settings to ALL controls
         from PyQt5.QtCore import QTimer
         from PyQt5.QtGui import QColor
@@ -5240,18 +5315,25 @@ class PreviewWindow(QMainWindow):
             if 'label' in control_data:
                 label = control_data['label']
                 
-                # Get original action text
+                # Get original action text (store in lowercase)
                 action_text = control_data['action']
+                if uppercase_changed and use_uppercase == False:
+                    # Convert stored action text back to lowercase if needed
+                    # Only do this when toggling from uppercase to lowercase
+                    action_text = action_text.lower()
+                    control_data['action'] = action_text
+                    print(f"Converted '{control_name}' action text to lowercase: {action_text}")
+                
                 prefix = control_data.get('prefix', '')
                 
                 # Apply uppercase if enabled
+                display_text = action_text
                 if use_uppercase:
-                    action_text = action_text.upper()
+                    display_text = action_text.upper()
                 
                 # Create the display text with or without prefix
-                display_text = action_text
                 if show_button_prefix and prefix:
-                    display_text = f"{prefix}: {action_text}"
+                    display_text = f"{prefix}: {display_text}"
                 
                 # Update the text
                 label.setText(display_text)
