@@ -1,0 +1,10 @@
+{
+  "plugin": {
+    "name": "controls",
+    "description": "controls",
+    "version": "0.3",
+    "author": "Custom Plugin",
+    "type": "plugin",
+    "start": "true"
+  }
+}
