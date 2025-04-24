@@ -205,7 +205,13 @@ class PreviewWindow(QMainWindow):
             # Add this line at the end of __init__, just before self.setVisible(True)
             self.enhance_preview_window_init()
             
-            self.setVisible(True)  # Now show the fully prepared window
+            # Make sure we have a transparent background
+            transparent_bg_path = self.initialize_transparent_background()
+            if transparent_bg_path:
+                # Ensure the background is loaded
+                self.load_background_image_fullscreen(force_default=transparent_bg_path)
+            
+            self.setVisible(True)  # Now show the window
 
             print(f"Window size: {self.width()}x{self.height()}")
             print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
@@ -3355,9 +3361,8 @@ class PreviewWindow(QMainWindow):
         self.button_layout.addLayout(self.top_row)
         self.button_layout.addLayout(self.bottom_row)
     
-    # 8. Modify the save_image method to remove shadow rendering
     def save_image(self):
-        """Enhanced save_image method without shadow rendering"""
+        """Enhanced save_image method that preserves transparency"""
         try:
             # Create the images directory if it doesn't exist
             images_dir = os.path.join(self.preview_dir, "images")
@@ -3378,13 +3383,15 @@ class PreviewWindow(QMainWindow):
                     return False
             
             # Create a new image with the same size as the canvas
+            # Use QImage with Format_ARGB32 to support transparency
+            from PyQt5.QtGui import QImage
             image = QImage(
                 self.canvas.width(),
                 self.canvas.height(),
                 QImage.Format_ARGB32
             )
-            # Fill with black background
-            image.fill(Qt.black)
+            # Fill with transparent background instead of black
+            image.fill(Qt.transparent)
             
             # Create painter for the image
             painter = QPainter(image)
@@ -3392,16 +3399,22 @@ class PreviewWindow(QMainWindow):
             painter.setRenderHint(QPainter.TextAntialiasing)
             painter.setRenderHint(QPainter.SmoothPixmapTransform)
             
-            # Draw the background image
+            # Draw the background image if it's not the default transparent one
             if hasattr(self, 'background_pixmap') and self.background_pixmap and not self.background_pixmap.isNull():
-                bg_pixmap = self.background_pixmap
-                
-                # Calculate position to center the pixmap
-                x = (self.canvas.width() - bg_pixmap.width()) // 2
-                y = (self.canvas.height() - bg_pixmap.height()) // 2
-                
-                # Draw the pixmap
-                painter.drawPixmap(x, y, bg_pixmap)
+                # Check if this is the default transparent background
+                if hasattr(self, 'original_background_pixmap') and self.original_background_pixmap:
+                    bg_path = self.original_background_pixmap.cacheKey()
+                    default_path = os.path.join(self.preview_dir, "images", "default.png")
+                    
+                    # If it's not the default transparent background, draw it
+                    bg_pixmap = self.background_pixmap
+                    
+                    # Calculate position to center the pixmap
+                    x = (self.canvas.width() - bg_pixmap.width()) // 2
+                    y = (self.canvas.height() - bg_pixmap.height()) // 2
+                    
+                    # Draw the pixmap
+                    painter.drawPixmap(x, y, bg_pixmap)
             
             # Draw the bezel if it's visible
             if hasattr(self, 'bezel_visible') and self.bezel_visible and hasattr(self, 'bezel_pixmap') and not self.bezel_pixmap.isNull():
@@ -3558,7 +3571,7 @@ class PreviewWindow(QMainWindow):
             # End painting
             painter.end()
             
-            # Save the image
+            # Save the image as PNG to preserve transparency
             if image.save(output_path, "PNG"):
                 print(f"Image saved successfully to {output_path}")
                 QMessageBox.information(
@@ -3586,7 +3599,7 @@ class PreviewWindow(QMainWindow):
                 f"Failed to save image: {str(e)}"
             )
             return False
-    
+
     def handle_key_press(self, event):
         """Handle key press events"""
         if event.key() == Qt.Key_Escape:
@@ -3699,77 +3712,85 @@ class PreviewWindow(QMainWindow):
         
         print("All controls raised above bezel")
 
-    def load_background_image_fullscreen(self):
+    def initialize_transparent_background(self):
+        """Create and ensure a blank transparent background exists before displaying preview"""
+        try:
+            # Use absolute paths to ensure correct location
+            images_dir = os.path.abspath(os.path.join(self.preview_dir, "images"))
+            os.makedirs(images_dir, exist_ok=True)
+            
+            default_path = os.path.join(images_dir, "default.png")
+            print(f"Checking for default background at: {default_path}")
+            
+            # Create the transparent image if it doesn't exist
+            if not os.path.exists(default_path):
+                print("Creating new transparent background image...")
+                
+                # Create a transparent image at 1920x1080 resolution
+                from PyQt5.QtGui import QImage
+                default_image = QImage(1920, 1080, QImage.Format_ARGB32)
+                default_image.fill(Qt.transparent)  # Completely transparent
+                
+                # Save the image
+                try:
+                    success = default_image.save(default_path, "PNG")
+                    if success:
+                        print(f"Successfully created transparent background at: {default_path}")
+                    else:
+                        print(f"Failed to save transparent background to {default_path}")
+                except Exception as e:
+                    print(f"Exception while saving transparent background: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"Transparent background already exists at: {default_path}")
+            
+            return default_path
+        except Exception as e:
+            print(f"Error creating transparent background: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    # You'll also need to modify the load_background_image_fullscreen method to accept a forced default:
+    def load_background_image_fullscreen(self, force_default=None):
         """Load the background image for the game with improved path handling"""
         try:
-            # First check for game-specific image in preview directory
-            possible_paths = [
-                # First look in preview/images directory
-                os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
-                os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
-                
-                # Then check in preview root
-                os.path.join(self.preview_dir, f"{self.rom_name}.png"),
-                os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
-                
-                # Default images
-                os.path.join(self.preview_dir, "images", "default.png"),
-                os.path.join(self.preview_dir, "images", "default.jpg"),
-                os.path.join(self.preview_dir, "default.png"),
-                os.path.join(self.preview_dir, "default.jpg"),
-            ]
-            
-            # Find the first existing image path
             image_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    image_path = path
-                    print(f"Found background image: {image_path}")
-                    break
             
-            # No existing image found, create default.png
-            if not image_path:
-                print("No existing background image found, creating default.png")
+            # If force_default is provided, use it directly
+            if force_default and os.path.exists(force_default):
+                image_path = force_default
+                print(f"Using forced default background: {image_path}")
+            else:
+                # First check for game-specific image in preview directory
+                possible_paths = [
+                    # First look in preview/images directory
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
+                    
+                    # Then check in preview root
+                    os.path.join(self.preview_dir, f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
+                    
+                    # Default images
+                    os.path.join(self.preview_dir, "images", "default.png"),
+                    os.path.join(self.preview_dir, "images", "default.jpg"),
+                    os.path.join(self.preview_dir, "default.png"),
+                    os.path.join(self.preview_dir, "default.jpg"),
+                ]
                 
-                # Ensure images directory exists
-                images_dir = os.path.join(self.preview_dir, "images")
-                os.makedirs(images_dir, exist_ok=True)
+                # Find the first existing image path
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        image_path = path
+                        print(f"Found background image: {image_path}")
+                        break
                 
-                # Create a default image using QPainter
-                default_path = os.path.join(images_dir, "default.png")
-                default_pixmap = QPixmap(1280, 720)
-                default_pixmap.fill(Qt.black)
-                
-                # Paint default text
-                painter = QPainter(default_pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setRenderHint(QPainter.TextAntialiasing, True)
-                
-                # Draw text
-                font = QFont("Arial", 32, QFont.Bold)
-                painter.setFont(font)
-                painter.setPen(Qt.white)
-                painter.drawText(default_pixmap.rect(), Qt.AlignCenter, "MAME Controls Preview")
-                
-                # Draw instructions
-                font.setPointSize(24)
-                font.setBold(False)
-                painter.setFont(font)
-                painter.setPen(QColor(180, 180, 180))
-                painter.drawText(QRect(0, 300, 1280, 100), Qt.AlignCenter, 
-                                "Place game screenshots in preview/images folder")
-                painter.drawText(QRect(0, 350, 1280, 100), Qt.AlignCenter, 
-                                "named after the ROM (e.g., pacman.png)")
-                
-                painter.end()
-                
-                # Save the default image
-                if default_pixmap.save(default_path, "PNG"):
-                    print(f"Created default background image at: {default_path}")
-                    image_path = default_path
-                else:
-                    print(f"Failed to save default background image")
-            
+                # If no image found, use initialize_transparent_background to create one
+                if not image_path:
+                    image_path = self.initialize_transparent_background()
+                    
             # Set background image if found or created
             if image_path:
                 # Create background label with image
@@ -3824,62 +3845,11 @@ class PreviewWindow(QMainWindow):
                 # Update when window resizes
                 self.canvas.resizeEvent = self.on_canvas_resize_with_background
             else:
-                # Fallback to a plain black background
-                print("Could not create or find a background image")
+                # Fallback to a transparent background
+                print("Could not create or find a background image, using transparent background")
                 self.bg_label = QLabel(self.canvas)
-                self.bg_label.setStyleSheet("background-color: black;")
+                self.bg_label.setStyleSheet("background-color: transparent;")
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
-                
-                # Try to create and save a default image for future use
-                try:
-                    # Create directories if they don't exist
-                    os.makedirs(os.path.join(self.preview_dir, "images"), exist_ok=True)
-                    
-                    # Create a default image using QPainter
-                    default_pixmap = QPixmap(1280, 720)
-                    default_pixmap.fill(Qt.black)
-                    
-                    # Paint default text
-                    painter = QPainter(default_pixmap)
-                    painter.setRenderHint(QPainter.Antialiasing, True)
-                    painter.setRenderHint(QPainter.TextAntialiasing, True)
-                    
-                    # Draw text
-                    font = QFont("Arial", 32, QFont.Bold)
-                    painter.setFont(font)
-                    painter.setPen(Qt.white)
-                    painter.drawText(default_pixmap.rect(), Qt.AlignCenter, "MAME Controls Preview")
-                    
-                    # Draw instructions
-                    font.setPointSize(24)
-                    font.setBold(False)
-                    painter.setFont(font)
-                    painter.setPen(QColor(180, 180, 180))
-                    painter.drawText(QRect(0, 300, 1280, 100), Qt.AlignCenter, 
-                                    "Place game screenshots in preview/images folder")
-                    painter.drawText(QRect(0, 350, 1280, 100), Qt.AlignCenter, 
-                                    "named after the ROM (e.g., pacman.png)")
-                    
-                    painter.end()
-                    
-                    # Save the default image
-                    default_path = os.path.join(self.preview_dir, "images", "default.png")
-                    if default_pixmap.save(default_path, "PNG"):
-                        print(f"Created default background image at: {default_path}")
-                        
-                        # Use this image as the background
-                        self.bg_label.setPixmap(default_pixmap)
-                        self.bg_label.setGeometry(0, 0, default_pixmap.width(), default_pixmap.height())
-                        
-                        # Store pixmaps for later use
-                        self.original_background_pixmap = default_pixmap
-                        self.background_pixmap = default_pixmap
-                        
-                        # Store position info
-                        self.bg_pos = (0, 0)
-                        self.bg_size = (default_pixmap.width(), default_pixmap.height())
-                except Exception as e:
-                    print(f"Error creating default background: {e}")
         except Exception as e:
             print(f"Error loading background image: {e}")
             import traceback
@@ -3894,10 +3864,6 @@ class PreviewWindow(QMainWindow):
                 self.bg_label.setStyleSheet("color: red; font-size: 18px;")
                 self.bg_label.setAlignment(Qt.AlignCenter)
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
-
-
-    # Replace the on_canvas_resize_with_background method
-    # 1. First, let's enhance the update_logo_display method to properly handle centering
 
     def update_logo_display(self):
         """Update the logo display based on current settings with improved centering"""
