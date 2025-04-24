@@ -1,0 +1,5 @@
+{
+    "max_age_days": 7,
+    "max_files": 100,
+    "auto_cleanup_enabled": true
+}
