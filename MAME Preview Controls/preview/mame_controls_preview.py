@@ -3853,29 +3853,6 @@ class PreviewWindow(QMainWindow):
                 default_pixmap = QPixmap(1280, 720)
                 default_pixmap.fill(Qt.black)
                 
-                # Paint default text
-                painter = QPainter(default_pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setRenderHint(QPainter.TextAntialiasing, True)
-                
-                # Draw text
-                font = QFont("Arial", 32, QFont.Bold)
-                painter.setFont(font)
-                painter.setPen(Qt.white)
-                painter.drawText(default_pixmap.rect(), Qt.AlignCenter, "MAME Controls Preview")
-                
-                # Draw instructions
-                font.setPointSize(24)
-                font.setBold(False)
-                painter.setFont(font)
-                painter.setPen(QColor(180, 180, 180))
-                painter.drawText(QRect(0, 300, 1280, 100), Qt.AlignCenter, 
-                                "Place game screenshots in preview/images folder")
-                painter.drawText(QRect(0, 350, 1280, 100), Qt.AlignCenter, 
-                                "named after the ROM (e.g., pacman.png)")
-                
-                painter.end()
-                
                 # Save the default image
                 if default_pixmap.save(default_path, "PNG"):
                     print(f"Created default background image at: {default_path}")
