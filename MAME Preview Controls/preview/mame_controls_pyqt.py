@@ -1301,6 +1301,7 @@ class MAMEControlConfig(QMainWindow):
                 conn.close()
             return None
     
+    # 4. Update the show_preview_standalone method to use enhanced data loading:
     def show_preview_standalone(self, rom_name, auto_close=False, clean_mode=False):
         """Show the preview for a specific ROM without running the main app, with optimized cache prioritization"""
         print(f"Starting standalone preview for ROM: {rom_name}")
@@ -1331,7 +1332,7 @@ class MAMEControlConfig(QMainWindow):
         # Set the current game
         self.current_game = rom_name
         
-        # Check for cached data first
+        # Check for cached data first - but apply defaults to any unnamed controls
         game_data = None
         if os.path.exists(cache_file):
             try:
@@ -1341,9 +1342,7 @@ class MAMEControlConfig(QMainWindow):
                 
                 # Only use cache if it's recent (less than 1 hour old)
                 if cache_age < 3600:
-                    import json
-                    with open(cache_file, 'r') as f:
-                        game_data = json.load(f)
+                    game_data = self.load_game_data_from_cache(rom_name)
                     
                     if game_data:
                         print(f"Using cached game data for {rom_name}")
@@ -1395,7 +1394,7 @@ class MAMEControlConfig(QMainWindow):
                     # The original database method implementation remains unchanged
                     pass
             
-            # Load game data using the unified getter
+            # Load game data using the unified getter with defaults
             data_load_start = time.time()
             game_data = self.get_unified_game_data(rom_name)
             data_load_time = time.time() - data_load_start
@@ -3187,6 +3186,89 @@ class MAMEControlConfig(QMainWindow):
             
             # Add to the list
             self.game_list.append(f"{prefix}{display_name}")
+    
+    # 1. Add this helper function to the PyQt version to apply default values to controls:
+    def apply_default_control_names(self, game_data):
+        """Apply default control names for any unnamed controls in the game data"""
+        if not game_data or 'players' not in game_data:
+            return game_data
+        
+        # Define default action names
+        default_actions = {
+            'P1_JOYSTICK_UP': 'Up',
+            'P1_JOYSTICK_DOWN': 'Down',
+            'P1_JOYSTICK_LEFT': 'Left',
+            'P1_JOYSTICK_RIGHT': 'Right',
+            'P2_JOYSTICK_UP': 'Up',
+            'P2_JOYSTICK_DOWN': 'Down',
+            'P2_JOYSTICK_LEFT': 'Left',
+            'P2_JOYSTICK_RIGHT': 'Right',
+            'P1_BUTTON1': 'A Button',
+            'P1_BUTTON2': 'B Button',
+            'P1_BUTTON3': 'X Button',
+            'P1_BUTTON4': 'Y Button',
+            'P1_BUTTON5': 'LB Button',
+            'P1_BUTTON6': 'RB Button',
+            'P1_BUTTON7': 'LT Button',
+            'P1_BUTTON8': 'RT Button',
+            'P1_BUTTON9': 'Left Stick Button',
+            'P1_BUTTON10': 'Right Stick Button',
+            'P2_BUTTON1': 'A Button',
+            'P2_BUTTON2': 'B Button',
+            'P2_BUTTON3': 'X Button',
+            'P2_BUTTON4': 'Y Button',
+            'P2_BUTTON5': 'LB Button',
+            'P2_BUTTON6': 'RB Button',
+            'P2_BUTTON7': 'LT Button',
+            'P2_BUTTON8': 'RT Button',
+            'P2_BUTTON9': 'Left Stick Button',
+            'P2_BUTTON10': 'Right Stick Button',
+        }
+        
+        # Process each player's controls
+        for player in game_data['players']:
+            for control in player.get('labels', []):
+                control_name = control.get('name', '')
+                # If value is missing or empty, apply default
+                if not control.get('value') and control_name in default_actions:
+                    control['value'] = default_actions[control_name]
+                    print(f"Applied default name '{default_actions[control_name]}' to {control_name}")
+        
+        return game_data
+
+    # 2. Update the get_unified_game_data method in the PyQT script:
+    def get_unified_game_data(self, rom_name):
+        """Get game data with consistent defaults for both database and JSON sources"""
+        # Try to get from normal method
+        game_data = self.get_game_data(rom_name)
+        
+        # If we got data, apply defaults to any unnamed controls
+        if game_data:
+            game_data = self.apply_default_control_names(game_data)
+            
+        return game_data
+
+    # 3. Update the load_game_data_from_cache method in the PyQT script:
+    def load_game_data_from_cache(self, rom_name):
+        """Load game data from cache with fallback to defaults for controls without names"""
+        cache_dir = os.path.join(self.preview_dir, "cache")
+        cache_path = os.path.join(cache_dir, f"{rom_name}_cache.json")
+        
+        if not os.path.exists(cache_path):
+            print(f"No cache file found for {rom_name}")
+            return None
+            
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                game_data = json.load(f)
+                
+            # Apply defaults to any unnamed controls
+            game_data = self.apply_default_control_names(game_data)
+                        
+            return game_data
+        except Exception as e:
+            print(f"Error loading cache for {rom_name}: {e}")
+            return None
     
     def get_game_data(self, romname):
         """Get control data for a ROM with database prioritization"""

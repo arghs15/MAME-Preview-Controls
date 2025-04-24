@@ -2837,18 +2837,32 @@ class MAMEControlConfig(ctk.CTk):
         
         return generic_control_games, missing_control_games
     
-    # Update your show_preview method to track the processes
+    # 1. Update the show_preview method in mame_controls_tkinter.py to properly cache data with defaults:
     def show_preview(self):
-        """Launch the preview window with simplified path handling"""
+        """Launch the preview window with caching to ensure default controls are included"""
         if not self.current_game:
             messagebox.showinfo("No Game Selected", "Please select a game first")
             return
                 
-        # Get game data
+        # Get complete game data with default values applied
         game_data = self.get_game_data(self.current_game)
         if not game_data:
             messagebox.showinfo("No Control Data", f"No control data found for {self.current_game}")
             return
+        
+        # Create cache directory if it doesn't exist yet
+        cache_dir = os.path.join(self.preview_dir, "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Save the processed game data to the cache file
+        # This ensures default control names are preserved for the preview
+        cache_path = os.path.join(cache_dir, f"{self.current_game}_cache.json")
+        try:
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(game_data, f, indent=2)
+            print(f"Saved processed game data with defaults to cache: {cache_path}")
+        except Exception as e:
+            print(f"Warning: Could not save cache file: {e}")
         
         # Handle PyInstaller frozen executable
         if getattr(sys, 'frozen', False):
