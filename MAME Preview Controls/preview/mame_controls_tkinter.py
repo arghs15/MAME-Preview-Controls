@@ -711,248 +711,6 @@ class MAMEControlConfig(ctk.CTk):
         import sys
         sys.exit(0)
         
-    def get_game_data(self, romname):
-        """Get game data with integrated database prioritization"""
-        # 1. Check cache first
-        if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
-            return self.rom_data_cache[romname]
-        
-        # 2. Try database first if available
-        if os.path.exists(self.db_path):
-            db_data = self.get_game_data_from_db(romname)
-            if db_data:
-                # Cache the result
-                if hasattr(self, 'rom_data_cache'):
-                    self.rom_data_cache[romname] = db_data
-                return db_data
-        
-        # 3. Fall back to JSON lookup if needed
-        # Load gamedata.json first if needed
-        if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
-            self.load_gamedata_json()
-                
-        # Continue with the existing lookup logic...
-        if romname in self.gamedata_json:
-            game_data = self.gamedata_json[romname]
-            
-            # Simple name defaults
-            default_actions = {
-                'P1_JOYSTICK_UP': 'Up',
-                'P1_JOYSTICK_DOWN': 'Down',
-                'P1_JOYSTICK_LEFT': 'Left',
-                'P1_JOYSTICK_RIGHT': 'Right',
-                'P2_JOYSTICK_UP': 'Up',
-                'P2_JOYSTICK_DOWN': 'Down',
-                'P2_JOYSTICK_LEFT': 'Left',
-                'P2_JOYSTICK_RIGHT': 'Right',
-                'P1_BUTTON1': 'A Button',
-                'P1_BUTTON2': 'B Button',
-                'P1_BUTTON3': 'X Button',
-                'P1_BUTTON4': 'Y Button',
-                'P1_BUTTON5': 'LB Button',
-                'P1_BUTTON6': 'RB Button',
-                # Mirror P1 button names for P2
-                'P2_BUTTON1': 'A Button',
-                'P2_BUTTON2': 'B Button',
-                'P2_BUTTON3': 'X Button',
-                'P2_BUTTON4': 'Y Button',
-                'P2_BUTTON5': 'LB Button',
-                'P2_BUTTON6': 'RB Button',
-            }
-            
-            # Basic structure conversion
-            converted_data = {
-                'romname': romname,
-                'gamename': game_data.get('description', romname),
-                'numPlayers': int(game_data.get('playercount', 1)),
-                'alternating': game_data.get('alternating', False),
-                'mirrored': False,
-                'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
-                'players': []
-            }
-            
-            # Check if this is a clone and needs to inherit controls from parent
-            needs_parent_controls = False
-            
-            # Find controls (direct or in a clone)
-            controls = None
-            if 'controls' in game_data:
-                controls = game_data['controls']
-                #print(f"Found direct controls for {romname}")
-            else:
-                needs_parent_controls = True
-                #print(f"No direct controls for {romname}, needs parent controls")
-                
-            # If no controls and this is a clone, try to use parent controls
-            if needs_parent_controls:
-                parent_rom = None
-                
-                # Check explicit parent field (should be there from load_gamedata_json)
-                if 'parent' in game_data:
-                    parent_rom = game_data['parent']
-                    #print(f"Found parent {parent_rom} via direct reference")
-                
-                # Also check parent lookup table for redundancy
-                elif hasattr(self, 'parent_lookup') and romname in self.parent_lookup:
-                    parent_rom = self.parent_lookup[romname]
-                    #print(f"Found parent {parent_rom} via lookup table")
-                
-                # If we found a parent, try to get its controls
-                if parent_rom and parent_rom in self.gamedata_json:
-                    parent_data = self.gamedata_json[parent_rom]
-                    if 'controls' in parent_data:
-                        controls = parent_data['controls']
-                        #print(f"Using controls from parent {parent_rom} for clone {romname}")
-            
-            # Now process the controls (either direct or inherited from parent)
-            if controls:
-                # First pass - collect P1 button names to mirror to P2
-                p1_button_names = {}
-                for control_name, control_data in controls.items():
-                    if control_name.startswith('P1_BUTTON') and 'name' in control_data:
-                        button_num = control_name.replace('P1_BUTTON', '')
-                        p1_button_names[f'P2_BUTTON{button_num}'] = control_data['name']
-                        
-                # Process player controls
-                p1_controls = []
-                p2_controls = []
-                
-                for control_name, control_data in controls.items():
-                    # Add P1 controls
-                    if control_name.startswith('P1_'):
-                        # Skip non-joystick/button controls
-                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
-                            # Get the friendly name
-                            friendly_name = None
-                            
-                            # First check for explicit name
-                            if 'name' in control_data:
-                                friendly_name = control_data['name']
-                            # Then check for default actions
-                            elif control_name in default_actions:
-                                friendly_name = default_actions[control_name]
-                            # Fallback to control name
-                            else:
-                                parts = control_name.split('_')
-                                if len(parts) > 1:
-                                    friendly_name = parts[-1]
-                                
-                            if friendly_name:
-                                p1_controls.append({
-                                    'name': control_name,
-                                    'value': friendly_name
-                                })
-                    
-                    # Add P2 controls - prioritize matching P1 button names
-                    elif control_name.startswith('P2_'):
-                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
-                            friendly_name = None
-                            
-                            # First check for explicit name
-                            if 'name' in control_data:
-                                friendly_name = control_data['name']
-                            # Then check if we have a matching P1 button name
-                            elif control_name in p1_button_names:
-                                friendly_name = p1_button_names[control_name]
-                            # Then check defaults
-                            elif control_name in default_actions:
-                                friendly_name = default_actions[control_name]
-                            # Fallback to control name
-                            else:
-                                parts = control_name.split('_')
-                                if len(parts) > 1:
-                                    friendly_name = parts[-1]
-                                
-                            if friendly_name:
-                                p2_controls.append({
-                                    'name': control_name,
-                                    'value': friendly_name
-                                })
-                
-                # Also check for special direction mappings (P1_UP, etc.)
-                for control_name, control_data in controls.items():
-                    if control_name == 'P1_UP' and 'name' in control_data:
-                        # Update the joystick control if it exists
-                        for control in p1_controls:
-                            if control['name'] == 'P1_JOYSTICK_UP':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P1_DOWN' and 'name' in control_data:
-                        for control in p1_controls:
-                            if control['name'] == 'P1_JOYSTICK_DOWN':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P1_LEFT' and 'name' in control_data:
-                        for control in p1_controls:
-                            if control['name'] == 'P1_JOYSTICK_LEFT':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P1_RIGHT' and 'name' in control_data:
-                        for control in p1_controls:
-                            if control['name'] == 'P1_JOYSTICK_RIGHT':
-                                control['value'] = control_data['name']
-                    # Also handle P2 directional controls the same way
-                    elif control_name == 'P2_UP' and 'name' in control_data:
-                        for control in p2_controls:
-                            if control['name'] == 'P2_JOYSTICK_UP':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P2_DOWN' and 'name' in control_data:
-                        for control in p2_controls:
-                            if control['name'] == 'P2_JOYSTICK_DOWN':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P2_LEFT' and 'name' in control_data:
-                        for control in p2_controls:
-                            if control['name'] == 'P2_JOYSTICK_LEFT':
-                                control['value'] = control_data['name']
-                    elif control_name == 'P2_RIGHT' and 'name' in control_data:
-                        for control in p2_controls:
-                            if control['name'] == 'P2_JOYSTICK_RIGHT':
-                                control['value'] = control_data['name']
-                
-                # Sort controls by name to ensure consistent order (Button 1 before Button 2)
-                p1_controls.sort(key=lambda x: x['name'])
-                p2_controls.sort(key=lambda x: x['name'])
-                            
-                # Add player 1 if we have controls
-                if p1_controls:
-                    converted_data['players'].append({
-                        'number': 1,
-                        'numButtons': int(game_data.get('buttons', 1)),
-                        'labels': p1_controls
-                    })
-
-                # Add player 2 if we have controls
-                if p2_controls:
-                    converted_data['players'].append({
-                        'number': 2,
-                        'numButtons': int(game_data.get('buttons', 1)),
-                        'labels': p2_controls
-                    })
-                
-            # Mark as gamedata source
-            converted_data['source'] = 'gamedata.json'
-            
-            # Cache the result if caching is enabled
-            if hasattr(self, 'rom_data_cache'):
-                self.rom_data_cache[romname] = converted_data
-                
-            return converted_data
-        
-        # Try parent lookup before giving up
-        if hasattr(self, 'parent_lookup') and romname in self.parent_lookup:
-            parent_rom = self.parent_lookup[romname]
-            parent_data = self.get_game_data(parent_rom)  # Recursive call
-            if parent_data:
-                # Update with this ROM's info and cache
-                parent_data['romname'] = romname
-                if romname in self.gamedata_json:
-                    parent_data['gamename'] = self.gamedata_json[romname].get('description', f"{romname} (Clone)")
-                
-                # Cache and return
-                if hasattr(self, 'rom_data_cache'):
-                    self.rom_data_cache[romname] = parent_data
-                return parent_data
-        
-        # Not found anywhere
-        return None
-        
     def load_custom_configs(self):
         """Load custom configurations from cfg directory"""
         cfg_dir = os.path.join(self.mame_dir, "cfg")
@@ -2388,8 +2146,363 @@ class MAMEControlConfig(ctk.CTk):
                     (rom_name, control_name, display_name)
                 )
     
+    # Modified version of load_all_data to incorporate database building
+    def load_all_data(self):
+        """Load all necessary data with streamlined logic"""
+        start_time = time.time()
+        
+        try:
+            # Initialize ROM data cache
+            self.rom_data_cache = {}
+            
+            # 1. Load settings
+            self.load_settings()
+            
+            # 2. Scan ROMs directory
+            self.scan_roms_directory()
+            
+            # 3. Load default controls
+            self.load_default_config()
+            
+            # 4. Check if database needs update
+            db_needs_update = self.check_db_update_needed()
+            
+            if db_needs_update:
+                # If database update is needed, load gamedata.json and build db
+                self.load_gamedata_json()
+                self.build_gamedata_db()
+            else:
+                # Using existing SQLite database - no need to load full gamedata.json
+                self.gamedata_json = {}  # Empty placeholder
+                self.parent_lookup = {}  # Empty placeholder
+            
+            # 5. Load custom configs
+            self.load_custom_configs()
+            
+            # 6. Update UI
+            self.update_stats_label()
+            self.update_game_list()
+            
+            # 7. Auto-select first ROM
+            self.select_first_rom()
+            
+            total_time = time.time() - start_time
+            print(f"Data loading complete in {total_time:.2f}s")
+            
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Data Loading Error", f"Failed to load application data: {e}")
+
+    # Add or modify these functions in the mame_controls_tkinter.py file
+
+    def get_game_data(self, romname):
+        """Get game data with integrated database prioritization and improved handling of unnamed controls"""
+        # 1. Check cache first
+        if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
+            return self.rom_data_cache[romname]
+        
+        # 2. Try database first if available
+        if os.path.exists(self.db_path):
+            db_data = self.get_game_data_from_db(romname)
+            if db_data:
+                # Cache the result
+                if hasattr(self, 'rom_data_cache'):
+                    self.rom_data_cache[romname] = db_data
+                return db_data
+        
+        # 3. Fall back to JSON lookup if needed
+        # Load gamedata.json first if needed
+        if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+            self.load_gamedata_json()
+                
+        # Continue with the existing lookup logic...
+        if romname in self.gamedata_json:
+            game_data = self.gamedata_json[romname]
+            
+            # Simple name defaults - these are the fallback button names if none are specified
+            default_actions = {
+                'P1_JOYSTICK_UP': 'Up',
+                'P1_JOYSTICK_DOWN': 'Down',
+                'P1_JOYSTICK_LEFT': 'Left',
+                'P1_JOYSTICK_RIGHT': 'Right',
+                'P2_JOYSTICK_UP': 'Up',
+                'P2_JOYSTICK_DOWN': 'Down',
+                'P2_JOYSTICK_LEFT': 'Left',
+                'P2_JOYSTICK_RIGHT': 'Right',
+                'P1_BUTTON1': 'A Button',
+                'P1_BUTTON2': 'B Button',
+                'P1_BUTTON3': 'X Button',
+                'P1_BUTTON4': 'Y Button',
+                'P1_BUTTON5': 'LB Button',
+                'P1_BUTTON6': 'RB Button',
+                'P1_BUTTON7': 'LT Button',
+                'P1_BUTTON8': 'RT Button',
+                'P1_BUTTON9': 'Left Stick Button',
+                'P1_BUTTON10': 'Right Stick Button',
+                # Mirror P1 button names for P2
+                'P2_BUTTON1': 'A Button',
+                'P2_BUTTON2': 'B Button',
+                'P2_BUTTON3': 'X Button',
+                'P2_BUTTON4': 'Y Button',
+                'P2_BUTTON5': 'LB Button',
+                'P2_BUTTON6': 'RB Button',
+                'P2_BUTTON7': 'LT Button',
+                'P2_BUTTON8': 'RT Button',
+                'P2_BUTTON9': 'Left Stick Button',
+                'P2_BUTTON10': 'Right Stick Button',
+            }
+            
+            # Basic structure conversion
+            converted_data = {
+                'romname': romname,
+                'gamename': game_data.get('description', romname),
+                'numPlayers': int(game_data.get('playercount', 1)),
+                'alternating': game_data.get('alternating', False),
+                'mirrored': False,
+                'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
+                'players': []
+            }
+            
+            # Check if this is a clone and needs to inherit controls from parent
+            needs_parent_controls = False
+            
+            # Find controls (direct or in a clone)
+            controls = None
+            if 'controls' in game_data:
+                controls = game_data['controls']
+                #print(f"Found direct controls for {romname}")
+            else:
+                needs_parent_controls = True
+                #print(f"No direct controls for {romname}, needs parent controls")
+                
+            # If no controls and this is a clone, try to use parent controls
+            if needs_parent_controls:
+                parent_rom = None
+                
+                # Check explicit parent field (should be there from load_gamedata_json)
+                if 'parent' in game_data:
+                    parent_rom = game_data['parent']
+                    #print(f"Found parent {parent_rom} via direct reference")
+                
+                # Also check parent lookup table for redundancy
+                elif hasattr(self, 'parent_lookup') and romname in self.parent_lookup:
+                    parent_rom = self.parent_lookup[romname]
+                    #print(f"Found parent {parent_rom} via lookup table")
+                
+                # If we found a parent, try to get its controls
+                if parent_rom and parent_rom in self.gamedata_json:
+                    parent_data = self.gamedata_json[parent_rom]
+                    if 'controls' in parent_data:
+                        controls = parent_data['controls']
+                        #print(f"Using controls from parent {parent_rom} for clone {romname}")
+            
+            # Now process the controls (either direct or inherited from parent)
+            if controls:
+                # First pass - collect P1 button names to mirror to P2
+                p1_button_names = {}
+                for control_name, control_data in controls.items():
+                    if control_name.startswith('P1_BUTTON') and 'name' in control_data:
+                        button_num = control_name.replace('P1_BUTTON', '')
+                        p1_button_names[f'P2_BUTTON{button_num}'] = control_data['name']
+                        
+                # Process player controls
+                p1_controls = []
+                p2_controls = []
+                
+                for control_name, control_data in controls.items():
+                    # Add P1 controls
+                    if control_name.startswith('P1_'):
+                        # Skip non-joystick/button controls
+                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
+                            # Get the friendly name
+                            friendly_name = None
+                            
+                            # First check for explicit name
+                            if 'name' in control_data and control_data['name']:
+                                friendly_name = control_data['name']
+                            # Then check for default actions
+                            elif control_name in default_actions:
+                                friendly_name = default_actions[control_name]
+                            # Fallback to control name
+                            else:
+                                parts = control_name.split('_')
+                                if len(parts) > 1:
+                                    friendly_name = parts[-1]
+                                
+                            if friendly_name:
+                                p1_controls.append({
+                                    'name': control_name,
+                                    'value': friendly_name
+                                })
+                    
+                    # Add P2 controls - prioritize matching P1 button names
+                    elif control_name.startswith('P2_'):
+                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
+                            friendly_name = None
+                            
+                            # First check for explicit name
+                            if 'name' in control_data and control_data['name']:
+                                friendly_name = control_data['name']
+                            # Then check if we have a matching P1 button name
+                            elif control_name in p1_button_names:
+                                friendly_name = p1_button_names[control_name]
+                            # Then check defaults
+                            elif control_name in default_actions:
+                                friendly_name = default_actions[control_name]
+                            # Fallback to control name
+                            else:
+                                parts = control_name.split('_')
+                                if len(parts) > 1:
+                                    friendly_name = parts[-1]
+                                
+                            if friendly_name:
+                                p2_controls.append({
+                                    'name': control_name,
+                                    'value': friendly_name
+                                })
+                
+                # Also check for special direction mappings (P1_UP, etc.)
+                for control_name, control_data in controls.items():
+                    if control_name == 'P1_UP' and 'name' in control_data:
+                        # Update the joystick control if it exists
+                        for control in p1_controls:
+                            if control['name'] == 'P1_JOYSTICK_UP':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P1_DOWN' and 'name' in control_data:
+                        for control in p1_controls:
+                            if control['name'] == 'P1_JOYSTICK_DOWN':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P1_LEFT' and 'name' in control_data:
+                        for control in p1_controls:
+                            if control['name'] == 'P1_JOYSTICK_LEFT':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P1_RIGHT' and 'name' in control_data:
+                        for control in p1_controls:
+                            if control['name'] == 'P1_JOYSTICK_RIGHT':
+                                control['value'] = control_data['name']
+                    # Also handle P2 directional controls the same way
+                    elif control_name == 'P2_UP' and 'name' in control_data:
+                        for control in p2_controls:
+                            if control['name'] == 'P2_JOYSTICK_UP':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P2_DOWN' and 'name' in control_data:
+                        for control in p2_controls:
+                            if control['name'] == 'P2_JOYSTICK_DOWN':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P2_LEFT' and 'name' in control_data:
+                        for control in p2_controls:
+                            if control['name'] == 'P2_JOYSTICK_LEFT':
+                                control['value'] = control_data['name']
+                    elif control_name == 'P2_RIGHT' and 'name' in control_data:
+                        for control in p2_controls:
+                            if control['name'] == 'P2_JOYSTICK_RIGHT':
+                                control['value'] = control_data['name']
+                
+                # Sort controls by name to ensure consistent order (Button 1 before Button 2)
+                p1_controls.sort(key=lambda x: x['name'])
+                p2_controls.sort(key=lambda x: x['name'])
+                            
+                # Add player 1 if we have controls
+                if p1_controls:
+                    converted_data['players'].append({
+                        'number': 1,
+                        'numButtons': int(game_data.get('buttons', 1)),
+                        'labels': p1_controls
+                    })
+
+                # Add player 2 if we have controls
+                if p2_controls:
+                    converted_data['players'].append({
+                        'number': 2,
+                        'numButtons': int(game_data.get('buttons', 1)),
+                        'labels': p2_controls
+                    })
+                    
+            # If we still have no controls, let's generate default ones based on game properties
+            elif not converted_data['players'] and (game_data.get('buttons') or game_data.get('sticks')):
+                num_buttons = int(game_data.get('buttons', 6))
+                num_sticks = int(game_data.get('sticks', 1))
+                p1_controls = []
+                
+                # Add joystick controls if sticks > 0
+                if num_sticks > 0:
+                    for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                        control_name = f'P1_JOYSTICK_{direction}'
+                        p1_controls.append({
+                            'name': control_name,
+                            'value': default_actions.get(control_name, direction.capitalize())
+                        })
+                
+                # Add buttons based on the number specified
+                for i in range(1, min(num_buttons + 1, 11)):  # Limit to 10 buttons
+                    control_name = f'P1_BUTTON{i}'
+                    p1_controls.append({
+                        'name': control_name,
+                        'value': default_actions.get(control_name, f'Button {i}')
+                    })
+                
+                # Sort controls by name
+                p1_controls.sort(key=lambda x: x['name'])
+                
+                # Add player 1
+                converted_data['players'].append({
+                    'number': 1,
+                    'numButtons': num_buttons,
+                    'labels': p1_controls
+                })
+                
+                # If two players, mirror controls
+                if game_data.get('playercount', 1) > 1 and not game_data.get('alternating', False):
+                    p2_controls = []
+                    
+                    # Mirror P1 controls to P2
+                    for p1_control in p1_controls:
+                        p1_name = p1_control['name']
+                        p2_name = p1_name.replace('P1_', 'P2_')
+                        p2_controls.append({
+                            'name': p2_name,
+                            'value': p1_control['value']
+                        })
+                    
+                    # Add player 2
+                    converted_data['players'].append({
+                        'number': 2,
+                        'numButtons': num_buttons,
+                        'labels': p2_controls
+                    })
+                
+            # Mark as gamedata source
+            converted_data['source'] = 'gamedata.json'
+            
+            # Cache the result if caching is enabled
+            if hasattr(self, 'rom_data_cache'):
+                self.rom_data_cache[romname] = converted_data
+                
+            return converted_data
+        
+        # Try parent lookup before giving up
+        if hasattr(self, 'parent_lookup') and romname in self.parent_lookup:
+            parent_rom = self.parent_lookup[romname]
+            parent_data = self.get_game_data(parent_rom)  # Recursive call
+            if parent_data:
+                # Update with this ROM's info and cache
+                parent_data['romname'] = romname
+                if romname in self.gamedata_json:
+                    parent_data['gamename'] = self.gamedata_json[romname].get('description', f"{romname} (Clone)")
+                
+                # Cache and return
+                if hasattr(self, 'rom_data_cache'):
+                    self.rom_data_cache[romname] = parent_data
+                return parent_data
+        
+        # Not found anywhere
+        return None
+
+    # Update the get_game_data_from_db method to handle controls without names
     def get_game_data_from_db(self, romname):
-        """Get control data for a ROM from the SQLite database with streamlined error handling"""
+        """Get control data for a ROM from the SQLite database with better handling of unnamed controls"""
         if not os.path.exists(self.db_path):
             return None
         
@@ -2464,9 +2577,53 @@ class MAMEControlConfig(ctk.CTk):
             p1_controls = []
             p2_controls = []
             
+            # Default action names - used if no name is specified
+            default_actions = {
+                'P1_JOYSTICK_UP': 'Up',
+                'P1_JOYSTICK_DOWN': 'Down',
+                'P1_JOYSTICK_LEFT': 'Left',
+                'P1_JOYSTICK_RIGHT': 'Right',
+                'P2_JOYSTICK_UP': 'Up',
+                'P2_JOYSTICK_DOWN': 'Down',
+                'P2_JOYSTICK_LEFT': 'Left',
+                'P2_JOYSTICK_RIGHT': 'Right',
+                'P1_BUTTON1': 'A Button',
+                'P1_BUTTON2': 'B Button',
+                'P1_BUTTON3': 'X Button',
+                'P1_BUTTON4': 'Y Button',
+                'P1_BUTTON5': 'LB Button',
+                'P1_BUTTON6': 'RB Button',
+                'P1_BUTTON7': 'LT Button',
+                'P1_BUTTON8': 'RT Button',
+                'P1_BUTTON9': 'Left Stick Button',
+                'P1_BUTTON10': 'Right Stick Button',
+                'P2_BUTTON1': 'A Button',
+                'P2_BUTTON2': 'B Button',
+                'P2_BUTTON3': 'X Button',
+                'P2_BUTTON4': 'Y Button',
+                'P2_BUTTON5': 'LB Button',
+                'P2_BUTTON6': 'RB Button',
+                'P2_BUTTON7': 'LT Button',
+                'P2_BUTTON8': 'RT Button',
+                'P2_BUTTON9': 'Left Stick Button',
+                'P2_BUTTON10': 'Right Stick Button',
+            }
+            
             for control in control_rows:
                 control_name = control[0]  # First column
                 display_name = control[1]  # Second column
+                
+                # If display_name is empty, try to use a default
+                if not display_name and control_name in default_actions:
+                    display_name = default_actions[control_name]
+                
+                # If still no display name, try to extract from control name
+                if not display_name:
+                    parts = control_name.split('_')
+                    if len(parts) > 1:
+                        display_name = parts[-1].capitalize()
+                    else:
+                        display_name = control_name  # Last resort
                 
                 if control_name.startswith('P1_'):
                     p1_controls.append({
@@ -2478,6 +2635,37 @@ class MAMEControlConfig(ctk.CTk):
                         'name': control_name,
                         'value': display_name
                     })
+            
+            # If no controls found but we know about buttons/sticks, create default controls
+            if not p1_controls and not p2_controls and (buttons > 0 or sticks > 0):
+                # Create default P1 controls
+                if sticks > 0:
+                    # Add joystick controls
+                    for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                        control_name = f'P1_JOYSTICK_{direction}'
+                        p1_controls.append({
+                            'name': control_name,
+                            'value': default_actions.get(control_name, direction.capitalize())
+                        })
+                
+                # Add buttons
+                for i in range(1, min(buttons + 1, 11)):  # Limit to 10 buttons
+                    control_name = f'P1_BUTTON{i}'
+                    p1_controls.append({
+                        'name': control_name,
+                        'value': default_actions.get(control_name, f'Button {i}')
+                    })
+                
+                # Add default P2 controls if it's a 2-player game and not alternating
+                if player_count > 1 and not alternating:
+                    # Mirror P1 controls
+                    for p1_control in p1_controls:
+                        p1_name = p1_control['name']
+                        p2_name = p1_name.replace('P1_', 'P2_')
+                        p2_controls.append({
+                            'name': p2_name,
+                            'value': p1_control['value']
+                        })
             
             # Sort controls by name for consistent order
             p1_controls.sort(key=lambda x: x['name'])
@@ -2512,56 +2700,7 @@ class MAMEControlConfig(ctk.CTk):
             if conn:
                 conn.close()
             return None
-
-    # Modified version of load_all_data to incorporate database building
-    def load_all_data(self):
-        """Load all necessary data with streamlined logic"""
-        start_time = time.time()
-        
-        try:
-            # Initialize ROM data cache
-            self.rom_data_cache = {}
-            
-            # 1. Load settings
-            self.load_settings()
-            
-            # 2. Scan ROMs directory
-            self.scan_roms_directory()
-            
-            # 3. Load default controls
-            self.load_default_config()
-            
-            # 4. Check if database needs update
-            db_needs_update = self.check_db_update_needed()
-            
-            if db_needs_update:
-                # If database update is needed, load gamedata.json and build db
-                self.load_gamedata_json()
-                self.build_gamedata_db()
-            else:
-                # Using existing SQLite database - no need to load full gamedata.json
-                self.gamedata_json = {}  # Empty placeholder
-                self.parent_lookup = {}  # Empty placeholder
-            
-            # 5. Load custom configs
-            self.load_custom_configs()
-            
-            # 6. Update UI
-            self.update_stats_label()
-            self.update_game_list()
-            
-            # 7. Auto-select first ROM
-            self.select_first_rom()
-            
-            total_time = time.time() - start_time
-            print(f"Data loading complete in {total_time:.2f}s")
-            
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Data Loading Error", f"Failed to load application data: {e}")
-
+    
     # Modified version of get_game_data to use the database
     def get_game_data_with_db(self, romname):
         """Get control data for a ROM with database prioritization"""
@@ -3261,6 +3400,59 @@ class MAMEControlConfig(ctk.CTk):
                 else:
                     default_controls[control] = mapping
         
+        # Hardcoded default mappings to use when everything else fails
+        standard_mappings = {
+            'P1_BUTTON1': 'JOYCODE_1_BUTTON1',
+            'P1_BUTTON2': 'JOYCODE_1_BUTTON2',
+            'P1_BUTTON3': 'JOYCODE_1_BUTTON3',
+            'P1_BUTTON4': 'JOYCODE_1_BUTTON4',
+            'P1_BUTTON5': 'JOYCODE_1_BUTTON5',
+            'P1_BUTTON6': 'JOYCODE_1_BUTTON6',
+            'P1_JOYSTICK_UP': 'JOYCODE_1_DPADUP',
+            'P1_JOYSTICK_DOWN': 'JOYCODE_1_DPADDOWN',
+            'P1_JOYSTICK_LEFT': 'JOYCODE_1_DPADLEFT',
+            'P1_JOYSTICK_RIGHT': 'JOYCODE_1_DPADRIGHT',
+            'P2_BUTTON1': 'JOYCODE_2_BUTTON1',
+            'P2_BUTTON2': 'JOYCODE_2_BUTTON2',
+            'P2_BUTTON3': 'JOYCODE_2_BUTTON3',
+            'P2_BUTTON4': 'JOYCODE_2_BUTTON4',
+            'P2_BUTTON5': 'JOYCODE_2_BUTTON5',
+            'P2_BUTTON6': 'JOYCODE_2_BUTTON6',
+            'P2_JOYSTICK_UP': 'JOYCODE_2_DPADUP',
+            'P2_JOYSTICK_DOWN': 'JOYCODE_2_DPADDOWN',
+            'P2_JOYSTICK_LEFT': 'JOYCODE_2_DPADLEFT',
+            'P2_JOYSTICK_RIGHT': 'JOYCODE_2_DPADRIGHT',
+        }
+        
+        # Convert standard mappings to XInput if needed
+        if self.use_xinput:
+            xinput_mappings = {
+                'JOYCODE_1_BUTTON1': 'XINPUT_1_A',
+                'JOYCODE_1_BUTTON2': 'XINPUT_1_B',
+                'JOYCODE_1_BUTTON3': 'XINPUT_1_X',
+                'JOYCODE_1_BUTTON4': 'XINPUT_1_Y',
+                'JOYCODE_1_BUTTON5': 'XINPUT_1_SHOULDER_L',
+                'JOYCODE_1_BUTTON6': 'XINPUT_1_SHOULDER_R',
+                'JOYCODE_1_DPADUP': 'XINPUT_1_DPAD_UP',
+                'JOYCODE_1_DPADDOWN': 'XINPUT_1_DPAD_DOWN',
+                'JOYCODE_1_DPADLEFT': 'XINPUT_1_DPAD_LEFT',
+                'JOYCODE_1_DPADRIGHT': 'XINPUT_1_DPAD_RIGHT',
+                'JOYCODE_2_BUTTON1': 'XINPUT_2_A',
+                'JOYCODE_2_BUTTON2': 'XINPUT_2_B',
+                'JOYCODE_2_BUTTON3': 'XINPUT_2_X',
+                'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',
+                'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',
+                'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',
+                'JOYCODE_2_DPADUP': 'XINPUT_2_DPAD_UP',
+                'JOYCODE_2_DPADDOWN': 'XINPUT_2_DPAD_DOWN',
+                'JOYCODE_2_DPADLEFT': 'XINPUT_2_DPAD_LEFT',
+                'JOYCODE_2_DPADRIGHT': 'XINPUT_2_DPAD_RIGHT',
+            }
+            
+            for control, mapping in standard_mappings.items():
+                if mapping in xinput_mappings:
+                    standard_mappings[control] = xinput_mappings[mapping]
+        
         # Get default controls from game data
         for player in game_data.get('players', []):
             player_num = player['number']
@@ -3276,6 +3468,10 @@ class MAMEControlConfig(ctk.CTk):
                 elif control_name in default_controls:
                     current_mapping = default_controls[control_name]
                     is_different = False  # Default mapping from default.cfg
+                # Use our hardcoded standard mappings as last resort
+                elif control_name in standard_mappings:
+                    current_mapping = standard_mappings[control_name]
+                    is_different = False  # Standard mapping
                 else:
                     current_mapping = "Not mapped"
                     is_different = False
