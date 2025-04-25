@@ -1005,6 +1005,24 @@ class MAMEControlConfig(ctk.CTk):
             self.analyze_button.grid(row=0, column=4, padx=5, pady=5, sticky="e")
             debug_print("Buttons created")
 
+            # Batch export button
+            self.batch_export_button = ctk.CTkButton(
+                self.stats_frame,
+                text="Batch Export",
+                command=self.batch_export_images,
+                width=150
+            )
+            self.batch_export_button.grid(row=0, column=5, padx=5, pady=5, sticky="e")
+            
+            self.test_export_button = ctk.CTkButton(
+                self.stats_frame,
+                text="Test Export",
+                command=self.test_direct_export,
+                width=150
+            )
+            self.test_export_button.grid(row=0, column=6, padx=5, pady=5, sticky="e")
+            
+            
             # Clear cache button
             self.clear_cache_button = ctk.CTkButton(
                 self.stats_frame,
@@ -3936,3 +3954,594 @@ class MAMEControlConfig(ctk.CTk):
         
         print(f"Font size adjustment: {font_family} - original: {font_size}, adjusted: {adjusted_font_size} (scale: {scale})")
         return adjusted_font_size
+    
+    def test_direct_export(self):
+        """Direct test of image export functionality"""
+        if not self.current_game:
+            messagebox.showinfo("No Game Selected", "Please select a game first")
+            return
+            
+        # Get game data
+        game_data = self.get_game_data(self.current_game)
+        if not game_data:
+            messagebox.showinfo("No Data", f"No control data found for {self.current_game}")
+            return
+            
+        # Define output path
+        output_dir = os.path.join(self.preview_dir, "images")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"{self.current_game}_test.png")
+        
+        # Create PreviewWindow directly
+        try:
+            from PyQt5.QtWidgets import QApplication
+            import sys
+            
+            # Initialize PyQt app
+            app = QApplication(sys.argv)
+            
+            # Import the preview module
+            from mame_controls_preview import PreviewWindow
+            
+            # Create preview window
+            preview = PreviewWindow(
+                self.current_game,
+                game_data,
+                self.mame_dir,
+                hide_buttons=True,
+                clean_mode=True
+            )
+            
+            # Make sure the window is ready
+            preview.show()
+            
+            # Ensure bezel is loaded if available - important!
+            if hasattr(preview, 'integrate_bezel_support'):
+                # Force bezel integration if method exists
+                preview.integrate_bezel_support()
+                
+            # Make sure bezel is visible if it exists
+            if hasattr(preview, 'has_bezel') and preview.has_bezel:
+                preview.bezel_visible = True
+                if hasattr(preview, 'show_bezel_with_background'):
+                    preview.show_bezel_with_background()
+            
+            # Try to access the export_image_headless method
+            if hasattr(preview, 'export_image_headless'):
+                print(f"Calling export_image_headless to {output_path}")
+                result = preview.export_image_headless(output_path, "png")
+                
+                if result:
+                    messagebox.showinfo("Success", f"Image exported to {output_path}")
+                else:
+                    messagebox.showerror("Export Failed", f"Failed to export image to {output_path}")
+            else:
+                messagebox.showerror("Export Not Available", 
+                                "The export_image_headless method is not available in the PreviewWindow class")
+            
+            # Clean up
+            preview.close()
+            app.quit()
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Export test failed: {str(e)}")
+    
+    # Modified preview_export_image function to suppress individual success messages
+    def preview_export_image(self, rom_name, game_data, output_dir, format="png", hide_buttons=True, clean_mode=True, show_bezel=True, show_logo=True):
+        """Export a preview image for a ROM using direct PyQt interaction"""
+        try:
+            print(f"Direct export of {rom_name} to {output_dir}")
+            
+            # Make sure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, f"{rom_name}.{format}")
+            
+            # Create PreviewWindow directly
+            from PyQt5.QtWidgets import QApplication
+            import sys
+            
+            # Initialize PyQt app if needed
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication(sys.argv)
+            
+            # Import the preview module
+            from mame_controls_preview import PreviewWindow
+            
+            # Create preview window
+            preview = PreviewWindow(
+                rom_name,
+                game_data,
+                self.mame_dir,
+                hide_buttons=hide_buttons,
+                clean_mode=clean_mode
+            )
+            
+            # Make sure the window is prepared properly
+            preview.show()
+            
+            # Ensure bezel is loaded and visible if requested
+            if show_bezel and hasattr(preview, 'integrate_bezel_support'):
+                # Force bezel integration if method exists
+                preview.integrate_bezel_support()
+                
+                # Make bezel visible if it exists
+                if hasattr(preview, 'has_bezel') and preview.has_bezel:
+                    preview.bezel_visible = True
+                    if hasattr(preview, 'show_bezel_with_background'):
+                        preview.show_bezel_with_background()
+            
+            # Set logo visibility
+            if hasattr(preview, 'logo_visible') and hasattr(preview, 'logo_label'):
+                preview.logo_visible = show_logo
+                if preview.logo_label:
+                    preview.logo_label.setVisible(show_logo)
+            
+            # Use the export method
+            if hasattr(preview, 'export_image_headless'):
+                print(f"Calling export_image_headless to {output_path}")
+                result = preview.export_image_headless(output_path, format)
+                
+                # Check if file was created
+                if result and os.path.exists(output_path):
+                    print(f"Successfully exported {rom_name} to {output_path}")
+                    success = True
+                else:
+                    print(f"Failed to export {rom_name} - file not created")
+                    success = False
+            else:
+                print(f"ERROR: export_image_headless method not available for {rom_name}")
+                success = False
+            
+            # Clean up
+            preview.close()
+            
+            return success
+        except Exception as e:
+            print(f"Error during export of {rom_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # Updated batch_export_images function with full-screen dialog and no individual messages
+    def batch_export_images(self):
+        """Show dialog to export multiple ROM preview images in batch with improved sizing"""
+        # Create dialog - use the full window size
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Batch Export Preview Images")
+        
+        # Make dialog almost full screen
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        dialog_width = int(screen_width * 0.9)  # 90% of screen width
+        dialog_height = int(screen_height * 0.9)  # 90% of screen height
+        x = int((screen_width - dialog_width) / 2)
+        y = int((screen_height - dialog_height) / 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+        
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Create main frame
+        main_frame = ctk.CTkFrame(dialog)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Title label
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="Batch Export Preview Images",
+            font=("Arial", 18, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+        
+        # Description label
+        description = """
+        This tool will generate preview images for multiple ROMs.
+        Choose which ROMs to process and export settings below.
+        Images will be saved to the preview/images directory.
+        """
+        desc_label = ctk.CTkLabel(
+            main_frame,
+            text=description,
+            font=("Arial", 12),
+            justify="left"
+        )
+        desc_label.pack(pady=(0, 10))
+        
+        # Settings frame
+        settings_frame = ctk.CTkFrame(main_frame)
+        settings_frame.pack(fill="x", padx=10, pady=10)
+        
+        # Display options frame
+        display_options = ctk.CTkFrame(settings_frame)
+        display_options.pack(fill="x", padx=5, pady=5)
+        
+        # Title and options for display settings
+        ctk.CTkLabel(
+            display_options,
+            text="Display Options",
+            font=("Arial", 14, "bold")
+        ).pack(anchor="w", padx=10, pady=(5, 10))
+        
+        # Hide buttons option
+        hide_buttons_var = ctk.BooleanVar(value=True)
+        hide_buttons_check = ctk.CTkCheckBox(
+            display_options,
+            text="Hide Control Buttons",
+            variable=hide_buttons_var
+        )
+        hide_buttons_check.pack(anchor="w", padx=20, pady=2)
+        
+        # Clean mode option (no drag handles, etc)
+        clean_mode_var = ctk.BooleanVar(value=True)
+        clean_mode_check = ctk.CTkCheckBox(
+            display_options,
+            text="Clean Mode (No Drag Handles)",
+            variable=clean_mode_var
+        )
+        clean_mode_check.pack(anchor="w", padx=20, pady=2)
+        
+        # Show bezel option
+        show_bezel_var = ctk.BooleanVar(value=True)
+        show_bezel_check = ctk.CTkCheckBox(
+            display_options,
+            text="Show Bezel (If Available)",
+            variable=show_bezel_var
+        )
+        show_bezel_check.pack(anchor="w", padx=20, pady=2)
+        
+        # Show logo option
+        show_logo_var = ctk.BooleanVar(value=True)
+        show_logo_check = ctk.CTkCheckBox(
+            display_options,
+            text="Show Logo (If Available)",
+            variable=show_logo_var
+        )
+        show_logo_check.pack(anchor="w", padx=20, pady=2)
+        
+        # Output options frame
+        output_options = ctk.CTkFrame(settings_frame)
+        output_options.pack(fill="x", padx=5, pady=5)
+        
+        # Title and options for output settings
+        ctk.CTkLabel(
+            output_options,
+            text="Output Options",
+            font=("Arial", 14, "bold")
+        ).pack(anchor="w", padx=10, pady=(5, 10))
+        
+        # Image format
+        format_frame = ctk.CTkFrame(output_options, fg_color="transparent")
+        format_frame.pack(fill="x", padx=20, pady=2)
+        
+        ctk.CTkLabel(
+            format_frame,
+            text="Image Format:",
+            width=100
+        ).pack(side="left")
+        
+        format_var = ctk.StringVar(value="PNG")
+        format_combo = ctk.CTkComboBox(
+            format_frame,
+            values=["PNG", "JPG"],
+            variable=format_var,
+            width=120
+        )
+        format_combo.pack(side="left", padx=10)
+        
+        # Output directory
+        output_frame = ctk.CTkFrame(output_options, fg_color="transparent")
+        output_frame.pack(fill="x", padx=20, pady=2)
+        
+        ctk.CTkLabel(
+            output_frame,
+            text="Output Directory:",
+            width=100
+        ).pack(side="left")
+        
+        # Default to preview/images directory
+        images_dir = os.path.join(self.preview_dir, "images")
+        output_dir_var = ctk.StringVar(value=images_dir)
+        
+        dir_entry = ctk.CTkEntry(
+            output_frame,
+            textvariable=output_dir_var,
+            width=300
+        )
+        dir_entry.pack(side="left", padx=10, fill="x", expand=True)
+        
+        def browse_directory():
+            directory = tk.filedialog.askdirectory(
+                initialdir=output_dir_var.get(),
+                title="Select Output Directory"
+            )
+            if directory:
+                output_dir_var.set(directory)
+        
+        browse_button = ctk.CTkButton(
+            output_frame,
+            text="Browse...",
+            width=80,
+            command=browse_directory
+        )
+        browse_button.pack(side="left", padx=5)
+        
+        # ROM selection frame
+        rom_selection_frame = ctk.CTkFrame(main_frame)
+        rom_selection_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Title for ROM selection
+        ctk.CTkLabel(
+            rom_selection_frame,
+            text="ROM Selection",
+            font=("Arial", 14, "bold")
+        ).pack(anchor="w", padx=10, pady=(5, 10))
+        
+        # ROM selection options
+        selection_options_frame = ctk.CTkFrame(rom_selection_frame, fg_color="transparent")
+        selection_options_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Selection mode
+        selection_mode_var = ctk.StringVar(value="all_with_controls")
+        
+        mode_all = ctk.CTkRadioButton(
+            selection_options_frame,
+            text="All ROMs with Controls",
+            variable=selection_mode_var,
+            value="all_with_controls"
+        )
+        mode_all.pack(anchor="w", padx=20, pady=2)
+        
+        mode_custom = ctk.CTkRadioButton(
+            selection_options_frame,
+            text="Custom Selection",
+            variable=selection_mode_var,
+            value="custom"
+        )
+        mode_custom.pack(anchor="w", padx=20, pady=2)
+        
+        mode_current = ctk.CTkRadioButton(
+            selection_options_frame,
+            text="Current ROM Only",
+            variable=selection_mode_var,
+            value="current"
+        )
+        mode_current.pack(anchor="w", padx=20, pady=2)
+        
+        # List of ROMs with checkboxes
+        list_frame = ctk.CTkFrame(rom_selection_frame)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # ROM listbox with checkboxes using ttk
+        # We need to use ttk Treeview for multi-column checkable list
+        tree_frame = ttk.Frame(list_frame)
+        tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Create Treeview with a single column but configure to show checkboxes
+        rom_tree = ttk.Treeview(
+            tree_frame,
+            columns=("rom_name", "game_name"),
+            show="headings",
+            selectmode="extended"
+        )
+        rom_tree.heading("rom_name", text="ROM Name")
+        rom_tree.heading("game_name", text="Game Name")
+        rom_tree.column("rom_name", width=200)
+        rom_tree.column("game_name", width=500)
+        
+        rom_tree.pack(side="left", fill="both", expand=True)
+        
+        # Add a scrollbar
+        tree_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=rom_tree.yview)
+        tree_scrollbar.pack(side="right", fill="y")
+        rom_tree.configure(yscrollcommand=tree_scrollbar.set)
+        
+        # Populate the tree with ROMs that have controls
+        roms_with_data = []
+        for rom in sorted(self.available_roms):
+            game_data = self.get_game_data(rom)
+            if game_data:
+                roms_with_data.append((rom, game_data.get('gamename', rom)))
+        
+        # Insert ROM data into the tree
+        for rom, game_name in roms_with_data:
+            rom_tree.insert("", "end", values=(rom, game_name))
+        
+        # Select All / Deselect All buttons for custom selection
+        select_buttons_frame = ctk.CTkFrame(rom_selection_frame, fg_color="transparent")
+        select_buttons_frame.pack(fill="x", padx=10, pady=5)
+        
+        def select_all_roms():
+            for item in rom_tree.get_children():
+                rom_tree.selection_add(item)
+        
+        def deselect_all_roms():
+            rom_tree.selection_remove(rom_tree.get_children())
+        
+        select_all_button = ctk.CTkButton(
+            select_buttons_frame,
+            text="Select All",
+            command=select_all_roms,
+            width=120
+        )
+        select_all_button.pack(side="left", padx=5)
+        
+        deselect_all_button = ctk.CTkButton(
+            select_buttons_frame,
+            text="Deselect All",
+            command=deselect_all_roms,
+            width=120
+        )
+        deselect_all_button.pack(side="left", padx=5)
+        
+        # Output & processing indicators
+        output_frame = ctk.CTkFrame(main_frame)
+        output_frame.pack(fill="x", padx=10, pady=10)
+        
+        # Progress bar
+        progress_var = tk.DoubleVar(value=0.0)
+        progress_bar = ctk.CTkProgressBar(output_frame)
+        progress_bar.pack(fill="x", padx=10, pady=5)
+        progress_bar.set(0)
+        
+        # Status label
+        status_var = tk.StringVar(value="Ready")
+        status_label = ctk.CTkLabel(
+            output_frame,
+            textvariable=status_var,
+            font=("Arial", 12)
+        )
+        status_label.pack(pady=5)
+        
+        # Bottom buttons
+        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        button_frame.pack(fill="x", padx=10, pady=10)
+        
+        def start_export():
+            # Determine which ROMs to process
+            roms_to_process = []
+            
+            mode = selection_mode_var.get()
+            if mode == "all_with_controls":
+                roms_to_process = [rom for rom, _ in roms_with_data]
+            elif mode == "custom":
+                selected_items = rom_tree.selection()
+                for item in selected_items:
+                    values = rom_tree.item(item, "values")
+                    roms_to_process.append(values[0])
+            elif mode == "current" and self.current_game:
+                roms_to_process.append(self.current_game)
+            
+            if not roms_to_process:
+                messagebox.showinfo("No ROMs Selected", "Please select at least one ROM to process")
+                return
+            
+            # Get settings
+            settings = {
+                "hide_buttons": hide_buttons_var.get(),
+                "clean_mode": clean_mode_var.get(),
+                "show_bezel": show_bezel_var.get(),
+                "show_logo": show_logo_var.get(),
+                "format": format_var.get().lower(),
+                "output_dir": output_dir_var.get()
+            }
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(settings["output_dir"], exist_ok=True)
+            
+            # Set up for processing
+            total_roms = len(roms_to_process)
+            processed = 0
+            failed = 0
+            
+            # Disable buttons during processing
+            start_button.configure(state="disabled")
+            cancel_button.configure(state="disabled")
+            
+            # Update status
+            status_var.set(f"Processing 0/{total_roms} ROMs...")
+            progress_bar.set(0)
+            dialog.update_idletasks()
+            
+            # Thread-safe update functions
+            def update_progress(value):
+                progress_var.set(value)
+                progress_bar.set(value)
+                dialog.update_idletasks()
+            
+            def update_status(text):
+                status_var.set(text)
+                dialog.update_idletasks()
+            
+            # Create a separate function for the actual processing
+            def process_roms():
+                nonlocal processed, failed
+                
+                for rom_name in roms_to_process:
+                    # Update status safely using the main thread
+                    dialog.after(0, lambda s=f"Processing {processed+1}/{total_roms}: {rom_name}": update_status(s))
+                    dialog.after(0, lambda v=(processed + 0.5) / total_roms: update_progress(v))
+                    
+                    # Generate and save the image
+                    try:
+                        # Get the game data
+                        game_data = self.get_game_data(rom_name)
+                        if not game_data:
+                            raise ValueError(f"No control data found for {rom_name}")
+                        
+                        # Export the image (using the preview_export_image function)
+                        success = self.preview_export_image(
+                            rom_name, 
+                            game_data,
+                            settings["output_dir"],
+                            settings["format"],
+                            settings["hide_buttons"],
+                            settings["clean_mode"],
+                            settings["show_bezel"],
+                            settings["show_logo"]
+                        )
+                        
+                        if success:
+                            processed += 1
+                        else:
+                            failed += 1
+                    except Exception as e:
+                        print(f"Error processing {rom_name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        failed += 1
+                    
+                    # Update progress safely using the main thread
+                    dialog.after(0, lambda v=processed / total_roms: update_progress(v))
+                    
+                    # Small sleep to allow UI updates
+                    time.sleep(0.1)
+                
+                # All done - update status
+                final_status = ""
+                if failed > 0:
+                    final_status = f"Completed: {processed} successful, {failed} failed"
+                else:
+                    final_status = f"Completed: {processed} ROM preview images exported"
+                
+                # Update UI elements safely on the main thread
+                dialog.after(0, lambda s=final_status: update_status(s))
+                dialog.after(0, lambda: start_button.configure(state="normal"))
+                dialog.after(0, lambda: cancel_button.configure(state="normal"))
+                
+                # Show completion message on the main thread - but only ONE at the end
+                dialog.after(0, lambda p=processed, f=failed, d=settings["output_dir"]: 
+                            messagebox.showinfo("Export Complete", 
+                                            f"Exported {p} ROM preview images to {d}\n" +
+                                            (f"Failed: {f}" if f > 0 else "")))
+            
+            # Start processing in a separate thread
+            import threading
+            import time
+            
+            process_thread = threading.Thread(target=process_roms)
+            process_thread.daemon = True
+            process_thread.start()
+        
+        # Make the Start Export button larger and more prominent
+        start_button = ctk.CTkButton(
+            button_frame,
+            text="Start Export",
+            command=start_export,
+            width=150,
+            height=40,
+            font=("Arial", 14, "bold")
+        )
+        start_button.pack(side="left", padx=20, pady=10)
+        
+        cancel_button = ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy,
+            width=120,
+            height=40
+        )
+        cancel_button.pack(side="right", padx=20, pady=10)
+    

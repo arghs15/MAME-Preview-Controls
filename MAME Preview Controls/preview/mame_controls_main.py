@@ -100,6 +100,7 @@ def main():
     try:
         # Create argument parser
         parser = argparse.ArgumentParser(description='MAME Control Configuration')
+        parser.add_argument('--export-image', action='store_true', help='Export image mode')
         parser.add_argument('--preview-only', action='store_true', help='Show only the preview window')
         parser.add_argument('--clean-preview', action='store_true', help='Show preview without buttons and UI elements (like saved image)')
         parser.add_argument('--game', type=str, help='Specify the ROM name to preview')
@@ -501,6 +502,102 @@ def main():
                     return 0
             except ImportError:
                 print("PyQt5 or necessary modules not found for preview mode.")
+                return 1
+        
+        # Check for export image mode
+        if args.game and args.export_image:
+            print(f"Mode: Export image for ROM: {args.game}")
+            
+            if not args.output:
+                print("ERROR: --output parameter is required for export mode")
+                return 1
+                
+            try:
+                # Initialize PyQt for the export
+                from PyQt5.QtWidgets import QApplication
+                
+                # Create QApplication
+                app = QApplication(sys.argv)
+                app.setApplicationName("MAME Control Preview Export")
+                
+                # Get application paths
+                app_dir = get_application_path()
+                mame_dir = get_mame_parent_dir(app_dir)
+                
+                # Get game data (using cached data if available)
+                preview_dir = os.path.join(mame_dir, "preview")
+                cache_dir = os.path.join(preview_dir, "cache")
+                cache_file = os.path.join(cache_dir, f"{args.game}_cache.json")
+                
+                game_data = None
+                if os.path.exists(cache_file):
+                    try:
+                        import json
+                        with open(cache_file, 'r') as f:
+                            game_data = json.load(f)
+                        print(f"Using cached data for {args.game}")
+                    except Exception as e:
+                        print(f"Error loading cache: {e}")
+                
+                if not game_data:
+                    # Import module for game data
+                    try:
+                        # Try direct import first
+                        from mame_controls_pyqt import MAMEControlConfig
+                    except ImportError:
+                        # If direct import fails, try using the module from the script directory
+                        sys.path.insert(0, script_dir)
+                        from mame_controls_pyqt import MAMEControlConfig
+                        
+                    # Create config to access game data
+                    config = MAMEControlConfig(preview_only=True)
+                    game_data = config.get_unified_game_data(args.game)
+                    
+                    if not game_data:
+                        print(f"ERROR: No game data found for {args.game}")
+                        return 1
+                
+                # Import the PreviewWindow class
+                try:
+                    from mame_controls_preview import PreviewWindow
+                except ImportError:
+                    print("ERROR: Could not import PreviewWindow class")
+                    return 1
+                    
+                # Create the preview window (not visible)
+                preview = PreviewWindow(
+                    args.game, 
+                    game_data, 
+                    mame_dir,
+                    hide_buttons=True,  # Always hide buttons in export mode
+                    clean_mode=True     # Always use clean mode in export mode
+                )
+                
+                # Configure bezel/logo visibility
+                if args.no_bezel and hasattr(preview, 'bezel_visible'):
+                    preview.bezel_visible = False
+                    
+                if args.no_logo and hasattr(preview, 'logo_visible'):
+                    preview.logo_visible = False
+                    if hasattr(preview, 'logo_label') and preview.logo_label:
+                        preview.logo_label.setVisible(False)
+                
+                # Export the image
+                if hasattr(preview, 'export_image_headless'):
+                    if preview.export_image_headless(args.output, args.format):
+                        print(f"Successfully exported preview for {args.game} to {args.output}")
+                        return 0
+                    else:
+                        print(f"Failed to export preview for {args.game}")
+                        return 1
+                else:
+                    print("ERROR: Export method not available")
+                    return 1
+                    
+            except Exception as e:
+                print(f"ERROR in export mode: {e}")
+                import traceback
+                traceback.print_exc()
                 return 1
         
         # For the main application, check which UI to use - now defaulting to Tkinter

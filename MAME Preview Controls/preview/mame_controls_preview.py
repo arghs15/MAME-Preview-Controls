@@ -5499,6 +5499,120 @@ class PreviewWindow(QMainWindow):
         import gc
         gc.collect()
         print("Garbage collection completed")
+    
+    # Add this function to mame_controls_preview.py
+    def export_image_headless(self, output_path, format="png"):
+        """Export preview image in headless mode using existing save_image functionality"""
+        try:
+            print(f"Exporting preview image to {output_path}")
+            
+            # If the original save_image function exists, use it
+            if hasattr(self, 'save_image'):
+                # Get the current output path to restore it later
+                original_output_path = getattr(self, '_output_path', None)
+                
+                # Set the output path temporarily
+                self._output_path = output_path
+                
+                # Call the existing save_image function
+                result = self.save_image()
+                
+                # Restore original path
+                if original_output_path:
+                    self._output_path = original_output_path
+                
+                return result
+            else:
+                print("ERROR: save_image method not available")
+                return False
+        except Exception as e:
+            print(f"Error in export_image_headless: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # Add this to mame_controls_preview.py to handle command line parameters
+    def add_cli_export_support():
+        """Add CLI support for batch export mode to the preview module"""
+        import argparse
+        
+        parser = argparse.ArgumentParser(description='MAME Control Preview')
+        parser.add_argument('--export-image', action='store_true', help='Export image mode')
+        parser.add_argument('--game', type=str, help='ROM name')
+        parser.add_argument('--output', type=str, help='Output image path')
+        parser.add_argument('--format', type=str, default='png', choices=['png', 'jpg'], help='Image format')
+        parser.add_argument('--no-buttons', action='store_true', help='Hide control buttons')
+        parser.add_argument('--clean-mode', action='store_true', help='Clean mode with no drag handles')
+        parser.add_argument('--no-bezel', action='store_true', help='Hide bezel')
+        parser.add_argument('--no-logo', action='store_true', help='Hide logo')
+        
+        args = parser.parse_args()
+        
+        # If export mode is enabled, handle it
+        if args.export_image:
+            if not args.game or not args.output:
+                print("ERROR: --game and --output parameters are required for export mode")
+                sys.exit(1)
+            
+            # Get application paths
+            app_dir = get_application_path()
+            mame_dir = get_mame_parent_dir(app_dir)
+            
+            # Find and load game data
+            from PyQt5.QtWidgets import QApplication
+            app = QApplication(sys.argv)
+            
+            # Create a headless app for image export
+            try:
+                # Load game data from cache 
+                preview_dir = os.path.join(mame_dir, "preview")
+                cache_dir = os.path.join(preview_dir, "cache")
+                cache_path = os.path.join(cache_dir, f"{args.game}_cache.json")
+                
+                if os.path.exists(cache_path):
+                    with open(cache_path, 'r', encoding='utf-8') as f:
+                        game_data = json.load(f)
+                else:
+                    print(f"ERROR: Cache file not found: {cache_path}")
+                    sys.exit(1)
+                    
+                # Create preview window with command line options
+                hide_buttons = args.no_buttons
+                clean_mode = args.clean_mode
+                
+                # Create the preview window (starts invisible)
+                preview = PreviewWindow(
+                    args.game, 
+                    game_data, 
+                    mame_dir,
+                    hide_buttons=hide_buttons,
+                    clean_mode=clean_mode
+                )
+                
+                # Set bezel/logo visibility if specified
+                if args.no_bezel and hasattr(preview, 'bezel_visible'):
+                    preview.bezel_visible = False
+                    
+                if args.no_logo and hasattr(preview, 'logo_visible'):
+                    preview.logo_visible = False
+                    if hasattr(preview, 'logo_label') and preview.logo_label:
+                        preview.logo_label.setVisible(False)
+                
+                # Export the image
+                if preview.export_image_headless(args.output, args.format):
+                    print(f"Successfully exported preview for {args.game} to {args.output}")
+                    sys.exit(0)
+                else:
+                    print(f"Failed to export preview for {args.game}")
+                    sys.exit(1)
+                    
+            except Exception as e:
+                print(f"ERROR in export mode: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+                
+        return args
 
 # 1. First, modify the EnhancedLabel class to remove shadow functionality
 class EnhancedLabel(QLabel):
