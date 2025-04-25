@@ -4071,6 +4071,7 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
             return False
 
+    # Modify the batch_export_images method in the MAMEControlConfig class
     def batch_export_images(self):
         """Show dialog to export multiple ROM preview images in batch with improved button accessibility"""
         # Create dialog with better size management
@@ -4397,6 +4398,9 @@ class MAMEControlConfig(ctk.CTk):
         )
         status_label.pack(pady=(5, 0))
         
+        # Add flag to track cancellation
+        cancel_processing = [False]
+        
         # IMPORTANT: Main export function - Define this BEFORE creating the buttons
         def start_export():
             # Determine which ROMs to process
@@ -4405,11 +4409,34 @@ class MAMEControlConfig(ctk.CTk):
             mode = selection_mode_var.get()
             if mode == "all_with_controls":
                 roms_to_process = [rom for rom, _ in roms_with_data]
+                
+                # Show warning for processing all ROMs
+                if len(roms_to_process) > 10:  # Only show warning for a significant number of ROMs
+                    if not messagebox.askyesno(
+                        "Warning - Batch Processing",
+                        f"You are about to process {len(roms_to_process)} ROMs, which may take a long time.\n\n"
+                        f"This operation can be canceld using the Cancel Export button.\n\n"
+                        f"Do you want to continue?",
+                        icon="warning"
+                    ):
+                        return
+                
             elif mode == "custom":
                 selected_items = rom_tree.selection()
                 for item in selected_items:
                     values = rom_tree.item(item, "values")
                     roms_to_process.append(values[0])
+                    
+                # Show warning if a large number of ROMs selected
+                if len(roms_to_process) > 10:  # Only show warning for a significant number of ROMs
+                    if not messagebox.askyesno(
+                        "Warning - Batch Processing",
+                        f"You are about to process {len(roms_to_process)} ROMs, which may take a long time.\n\n"
+                        f"Do you want to continue?",
+                        icon="warning"
+                    ):
+                        return
+                    
             elif mode == "current" and self.current_game:
                 roms_to_process.append(self.current_game)
             
@@ -4436,9 +4463,14 @@ class MAMEControlConfig(ctk.CTk):
             processed = 0
             failed = 0
             
-            # Disable buttons during processing
-            start_button.configure(state="disabled")
-            cancel_button.configure(state="disabled")
+            # Reset cancellation flag
+            cancel_processing[0] = False
+            
+            # Update start button to show "Processing..."
+            start_button.configure(state="disabled", text="Processing...")
+            
+            # Update cancel button to show it's active
+            cancel_button.configure(text="Cancel Export", fg_color="#dc3545", hover_color="#c82333")
             
             # Update status
             status_var.set(f"Processing 0/{total_roms} ROMs...")
@@ -4455,14 +4487,35 @@ class MAMEControlConfig(ctk.CTk):
                 status_var.set(text)
                 dialog.update_idletasks()
             
+            # Function to handle cancellation request
+            def request_cancel():
+                if messagebox.askyesno(
+                    "Confirm Cancellation",
+                    "Are you sure you want to cancel the export process?\n\n"
+                    "Any images already exported will remain.",
+                    icon="question"
+                ):
+                    cancel_processing[0] = True
+                    update_status("Cancelling... Please wait for current operation to complete.")
+                    cancel_button.configure(state="disabled", text="Cancelling...")
+            
+            # Update cancel button command
+            cancel_button.configure(command=request_cancel)
+            
             # Create a separate function for the actual processing
             def process_roms():
                 nonlocal processed, failed
                 
-                for rom_name in roms_to_process:
+                for i, rom_name in enumerate(roms_to_process):
+                    # Check for cancellation request
+                    if cancel_processing[0]:
+                        # Update status safely using the main thread
+                        dialog.after(0, lambda s=f"Cancelled after processing {processed}/{total_roms} ROMs": update_status(s))
+                        break
+                    
                     # Update status safely using the main thread
-                    dialog.after(0, lambda s=f"Processing {processed+1}/{total_roms}: {rom_name}": update_status(s))
-                    dialog.after(0, lambda v=(processed + 0.5) / total_roms: update_progress(v))
+                    dialog.after(0, lambda s=f"Processing {i+1}/{total_roms}: {rom_name}": update_status(s))
+                    dialog.after(0, lambda v=(i + 0.5) / total_roms: update_progress(v))
                     
                     # Generate and save the image
                     try:
@@ -4471,12 +4524,13 @@ class MAMEControlConfig(ctk.CTk):
                         if not game_data:
                             raise ValueError(f"No control data found for {rom_name}")
                         
-                        # Export the image (using the preview_export_image function)
+                        # Export the image (using the modified preview_export_image function)
+                        file_format = settings["format"].lower()
                         success = self.preview_export_image(
                             rom_name, 
                             game_data,
                             settings["output_dir"],
-                            settings["format"],
+                            file_format,
                             settings["hide_buttons"],
                             settings["clean_mode"],
                             settings["show_bezel"],
@@ -4494,26 +4548,34 @@ class MAMEControlConfig(ctk.CTk):
                         failed += 1
                     
                     # Update progress safely using the main thread
-                    dialog.after(0, lambda v=processed / total_roms: update_progress(v))
+                    dialog.after(0, lambda v=(i + 1) / total_roms: update_progress(v))
                     
                     # Small sleep to allow UI updates
                     time.sleep(0.1)
                 
                 # All done - update status
                 final_status = ""
-                if failed > 0:
+                if cancel_processing[0]:
+                    final_status = f"Cancelled: {processed} exported, {failed} failed"
+                elif failed > 0:
                     final_status = f"Completed: {processed} successful, {failed} failed"
                 else:
                     final_status = f"Completed: {processed} ROM preview images exported"
                 
                 # Update UI elements safely on the main thread
                 dialog.after(0, lambda s=final_status: update_status(s))
-                dialog.after(0, lambda: start_button.configure(state="normal"))
-                dialog.after(0, lambda: cancel_button.configure(state="normal"))
+                dialog.after(0, lambda: start_button.configure(state="normal", text="Start Export"))
+                dialog.after(0, lambda: cancel_button.configure(
+                    state="normal", 
+                    text="Close", 
+                    fg_color="#2B87D1",  # Reset to default color
+                    hover_color="#1A6DAE",
+                    command=dialog.destroy
+                ))
                 
                 # Show completion message on the main thread - but only ONE at the end
                 # And only if the user wants it
-                if settings["show_completion"]:
+                if settings["show_completion"] and not cancel_processing[0]:
                     dialog.after(0, lambda p=processed, f=failed, d=settings["output_dir"]: 
                                 messagebox.showinfo("Export Complete", 
                                                 f"Exported {p} ROM preview images to {d}\n" +
