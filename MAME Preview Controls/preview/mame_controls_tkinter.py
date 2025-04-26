@@ -975,13 +975,13 @@ class MAMEControlConfig(ctk.CTk):
             debug_print("Stats label created")
 
             # Unmatched ROMs button
-            self.unmatched_button = ctk.CTkButton(
+            '''self.unmatched_button = ctk.CTkButton(
                 self.stats_frame,
                 text="Show Unmatched ROMs",
                 command=self.show_unmatched_roms,
                 width=150
             )
-            self.unmatched_button.grid(row=0, column=1, padx=5, pady=5, sticky="e")
+            self.unmatched_button.grid(row=0, column=1, padx=5, pady=5, sticky="e")'''
             
             # Creating remaining UI elements...
             debug_print("Creating buttons...")

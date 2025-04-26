@@ -517,37 +517,36 @@ class PreviewWindow(QMainWindow):
                     print(f"Warning: Failed to delete guide: {e}")
             self.measurement_guides = []
 
-    # 5. Add integration to the PreviewWindow initialization
     def enhance_preview_window_init(self):
         """Call this in PreviewWindow.__init__ after setting up controls"""
         try:
-            
             # Load any saved settings
             if hasattr(self, 'load_grid_settings'):
                 self.load_grid_settings()
             if hasattr(self, 'load_snapping_settings'):
                 self.load_snapping_settings()
             
-            # Add a shortcut text to inform users about Shift key
-            from PyQt5.QtWidgets import QLabel
-            
-            try:
-                self.shortcuts_label = QLabel("Hold Shift to temporarily disable snapping", self)
-                self.shortcuts_label.setStyleSheet("""
-                    background-color: rgba(0, 0, 0, 180);
-                    color: white;
-                    padding: 5px;
-                    border-radius: 3px;
-                """)
-                self.shortcuts_label.adjustSize()
-                self.shortcuts_label.move(10, self.height() - self.shortcuts_label.height() - 10)
-                self.shortcuts_label.show()
+            # ONLY add the shortcut text if NOT in clean mode
+            if not hasattr(self, 'clean_mode') or not self.clean_mode:
+                from PyQt5.QtWidgets import QLabel
                 
-                # Hide after a delay
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(5000, lambda: self.shortcuts_label.hide())
-            except Exception as e:
-                print(f"Error creating shortcuts label: {e}")
+                try:
+                    self.shortcuts_label = QLabel("Hold Shift to temporarily disable snapping", self)
+                    self.shortcuts_label.setStyleSheet("""
+                        background-color: rgba(0, 0, 0, 180);
+                        color: white;
+                        padding: 5px;
+                        border-radius: 3px;
+                    """)
+                    self.shortcuts_label.adjustSize()
+                    self.shortcuts_label.move(10, self.height() - self.shortcuts_label.height() - 10)
+                    self.shortcuts_label.show()
+                    
+                    # Hide after a delay
+                    from PyQt5.QtCore import QTimer
+                    QTimer.singleShot(5000, lambda: self.shortcuts_label.hide())
+                except Exception as e:
+                    print(f"Error creating shortcuts label: {e}")
         except Exception as e:
             print(f"Error in enhance_preview_window_init: {e}")
     
@@ -4339,10 +4338,9 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
 
-
-    # 2. Modify the create_control_labels method in PreviewWindow to remove shadow creation
+    # 1. First, fix the create_control_labels method in PreviewWindow
     def create_control_labels(self, clean_mode=False):
-        """Create control labels without shadows"""
+        """Create control labels without shadows and respect clean_mode"""
         if not self.game_data or 'players' not in self.game_data:
             return
         
@@ -4473,8 +4471,12 @@ class PreviewWindow(QMainWindow):
                     # Position the label
                     label.move(x, y)
                     
-                    # Handle draggable mode based on clean_mode parameter
+                    # CRITICAL FIX: Make sure to set draggable flag correctly based on clean_mode
                     label.draggable = not clean_mode
+                    
+                    # CRITICAL FIX: Disable cursor change in clean mode
+                    if clean_mode:
+                        label.setCursor(Qt.ArrowCursor)
                     
                     # For gradient labels, explicitly set gradient properties
                     if use_gradient and hasattr(label, 'use_prefix_gradient'):
@@ -4494,10 +4496,16 @@ class PreviewWindow(QMainWindow):
                     # Apply visibility
                     label.setVisible(is_visible)
                     
-                    # Add drag events if not in clean mode
+                    # CRITICAL FIX: Only assign drag events if not in clean mode
                     if not clean_mode:
                         label.mousePressEvent = lambda event, lbl=label: self.on_label_press(event, lbl)
+                        label.mouseMoveEvent = lambda event, lbl=label: self.on_label_move(event, lbl)
                         label.mouseReleaseEvent = lambda event, lbl=label: self.on_label_release(event, lbl)
+                    else:
+                        # In clean mode, make sure we don't respond to mouse events
+                        label.mousePressEvent = lambda event: None
+                        label.mouseMoveEvent = lambda event: None
+                        label.mouseReleaseEvent = lambda event: None
                     
                     # Store the label
                     self.control_labels[control_name] = {
@@ -4513,7 +4521,7 @@ class PreviewWindow(QMainWindow):
         
         # Force a canvas update
         self.canvas.update()
-        print(f"Created {len(self.control_labels)} control labels with improved font handling")
+        print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
                 
     def on_label_press(self, event, label):
         """Handle mouse press on label"""
@@ -5747,9 +5755,9 @@ class EnhancedLabel(QLabel):
         painter.setPen(self.palette().color(QPalette.WindowText))
         painter.drawText(int(x), int(y), self.text())
         
-# 4. Modify the DraggableLabel classes to remove shadow functionality
+# 2. Also update the DraggableLabel class to strictly respect the draggable property
 class DraggableLabel(QLabel):
-    """A draggable label without shadow functionality"""
+    """A draggable label without shadow functionality that respects draggable flag"""
     def __init__(self, text, parent=None, settings=None):
         super().__init__(text, parent)
         self.settings = settings or {}
@@ -5768,12 +5776,15 @@ class DraggableLabel(QLabel):
         # Original font size
         self.original_font_size = self.settings.get("font_size", 28)
         
-        # Create context menu
+        # Create context menu - not used in clean mode
         self.setup_context_menu()
         
         # Enable auto-resizing based on content
         self.setWordWrap(True)
         self.adjustSize()
+        
+        # Allow draggability to be controlled
+        self.draggable = True
         
     # Add to DraggableLabel class
     def setFont(self, font):
@@ -5872,9 +5883,14 @@ class DraggableLabel(QLabel):
             self.setText(text)
             
     def mousePressEvent(self, event):
-        """Handle mouse press events for dragging with correct offset tracking"""
+        """Handle mouse press events for dragging with respect for draggable flag"""
         from PyQt5.QtCore import Qt
         
+        # CRITICAL FIX: Only handle dragging if explicitly allowed
+        if not getattr(self, 'draggable', True):
+            event.ignore()  # Pass event to parent
+            return
+            
         if event.button() == Qt.LeftButton:
             # Make sure dragging flag is set
             self.dragging = True
@@ -5887,7 +5903,11 @@ class DraggableLabel(QLabel):
             event.accept()
 
     def mouseMoveEvent(self, event):
-        """Handle mouse move with proper offset preservation"""
+        """Handle mouse move with proper offset preservation and respect for draggable flag"""
+        # CRITICAL FIX: Only handle dragging if explicitly allowed
+        if not getattr(self, 'draggable', True):
+            event.ignore()  # Pass event to parent
+            return
         from PyQt5.QtCore import Qt
         from PyQt5.QtWidgets import QApplication
         
@@ -6071,20 +6091,14 @@ class DraggableLabel(QLabel):
                 
             event.accept()
         
-    def find_preview_window_parent(self):
-        """Find the PreviewWindow parent to access alignment guide methods"""
-        current = self.parent()
-        while current:
-            # Look for a parent that has both show_alignment_guides and hide_alignment_guides methods
-            if (hasattr(current, 'show_alignment_guides') and 
-                hasattr(current, 'hide_alignment_guides')):
-                return current
-            current = current.parent()
-        return None
-    
     def mouseReleaseEvent(self, event):
-        """Handle mouse release to end dragging"""
+        """Handle mouse release with respect for draggable flag"""
         from PyQt5.QtCore import Qt
+        
+        # CRITICAL FIX: Only handle dragging if explicitly allowed
+        if not getattr(self, 'draggable', True):
+            event.ignore()  # Pass event to parent
+            return
         
         if event.button() == Qt.LeftButton:
             self.dragging = False
@@ -6101,9 +6115,25 @@ class DraggableLabel(QLabel):
                     parent.hide_position_indicator()
                 
             event.accept()
+    
+    def find_preview_window_parent(self):
+        """Find the PreviewWindow parent to access alignment guide methods"""
+        current = self.parent()
+        while current:
+            # Look for a parent that has both show_alignment_guides and hide_alignment_guides methods
+            if (hasattr(current, 'show_alignment_guides') and 
+                hasattr(current, 'hide_alignment_guides')):
+                return current
+            current = current.parent()
+        return None
             
     def contextMenuEvent(self, event):
-        """Show context menu on right-click"""
+        """Show context menu on right-click if draggable is enabled"""
+        # CRITICAL FIX: Only show context menu if explicitly allowed
+        if not getattr(self, 'draggable', True):
+            event.ignore()  # Pass event to parent
+            return
+            
         self.menu.exec_(event.globalPos())
     
     def paintEvent(self, event):
