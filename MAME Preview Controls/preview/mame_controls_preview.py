@@ -204,10 +204,16 @@ class PreviewWindow(QMainWindow):
             QTimer.singleShot(1000, self.detect_screen_after_startup)
             # Add this line at the end of __init__, just before self.setVisible(True)
             self.enhance_preview_window_init()
-
+            
+            # Make sure we have a transparent background
+            transparent_bg_path = self.initialize_transparent_background()
+            if transparent_bg_path:
+                # Ensure the background is loaded
+                self.load_background_image_fullscreen(force_default=transparent_bg_path)
+            
             self.initialize_controller_close()
-
-            self.setVisible(True)  # Now show the fully prepared window
+            
+            self.setVisible(True)  # Now show the window
 
             print(f"Window size: {self.width()}x{self.height()}")
             print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
@@ -271,132 +277,6 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
-
-    def initialize_controller_close(self):
-        """Initialize controller input detection using the inputs package"""
-        try:
-            # Try to import inputs module
-            from inputs import devices, get_gamepad
-            
-            # Check if gamepads are available
-            gamepads = [device for device in devices.gamepads]
-            if not gamepads:
-                print("No gamepads detected, controller close feature disabled")
-                return
-                
-            print(f"Found gamepad: {gamepads[0].name}, enabling controller close feature")
-            
-            # Flag to prevent multiple polling loops
-            self.xinput_polling_active = True
-            
-            # Track last detected button press time to prevent multiple triggers
-            self.last_button_press_time = 0
-            
-            # Create a dedicated thread for controller polling
-            import threading
-            import time
-            import queue
-            
-            # Create a queue for button events
-            self.controller_event_queue = queue.Queue()
-            
-            # Thread function for continuous controller polling
-            def controller_polling_thread():
-                try:
-                    while getattr(self, 'xinput_polling_active', False):
-                        try:
-                            # Get events from controller
-                            events = get_gamepad()
-                            
-                            # Look for button presses
-                            for event in events:
-                                if event.ev_type == "Key" and event.state == 1:
-                                    # Put button press event in queue
-                                    self.controller_event_queue.put(event.code)
-                                    
-                        except Exception as e:
-                            # Ignore expected errors
-                            if "No more events to read" not in str(e):
-                                print(f"Controller polling error: {e}")
-                            
-                        # Short sleep to avoid consuming too much CPU
-                        time.sleep(0.01)
-                except Exception as e:
-                    print(f"Controller thread error: {e}")
-                
-                print("Controller polling thread ended")
-            
-            # Start the polling thread
-            self.controller_thread = threading.Thread(target=controller_polling_thread)
-            self.controller_thread.daemon = True
-            self.controller_thread.start()
-            
-            # Function to check the event queue from the main thread
-            def check_controller_queue():
-                # Process up to 5 events at a time
-                for _ in range(5):
-                    if self.controller_event_queue.empty():
-                        break
-                    
-                    try:
-                        # Get button code from queue
-                        button_code = self.controller_event_queue.get_nowait()
-                        
-                        # Check debounce time (300ms)
-                        current_time = time.time()
-                        if current_time - self.last_button_press_time > 0.3:
-                            print(f"Controller button pressed: {button_code}")
-                            self.last_button_press_time = current_time
-                            
-                            # Close the preview
-                            self.close()
-                            return
-                    except queue.Empty:
-                        break
-                    except Exception as e:
-                        print(f"Error processing controller event: {e}")
-                
-                # Schedule next check if still active
-                if getattr(self, 'xinput_polling_active', False):
-                    from PyQt5.QtCore import QTimer
-                    QTimer.singleShot(33, check_controller_queue)  # ~30Hz checking
-            
-            # Start the event queue checker using QTimer
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(100, check_controller_queue)
-            print("Controller close feature enabled")
-            
-        except ImportError:
-            print("Inputs package not available, install with: pip install inputs")
-        except Exception as e:
-            print(f"Error setting up controller input: {e}")
-
-    def closeEvent(self, event):
-        """Override close event to ensure proper cleanup"""
-        print("PreviewWindow closeEvent triggered, performing cleanup...")
-        
-        # Stop controller polling
-        self.xinput_polling_active = False
-        
-        # Cancel any pending timers
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if isinstance(attr, QTimer):
-                try:
-                    attr.stop()
-                    print(f"Stopped timer: {attr_name}")
-                except:
-                    pass
-        
-        # Free resources
-        self.cleanup_resources()
-        
-        # Accept the close event to allow the window to close
-        event.accept()
-        
-        # If we're in standalone mode, quit the application
-        if getattr(self, 'standalone_mode', False):
-            QApplication.quit()
 
     # Add this method to the PreviewWindow class
     def resizeEvent(self, event):
@@ -1115,9 +995,10 @@ class PreviewWindow(QMainWindow):
                 line.deleteLater()
             self.grid_lines = []
     
-    # 1. Add show_alignment_guides method to PreviewWindow
+    # 3. Update show_alignment_guides method to not reference shadow elements
+
     def show_alignment_guides(self, guide_lines):
-        """Show alignment guide lines with enhanced visibility"""
+        """Show alignment guide lines with enhanced visibility, no shadow references"""
         # Remove any existing guide lines
         self.hide_alignment_guides()
         
@@ -1427,9 +1308,9 @@ class PreviewWindow(QMainWindow):
         
         print("--- FONT INITIALIZATION COMPLETE ---\n")
 
-    # 1. First, modify the create_floating_button_frame method to add a proper drag handle
+    # 10. Remove the shadow toggle button from UI
     def create_floating_button_frame(self):
-        """Create clean, simple floating button frame with improved drag and click handling"""
+        """Create clean, simple floating button frame without shadow toggle"""
         from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         from PyQt5.QtCore import Qt, QPoint, QTimer
         
@@ -1575,9 +1456,6 @@ class PreviewWindow(QMainWindow):
         self.drag_handle.mousePressEvent = self.handle_drag_press
         self.drag_handle.mouseMoveEvent = self.handle_drag_move
         self.drag_handle.mouseReleaseEvent = self.handle_drag_release
-        
-        # CRITICAL FIX: The button frame itself should NOT have drag behavior
-        # Remove the mouse event handlers from the button frame
         
         # Store a flag to track frame dragging state
         self.button_dragging = False
@@ -1809,6 +1687,7 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'bezel_button'):
             self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
     
+    # 12. Modify the force_resize_all_labels method to not update shadows
     def force_resize_all_labels(self):
         """Force all control labels to resize according to their content"""
         if not hasattr(self, 'control_labels'):
@@ -2033,8 +1912,6 @@ class PreviewWindow(QMainWindow):
                 for control_data in self.control_labels.values():
                     if 'label' in control_data and control_data['label']:
                         control_data['label'].raise_()
-                    if 'shadow' in control_data and control_data['shadow']:
-                        control_data['shadow'].raise_()
             
             print("Layering setup for bezel display")
     
@@ -2106,18 +1983,13 @@ class PreviewWindow(QMainWindow):
                 QTimer.singleShot(100, self.show_bezel_with_background)
                 print("Bezel initialized as visible based on settings")
     
-    # 2. For the on_label_move method in PreviewWindow, we need to update it too
-    def on_label_move(self, event, label, shadow, orig_func):
-        """Handle label movement and update shadow position with proper offset preservation"""
+    # 3. Modify the on_label_move method to remove shadow handling
+    def on_label_move(self, event, label, orig_func=None):
+        """Handle label movement without shadow updates"""
         # If we should use the original function, do that
         if orig_func is not None:
             # Call the original mouseMoveEvent method for the label
             orig_func(event)
-            
-            # Update shadow position to match the label with offset
-            if shadow:
-                shadow_pos = label.pos()
-                shadow.move(shadow_pos.x() + 2, shadow_pos.y() + 2)
             return
             
         # Direct handling (if orig_func is None)
@@ -2134,10 +2006,6 @@ class PreviewWindow(QMainWindow):
             
             # Move the label
             label.move(new_pos)
-            
-            # Update shadow position if provided
-            if shadow:
-                shadow.move(new_pos.x() + 2, new_pos.y() + 2)
         
         # Let event propagate
         event.accept()
@@ -2176,9 +2044,9 @@ class PreviewWindow(QMainWindow):
         
         return label, width, height
 
-    # Fix 4: Improve show_all_xinput_controls to properly handle font creation
+    # 11. Modify the show_all_xinput_controls method to remove shadow creation
     def show_all_xinput_controls(self):
-        """Show all possible P1 XInput controls for global positioning with improved font handling"""
+        """Show all possible P1 XInput controls for global positioning without shadows"""
         # Standard XInput controls for positioning - P1 ONLY
         xinput_controls = {
             "P1_JOYSTICK_UP": "LS Up",
@@ -2209,7 +2077,7 @@ class PreviewWindow(QMainWindow):
             from PyQt5.QtWidgets import QLabel, QSizePolicy
             import os
             
-            print("\n--- Showing all P1 XInput controls with improved font handling ---")
+            print("\n--- Showing all P1 XInput controls without shadows ---")
             
             # CRITICAL FIX: First ensure fonts are properly loaded/registered
             if not hasattr(self, 'current_font') or self.current_font is None:
@@ -2233,8 +2101,6 @@ class PreviewWindow(QMainWindow):
                 if control_name in self.control_labels:
                     if 'label' in self.control_labels[control_name]:
                         self.control_labels[control_name]['label'].deleteLater()
-                    if 'shadow' in self.control_labels[control_name]:
-                        self.control_labels[control_name]['shadow'].deleteLater()
                     del self.control_labels[control_name]
 
             # Clear collections
@@ -2357,20 +2223,11 @@ class PreviewWindow(QMainWindow):
                 # CRITICAL FIX FOR TEXT TRUNCATION:
                 # First, let the label auto-size based on content
                 label.adjustSize()
-                
                 # Then, ensure it's at least as wide as our calculated max width
                 # This creates consistency and prevents long text from being cut off
                 label_width = max(label.width(), max_text_width)
                 label_height = label.height()
                 label.resize(label_width, label_height)
-                
-                # Create shadow label with similar properties but plain black text
-                shadow = QLabel(display_text, self.canvas)
-                shadow.setFont(font)
-                shadow.setStyleSheet("color: black; background-color: transparent; border: none;")
-                
-                # Shadow should match label size exactly
-                shadow.resize(label_width, label_height)
                 
                 # Determine position - now completely separated from creation
                 x, y = 0, 0
@@ -2406,24 +2263,15 @@ class PreviewWindow(QMainWindow):
                     print(f"Using grid position for {control_name}: ({x}, {y})")
                 
                 # Apply position
-                shadow.move(x + 2, y + 2)
                 label.move(x, y)
-                
-                # Stack shadow behind
-                shadow.lower()
                 
                 # Store in control_labels with original position
                 self.control_labels[control_name] = {
                     'label': label,
-                    'shadow': shadow,
                     'action': action_text,
                     'prefix': button_prefix,
                     'original_pos': original_pos
                 }
-                
-                # Connect shadow movement handler
-                original_mouseMoveEvent = label.mouseMoveEvent
-                label.mouseMoveEvent = lambda event, label=label, shadow=shadow, orig_func=original_mouseMoveEvent: self.on_label_move(event, label, shadow, orig_func)
                 
                 # Apply visibility based on joystick settings
                 is_visible = True
@@ -2431,7 +2279,6 @@ class PreviewWindow(QMainWindow):
                     is_visible = self.joystick_visible
                 
                 label.setVisible(is_visible)
-                shadow.setVisible(is_visible)
             
             # Update button text
             if hasattr(self, 'xinput_controls_button'):
@@ -2448,7 +2295,7 @@ class PreviewWindow(QMainWindow):
             # Force a canvas update
             self.canvas.update()
             
-            print(f"Created and displayed {len(xinput_controls)} P1 XInput controls with improved font handling")
+            print(f"Created and displayed {len(xinput_controls)} P1 XInput controls without shadows")
             return True
             
         except Exception as e:
@@ -2481,8 +2328,6 @@ class PreviewWindow(QMainWindow):
                 # Remove the control from the canvas
                 if control_name in self.control_labels:
                     self.control_labels[control_name]['label'].deleteLater()
-                    if 'shadow' in self.control_labels[control_name]:
-                        self.control_labels[control_name]['shadow'].deleteLater()
                     del self.control_labels[control_name]
 
             # Clear collections
@@ -2504,7 +2349,7 @@ class PreviewWindow(QMainWindow):
             # Switch to showing all XInput controls
             self.show_all_xinput_controls()
 
-    # New method to force apply joystick visibility
+    # 15. Modify apply_joystick_visibility to not update shadows
     def apply_joystick_visibility(self):
         """Force apply joystick visibility settings to all controls"""
         controls_updated = 0
@@ -3387,8 +3232,9 @@ class PreviewWindow(QMainWindow):
         
         print(f"Logo display updated: {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
         
+    # 7. Modify the duplicate_control_label method in PreviewWindow
     def duplicate_control_label(self, label):
-        """Duplicate a control label"""
+        """Duplicate a control label without shadow"""
         # Find which control this label belongs to
         for control_name, control_data in self.control_labels.items():
             if control_data['label'] == label:
@@ -3411,31 +3257,19 @@ class PreviewWindow(QMainWindow):
                 new_label.setFont(label.font())
                 new_label.setStyleSheet(label.styleSheet())
                 
-                # Create shadow effect for better visibility
-                shadow_label = QLabel(action_text, self.canvas)
-                shadow_label.setStyleSheet("color: black; background-color: transparent; border: none;")
-                shadow_label.setFont(new_label.font())
-                
                 # Position slightly offset from original
                 new_pos = QPoint(label.pos().x() + 20, label.pos().y() + 20)
                 new_label.move(new_pos)
-                shadow_label.move(new_pos.x() + 2, new_pos.y() + 2)
                 
-                # Store the new labels
+                # Store the new label
                 self.control_labels[new_control_name] = {
                     'label': new_label,
-                    'shadow': shadow_label,
                     'action': action_text,
                     'original_pos': new_pos
                 }
                 
-                # Connect position update for shadow
-                original_mouseMoveEvent = new_label.mouseMoveEvent
-                new_label.mouseMoveEvent = lambda event, label=new_label, shadow=shadow_label, orig_func=original_mouseMoveEvent: self.on_label_move(event, label, shadow, orig_func)
-                
-                # Show the new labels
+                # Show the new label
                 new_label.show()
-                shadow_label.show()
                 
                 break
     
@@ -3528,39 +3362,9 @@ class PreviewWindow(QMainWindow):
         # Add rows to button layout
         self.button_layout.addLayout(self.top_row)
         self.button_layout.addLayout(self.bottom_row)
-        
-    # Add a shadow toggle button to the setup UI
-    # Add this to the method that creates your button rows
-    def add_shadow_toggle_button(self):
-        """Add a shadow toggle button to the UI"""
-        # Add to bottom row
-        button_style = """
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #5a5a5a;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-                min-width: 90px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """
-        
-        self.shadow_button = QPushButton("Hide Shadow")
-        self.shadow_button.clicked.connect(self.toggle_shadow)
-        self.shadow_button.setStyleSheet(button_style)
-        
-        # Add to your bottom row layout
-        self.bottom_row.addWidget(self.shadow_button)
     
     def save_image(self):
-        """Enhanced save_image method with proper text centering and vertical gradients"""
+        """Enhanced save_image method that preserves transparency"""
         try:
             # Create the images directory if it doesn't exist
             images_dir = os.path.join(self.preview_dir, "images")
@@ -3581,13 +3385,15 @@ class PreviewWindow(QMainWindow):
                     return False
             
             # Create a new image with the same size as the canvas
+            # Use QImage with Format_ARGB32 to support transparency
+            from PyQt5.QtGui import QImage
             image = QImage(
                 self.canvas.width(),
                 self.canvas.height(),
                 QImage.Format_ARGB32
             )
-            # Fill with black background
-            image.fill(Qt.black)
+            # Fill with transparent background instead of black
+            image.fill(Qt.transparent)
             
             # Create painter for the image
             painter = QPainter(image)
@@ -3595,16 +3401,22 @@ class PreviewWindow(QMainWindow):
             painter.setRenderHint(QPainter.TextAntialiasing)
             painter.setRenderHint(QPainter.SmoothPixmapTransform)
             
-            # Draw the background image
+            # Draw the background image if it's not the default transparent one
             if hasattr(self, 'background_pixmap') and self.background_pixmap and not self.background_pixmap.isNull():
-                bg_pixmap = self.background_pixmap
-                
-                # Calculate position to center the pixmap
-                x = (self.canvas.width() - bg_pixmap.width()) // 2
-                y = (self.canvas.height() - bg_pixmap.height()) // 2
-                
-                # Draw the pixmap
-                painter.drawPixmap(x, y, bg_pixmap)
+                # Check if this is the default transparent background
+                if hasattr(self, 'original_background_pixmap') and self.original_background_pixmap:
+                    bg_path = self.original_background_pixmap.cacheKey()
+                    default_path = os.path.join(self.preview_dir, "images", "default.png")
+                    
+                    # If it's not the default transparent background, draw it
+                    bg_pixmap = self.background_pixmap
+                    
+                    # Calculate position to center the pixmap
+                    x = (self.canvas.width() - bg_pixmap.width()) // 2
+                    y = (self.canvas.height() - bg_pixmap.height()) // 2
+                    
+                    # Draw the pixmap
+                    painter.drawPixmap(x, y, bg_pixmap)
             
             # Draw the bezel if it's visible
             if hasattr(self, 'bezel_visible') and self.bezel_visible and hasattr(self, 'bezel_pixmap') and not self.bezel_pixmap.isNull():
@@ -3645,42 +3457,6 @@ class PreviewWindow(QMainWindow):
                     
                     # Calculate vertical position - centered in the label
                     y = int(pos.y() + (label.height() + metrics.ascent() - metrics.descent()) / 2)
-                    
-                    # Draw shadow if enabled
-                    if getattr(label, 'is_shadow_visible', True):
-                        shadow_offset = getattr(label, 'shadow_offset', 2)
-                        shadow_color = getattr(label, 'shadow_color', QColor(0, 0, 0))
-                        painter.setPen(shadow_color)
-                        
-                        # Handle shadow based on whether we have prefix and action
-                        if prefix and ": " in label.text():
-                            prefix_text = f"{prefix}: "
-                            
-                            # Calculate widths for centering - Using width() for Qt compatibility
-                            prefix_width = metrics.width(prefix_text)
-                            action_width = metrics.width(action)
-                            total_width = prefix_width + action_width
-                            
-                            # Center the text within the label
-                            x = int(pos.x() + (label_width - total_width) / 2)
-                            
-                            # Draw full text shadow
-                            painter.drawText(
-                                int(x + shadow_offset),
-                                int(y + shadow_offset),
-                                prefix_text + action
-                            )
-                        else:
-                            # Center the single text
-                            text_width = metrics.width(label.text())
-                            x = int(pos.x() + (label_width - text_width) / 2)
-                            
-                            # Draw shadow
-                            painter.drawText(
-                                int(x + shadow_offset),
-                                int(y + shadow_offset),
-                                label.text()
-                            )
                     
                     # Handle colored/gradient text
                     if prefix and ": " in label.text():
@@ -3797,7 +3573,7 @@ class PreviewWindow(QMainWindow):
             # End painting
             painter.end()
             
-            # Save the image
+            # Save the image as PNG to preserve transparency
             if image.save(output_path, "PNG"):
                 print(f"Image saved successfully to {output_path}")
                 QMessageBox.information(
@@ -3931,8 +3707,6 @@ class PreviewWindow(QMainWindow):
             for control_data in self.control_labels.values():
                 if 'label' in control_data and control_data['label']:
                     control_data['label'].raise_()
-                if 'shadow' in control_data and control_data['shadow']:
-                    control_data['shadow'].raise_()
         
         # Raise logo if it exists
         if hasattr(self, 'logo_label') and self.logo_label:
@@ -3940,77 +3714,85 @@ class PreviewWindow(QMainWindow):
         
         print("All controls raised above bezel")
 
-    def load_background_image_fullscreen(self):
+    def initialize_transparent_background(self):
+        """Create and ensure a blank transparent background exists before displaying preview"""
+        try:
+            # Use absolute paths to ensure correct location
+            images_dir = os.path.abspath(os.path.join(self.preview_dir, "images"))
+            os.makedirs(images_dir, exist_ok=True)
+            
+            default_path = os.path.join(images_dir, "default.png")
+            print(f"Checking for default background at: {default_path}")
+            
+            # Create the transparent image if it doesn't exist
+            if not os.path.exists(default_path):
+                print("Creating new transparent background image...")
+                
+                # Create a transparent image at 1920x1080 resolution
+                from PyQt5.QtGui import QImage
+                default_image = QImage(1920, 1080, QImage.Format_ARGB32)
+                default_image.fill(Qt.transparent)  # Completely transparent
+                
+                # Save the image
+                try:
+                    success = default_image.save(default_path, "PNG")
+                    if success:
+                        print(f"Successfully created transparent background at: {default_path}")
+                    else:
+                        print(f"Failed to save transparent background to {default_path}")
+                except Exception as e:
+                    print(f"Exception while saving transparent background: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"Transparent background already exists at: {default_path}")
+            
+            return default_path
+        except Exception as e:
+            print(f"Error creating transparent background: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    # You'll also need to modify the load_background_image_fullscreen method to accept a forced default:
+    def load_background_image_fullscreen(self, force_default=None):
         """Load the background image for the game with improved path handling"""
         try:
-            # First check for game-specific image in preview directory
-            possible_paths = [
-                # First look in preview/images directory
-                os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
-                os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
-                
-                # Then check in preview root
-                os.path.join(self.preview_dir, f"{self.rom_name}.png"),
-                os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
-                
-                # Default images
-                os.path.join(self.preview_dir, "images", "default.png"),
-                os.path.join(self.preview_dir, "images", "default.jpg"),
-                os.path.join(self.preview_dir, "default.png"),
-                os.path.join(self.preview_dir, "default.jpg"),
-            ]
-            
-            # Find the first existing image path
             image_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    image_path = path
-                    print(f"Found background image: {image_path}")
-                    break
             
-            # No existing image found, create default.png
-            if not image_path:
-                print("No existing background image found, creating default.png")
+            # If force_default is provided, use it directly
+            if force_default and os.path.exists(force_default):
+                image_path = force_default
+                print(f"Using forced default background: {image_path}")
+            else:
+                # First check for game-specific image in preview directory
+                possible_paths = [
+                    # First look in preview/images directory
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
+                    
+                    # Then check in preview root
+                    os.path.join(self.preview_dir, f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
+                    
+                    # Default images
+                    os.path.join(self.preview_dir, "images", "default.png"),
+                    os.path.join(self.preview_dir, "images", "default.jpg"),
+                    os.path.join(self.preview_dir, "default.png"),
+                    os.path.join(self.preview_dir, "default.jpg"),
+                ]
                 
-                # Ensure images directory exists
-                images_dir = os.path.join(self.preview_dir, "images")
-                os.makedirs(images_dir, exist_ok=True)
+                # Find the first existing image path
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        image_path = path
+                        print(f"Found background image: {image_path}")
+                        break
                 
-                # Create a default image using QPainter
-                default_path = os.path.join(images_dir, "default.png")
-                default_pixmap = QPixmap(1280, 720)
-                default_pixmap.fill(Qt.black)
-                
-                # Paint default text
-                painter = QPainter(default_pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setRenderHint(QPainter.TextAntialiasing, True)
-                
-                # Draw text
-                font = QFont("Arial", 32, QFont.Bold)
-                painter.setFont(font)
-                painter.setPen(Qt.white)
-                painter.drawText(default_pixmap.rect(), Qt.AlignCenter, "MAME Controls Preview")
-                
-                # Draw instructions
-                font.setPointSize(24)
-                font.setBold(False)
-                painter.setFont(font)
-                painter.setPen(QColor(180, 180, 180))
-                painter.drawText(QRect(0, 300, 1280, 100), Qt.AlignCenter, 
-                                "Place game screenshots in preview/images folder")
-                painter.drawText(QRect(0, 350, 1280, 100), Qt.AlignCenter, 
-                                "named after the ROM (e.g., pacman.png)")
-                
-                painter.end()
-                
-                # Save the default image
-                if default_pixmap.save(default_path, "PNG"):
-                    print(f"Created default background image at: {default_path}")
-                    image_path = default_path
-                else:
-                    print(f"Failed to save default background image")
-            
+                # If no image found, use initialize_transparent_background to create one
+                if not image_path:
+                    image_path = self.initialize_transparent_background()
+                    
             # Set background image if found or created
             if image_path:
                 # Create background label with image
@@ -4065,62 +3847,11 @@ class PreviewWindow(QMainWindow):
                 # Update when window resizes
                 self.canvas.resizeEvent = self.on_canvas_resize_with_background
             else:
-                # Fallback to a plain black background
-                print("Could not create or find a background image")
+                # Fallback to a transparent background
+                print("Could not create or find a background image, using transparent background")
                 self.bg_label = QLabel(self.canvas)
-                self.bg_label.setStyleSheet("background-color: black;")
+                self.bg_label.setStyleSheet("background-color: transparent;")
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
-                
-                # Try to create and save a default image for future use
-                try:
-                    # Create directories if they don't exist
-                    os.makedirs(os.path.join(self.preview_dir, "images"), exist_ok=True)
-                    
-                    # Create a default image using QPainter
-                    default_pixmap = QPixmap(1280, 720)
-                    default_pixmap.fill(Qt.black)
-                    
-                    # Paint default text
-                    painter = QPainter(default_pixmap)
-                    painter.setRenderHint(QPainter.Antialiasing, True)
-                    painter.setRenderHint(QPainter.TextAntialiasing, True)
-                    
-                    # Draw text
-                    font = QFont("Arial", 32, QFont.Bold)
-                    painter.setFont(font)
-                    painter.setPen(Qt.white)
-                    painter.drawText(default_pixmap.rect(), Qt.AlignCenter, "MAME Controls Preview")
-                    
-                    # Draw instructions
-                    font.setPointSize(24)
-                    font.setBold(False)
-                    painter.setFont(font)
-                    painter.setPen(QColor(180, 180, 180))
-                    painter.drawText(QRect(0, 300, 1280, 100), Qt.AlignCenter, 
-                                    "Place game screenshots in preview/images folder")
-                    painter.drawText(QRect(0, 350, 1280, 100), Qt.AlignCenter, 
-                                    "named after the ROM (e.g., pacman.png)")
-                    
-                    painter.end()
-                    
-                    # Save the default image
-                    default_path = os.path.join(self.preview_dir, "images", "default.png")
-                    if default_pixmap.save(default_path, "PNG"):
-                        print(f"Created default background image at: {default_path}")
-                        
-                        # Use this image as the background
-                        self.bg_label.setPixmap(default_pixmap)
-                        self.bg_label.setGeometry(0, 0, default_pixmap.width(), default_pixmap.height())
-                        
-                        # Store pixmaps for later use
-                        self.original_background_pixmap = default_pixmap
-                        self.background_pixmap = default_pixmap
-                        
-                        # Store position info
-                        self.bg_pos = (0, 0)
-                        self.bg_size = (default_pixmap.width(), default_pixmap.height())
-                except Exception as e:
-                    print(f"Error creating default background: {e}")
         except Exception as e:
             print(f"Error loading background image: {e}")
             import traceback
@@ -4135,10 +3866,6 @@ class PreviewWindow(QMainWindow):
                 self.bg_label.setStyleSheet("color: red; font-size: 18px;")
                 self.bg_label.setAlignment(Qt.AlignCenter)
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
-
-
-    # Replace the on_canvas_resize_with_background method
-    # 1. First, let's enhance the update_logo_display method to properly handle centering
 
     def update_logo_display(self):
         """Update the logo display based on current settings with improved centering"""
@@ -4613,9 +4340,9 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
 
 
-    # Fix 2: Enhance create_control_labels to better handle font application
+    # 2. Modify the create_control_labels method in PreviewWindow to remove shadow creation
     def create_control_labels(self, clean_mode=False):
-        """Create control labels with improved font handling"""
+        """Create control labels without shadows"""
         if not self.game_data or 'players' not in self.game_data:
             return
         
@@ -4764,31 +4491,17 @@ class PreviewWindow(QMainWindow):
                     text_color = self.text_settings.get("action_color", "#FFFFFF")
                     label.setStyleSheet(f"color: {text_color}; background-color: transparent; font-family: '{label.font().family()}';")
                     
-                    # Create shadow effect for better visibility
-                    shadow_label = QLabel(display_text, self.canvas)
-                    shadow_label.setStyleSheet("color: black; background-color: transparent; border: none;")
-                    shadow_label.setFont(label.font())  # Apply same font
-                    shadow_label.resize(label.size())   # Match size
-                    shadow_label.move(x + 2, y + 2)     # Offset for shadow effect
-                    
-                    # Connect shadow movement
-                    original_mouseMoveEvent = label.mouseMoveEvent
-                    label.mouseMoveEvent = lambda event, lbl=label, shadow=shadow_label, orig_func=original_mouseMoveEvent: self.on_label_move(event, lbl, shadow, orig_func)
-                    
                     # Apply visibility
                     label.setVisible(is_visible)
-                    shadow_label.setVisible(is_visible)
-                    shadow_label.lower()  # Ensure shadow is behind text
                     
                     # Add drag events if not in clean mode
                     if not clean_mode:
                         label.mousePressEvent = lambda event, lbl=label: self.on_label_press(event, lbl)
                         label.mouseReleaseEvent = lambda event, lbl=label: self.on_label_release(event, lbl)
                     
-                    # Store the label and shadow
+                    # Store the label
                     self.control_labels[control_name] = {
                         'label': label,
-                        'shadow': shadow_label,
                         'action': action_text,
                         'prefix': button_prefix,
                         'original_pos': original_pos
@@ -4813,27 +4526,26 @@ class PreviewWindow(QMainWindow):
             label.setCursor(Qt.ClosedHandCursor)
             event.accept()
 
-    def on_label_move(self, event, label, shadow=None, orig_func=None):
-        """Handle mouse move for dragging labels with shadow support"""
-        # If shadow and original function are provided, use them
-        if shadow is not None and orig_func is not None:
+    # 4. Update on_label_move method to remove shadow parameter and handling
+    def on_label_move(self, event, label, orig_func=None):
+        """Handle label movement without shadow updates"""
+        # If we should use the original function, do that
+        if orig_func is not None:
             # Call the original mouseMoveEvent method for the label
             orig_func(event)
-            
-            # Update shadow position to match the label with offset
-            shadow_pos = label.pos()
-            shadow.move(shadow_pos.x() + 2, shadow_pos.y() + 2)
             return
             
-        # Otherwise, use the standard dragging behavior
-        from PyQt5.QtCore import Qt
-        from PyQt5.QtWidgets import QApplication
-        
+        # Direct handling (if orig_func is None)
         if hasattr(label, 'dragging') and label.dragging:
-            # Calculate new position
+            # Get the current mouse position
             delta = event.pos() - label.drag_start_pos
-            new_pos = label.pos() + delta
-            original_pos = new_pos  # Store original position before any snapping
+            
+            # FIXED: Use original position + delta to preserve offset
+            if hasattr(label, 'original_label_pos'):
+                new_pos = label.original_label_pos + delta
+            else:
+                # Fallback to mapToParent
+                new_pos = label.mapToParent(event.pos() - label.drag_start_pos)
             
             # Initialize guide lines list and snapping variables
             guide_lines = []
@@ -4842,6 +4554,8 @@ class PreviewWindow(QMainWindow):
             canvas_height = self.canvas.height()
             
             # Check if snapping is enabled and not overridden
+            from PyQt5.QtWidgets import QApplication
+            from PyQt5.QtCore import Qt
             modifiers = QApplication.keyboardModifiers()
             disable_snap = bool(modifiers & Qt.ShiftModifier)  # Shift key disables snapping temporarily
             
@@ -4979,7 +4693,7 @@ class PreviewWindow(QMainWindow):
                 except Exception as e:
                     print(f"Error hiding alignment guides: {e}")
             
-            # Apply the move
+            # Move the label
             label.move(new_pos)
             
             # Show position indicator regardless of snapping
@@ -4988,8 +4702,9 @@ class PreviewWindow(QMainWindow):
                     self.show_position_indicator(new_pos.x(), new_pos.y())
                 except Exception as e:
                     print(f"Error showing position indicator: {e}")
-                
-            event.accept()
+        
+        # Let event propagate
+        event.accept()
 
     def on_label_release(self, event, label):
         """Handle mouse release to end dragging"""
@@ -5040,17 +4755,6 @@ class PreviewWindow(QMainWindow):
         """Ensure all controls are properly laid out in clean mode"""
         # Force a redraw of the canvas
         self.canvas.update()
-        
-        # Make sure all shadow labels are properly positioned
-        for control_name, control_data in self.control_labels.items():
-            if 'shadow' in control_data and 'label' in control_data:
-                shadow = control_data['shadow']
-                label = control_data['label']
-                pos = label.pos()
-                shadow.move(pos.x() + 2, pos.y() + 2)
-                
-                # Make sure shadow is behind label
-                shadow.lower()
                 
         # If logo exists, make sure it has no border
         if hasattr(self, 'logo_label') and self.logo_label:
@@ -5147,6 +4851,7 @@ class PreviewWindow(QMainWindow):
         # Placeholder for now - requires position management system
         pass
     
+    # 13. Modify the toggle_texts method to not update shadows
     def toggle_texts(self):
         """Toggle visibility of control labels except joystick controls"""
         self.texts_visible = not self.texts_visible
@@ -5167,7 +4872,7 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'canvas'):
             self.canvas.update()
     
-    # Update toggle_joystick_controls to save settings
+    # 14. Modify toggle_joystick_controls to not update shadows
     def toggle_joystick_controls(self):
         """Toggle visibility of joystick controls and save setting"""
         self.joystick_visible = not self.joystick_visible
@@ -5315,9 +5020,26 @@ class PreviewWindow(QMainWindow):
             self.save_global_text_settings()
             print("Text settings updated and saved globally")
     
-    # Improved update_text_settings to ensure font size is applied to all controls
     def update_text_settings(self, settings):
         """Update text settings and properly apply to all controls with global saving"""
+        # First, capture the current uppercase state before updating
+        old_uppercase = self.text_settings.get("use_uppercase", False)
+        new_uppercase = settings.get("use_uppercase", old_uppercase)
+        uppercase_changed = old_uppercase != new_uppercase
+        
+        if uppercase_changed:
+            print(f"Uppercase setting changing from {old_uppercase} to {new_uppercase}")
+            
+            # Special handling for first run - ensure we have original case data
+            if not hasattr(self, '_original_case_data'):
+                self._original_case_data = {}
+                # Store original lowercase versions of all control text
+                for control_name, control_data in self.control_labels.items():
+                    if 'action' in control_data:
+                        # Store the lowercase version
+                        self._original_case_data[control_name] = control_data['action'].lower()
+                        print(f"Stored original case for {control_name}: {self._original_case_data[control_name]}")
+        
         # Update local settings with merge
         self.text_settings.update(settings)
         
@@ -5329,8 +5051,13 @@ class PreviewWindow(QMainWindow):
         # Reload and register the font
         self.load_and_register_fonts()
         
-        # Apply to existing controls
-        self.apply_text_settings()
+        # Force immediate recreation of control labels to handle case change correctly
+        if uppercase_changed:
+            # This approach ensures case changes apply immediately, even on first run
+            self.recreate_control_labels_with_case()
+        else:
+            # Normal update for other changes
+            self.apply_text_settings(uppercase_changed=uppercase_changed)
         
         # Save to file
         try:
@@ -5353,8 +5080,65 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
         
         print(f"Text settings updated and applied: {self.text_settings}")
-    
-    def apply_text_settings(self):
+
+    def recreate_control_labels_with_case(self):
+        """Recreate all control labels with proper case handling"""
+        # Get current settings
+        use_uppercase = self.text_settings.get("use_uppercase", False)
+        
+        # Process each control label
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data and 'action' in control_data:
+                label = control_data['label']
+                
+                # Get the correct case version of the action text
+                if hasattr(self, '_original_case_data') and control_name in self._original_case_data:
+                    # Use the stored original case
+                    original_text = self._original_case_data[control_name]
+                else:
+                    # If no stored original, use current and force lowercase
+                    original_text = control_data['action'].lower()
+                    # Store for future use
+                    if not hasattr(self, '_original_case_data'):
+                        self._original_case_data = {}
+                    self._original_case_data[control_name] = original_text
+                
+                # Apply uppercase if needed
+                if use_uppercase:
+                    action_text = original_text.upper()
+                else:
+                    action_text = original_text
+                
+                # Update the stored action with the proper case
+                control_data['action'] = action_text
+                
+                # Apply to label
+                prefix = control_data.get('prefix', '')
+                if self.text_settings.get("show_button_prefix", True) and prefix:
+                    display_text = f"{prefix}: {action_text}"
+                else:
+                    display_text = action_text
+                
+                # Update the text
+                label.setText(display_text)
+                
+                # Parse text correctly for specialized labels
+                if hasattr(label, 'parse_text'):
+                    try:
+                        label.parse_text(display_text)
+                    except Exception as e:
+                        print(f"Error parsing text for {control_name}: {e}")
+                
+                # Force repaint
+                label.update()
+        
+        # Force a canvas update to ensure all changes are visible
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+            
+        print(f"Recreated all control labels with {'uppercase' if use_uppercase else 'lowercase'} text")
+
+    def apply_text_settings(self, uppercase_changed=False):
         """Apply current text settings to all controls with both font and gradient support"""
         # Import QTimer at the beginning of the method
         from PyQt5.QtCore import QTimer
@@ -5381,11 +5165,6 @@ class PreviewWindow(QMainWindow):
         print(f"Applying gradient settings: prefix={use_prefix_gradient}, action={use_action_gradient}")
         print(f"Prefix gradient: {prefix_gradient_start} -> {prefix_gradient_end}")
         print(f"Action gradient: {action_gradient_start} -> {action_gradient_end}")
-        
-        # Create font
-        from PyQt5.QtGui import QFont
-        font = QFont(font_family, font_size)
-        font.setBold(bold_strength > 0)
         
         # DIRECT FONT LOADING - Create a completely new approach
         from PyQt5.QtGui import QFontDatabase, QFont, QFontInfo
@@ -5495,120 +5274,83 @@ class PreviewWindow(QMainWindow):
                                 if font_loaded:
                                     break
         
-        # Determine if we need to recreate labels based on gradient settings
-        need_to_recreate = False
+        # Now apply the font and settings to ALL controls
+        from PyQt5.QtCore import QTimer
+        from PyQt5.QtGui import QColor
+        from PyQt5.QtCore import QPoint
         
-        # Skip the gradient check for now since we don't have reliable class references
-        # This will be added back later when we have the proper classes
-        '''
-        # Check if we need to recreate labels (e.g., if we're switching between gradient types)
-        if hasattr(self, 'control_labels') and self.control_labels:
-            # Get the first label to check its type
-            first_label = next(iter(self.control_labels.values()))['label']
-            
-            # Check if current label type matches needed type
-            current_is_gradient = isinstance(first_label, GradientPrefixLabel)
-            needs_gradient = use_prefix_gradient or use_action_gradient
-            
-            if current_is_gradient != needs_gradient:
-                need_to_recreate = True
-                print(f"Need to recreate labels: current_is_gradient={current_is_gradient}, needs_gradient={needs_gradient}")
-        '''
-        
-        if need_to_recreate:
-            # Save current positions
-            saved_positions = {}
-            for control_name, control_data in self.control_labels.items():
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data:
                 label = control_data['label']
-                saved_positions[control_name] = (label.pos().x(), label.pos().y())
-            
-            # Remove all existing labels
-            for control_data in self.control_labels.values():
-                if 'label' in control_data and control_data['label']:
-                    control_data['label'].deleteLater()
-            
-            # Clear control labels dictionary
-            self.control_labels = {}
-            
-            # Recreate control labels
-            self.create_control_labels()
-            
-            # Restore positions
-            for control_name, position in saved_positions.items():
-                if control_name in self.control_labels:
-                    x, y = position
-                    self.control_labels[control_name]['label'].move(x, y)
-        else:
-            # Now apply the font and settings to ALL controls
-            from PyQt5.QtCore import QTimer
-            from PyQt5.QtGui import QColor
-            from PyQt5.QtCore import QPoint
-            
-            for control_name, control_data in self.control_labels.items():
-                if 'label' in control_data:
-                    label = control_data['label']
-                    
-                    # Get original action text
-                    action_text = control_data['action']
-                    prefix = control_data.get('prefix', '')
-                    
-                    # Apply uppercase if enabled
-                    if use_uppercase:
-                        action_text = action_text.upper()
-                    
-                    # Create the display text with or without prefix
-                    display_text = action_text
-                    if show_button_prefix and prefix:
-                        display_text = f"{prefix}: {action_text}"
-                    
-                    # Update the text
-                    label.setText(display_text)
-                    
-                    # Update label settings
-                    if hasattr(label, 'settings'):
-                        label.settings.update(self.text_settings)
-                    
-                    # If it's a ColoredPrefixLabel or GradientPrefixLabel, update prefix and action
-                    if hasattr(label, 'parse_text'):
-                        try:
-                            label.parse_text(display_text)
-                        except Exception as e:
-                            print(f"Error parsing text for {control_name}: {e}")
-                    
-                    # Apply the font - TWO ways for redundancy
-                    label.setFont(font)
-                    
-                    # Special gradient updates for GradientPrefixLabel - do this safely
-                    if hasattr(label, 'use_prefix_gradient') and hasattr(label, 'use_action_gradient'):
-                        try:
-                            # Update gradient flags
-                            label.use_prefix_gradient = use_prefix_gradient
-                            label.use_action_gradient = use_action_gradient
-                            
-                            # Update gradient colors if these attributes exist
-                            if hasattr(label, 'prefix_gradient_start'):
-                                label.prefix_gradient_start = QColor(prefix_gradient_start)
-                            if hasattr(label, 'prefix_gradient_end'):
-                                label.prefix_gradient_end = QColor(prefix_gradient_end)
-                            if hasattr(label, 'action_gradient_start'):
-                                label.action_gradient_start = QColor(action_gradient_start)
-                            if hasattr(label, 'action_gradient_end'):
-                                label.action_gradient_end = QColor(action_gradient_end)
-                        except Exception as e:
-                            print(f"Error updating gradient settings: {e}")
-                    
-                    # FORCE SPECIFIC FONT NAME as fallback with stylesheet (as a second approach)
-                    label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
-                    
-                    # Update positions
-                    original_pos = control_data.get('original_pos', QPoint(100, 100))
-                    label_x, label_y = original_pos.x(), original_pos.y() + y_offset
-                    
-                    # Move the label
-                    label.move(label_x, label_y)
-                    
-                    # Force repaint
-                    label.update()
+                
+                # Get original action text (store in lowercase)
+                action_text = control_data['action']
+                if uppercase_changed and use_uppercase == False:
+                    # Convert stored action text back to lowercase if needed
+                    # Only do this when toggling from uppercase to lowercase
+                    action_text = action_text.lower()
+                    control_data['action'] = action_text
+                    print(f"Converted '{control_name}' action text to lowercase: {action_text}")
+                
+                prefix = control_data.get('prefix', '')
+                
+                # Apply uppercase if enabled
+                display_text = action_text
+                if use_uppercase:
+                    display_text = action_text.upper()
+                
+                # Create the display text with or without prefix
+                if show_button_prefix and prefix:
+                    display_text = f"{prefix}: {display_text}"
+                
+                # Update the text
+                label.setText(display_text)
+                
+                # Update label settings
+                if hasattr(label, 'settings'):
+                    label.settings.update(self.text_settings)
+                
+                # If it's a ColoredPrefixLabel or GradientPrefixLabel, update prefix and action
+                if hasattr(label, 'parse_text'):
+                    try:
+                        label.parse_text(display_text)
+                    except Exception as e:
+                        print(f"Error parsing text for {control_name}: {e}")
+                
+                # Apply the font - TWO ways for redundancy
+                label.setFont(font)
+                
+                # Special gradient updates for GradientPrefixLabel - do this safely
+                if hasattr(label, 'use_prefix_gradient') and hasattr(label, 'use_action_gradient'):
+                    try:
+                        # Update gradient flags
+                        label.use_prefix_gradient = use_prefix_gradient
+                        label.use_action_gradient = use_action_gradient
+                        
+                        # Update gradient colors if these attributes exist
+                        if hasattr(label, 'prefix_gradient_start'):
+                            label.prefix_gradient_start = QColor(prefix_gradient_start)
+                        if hasattr(label, 'prefix_gradient_end'):
+                            label.prefix_gradient_end = QColor(prefix_gradient_end)
+                        if hasattr(label, 'action_gradient_start'):
+                            label.action_gradient_start = QColor(action_gradient_start)
+                        if hasattr(label, 'action_gradient_end'):
+                            label.action_gradient_end = QColor(action_gradient_end)
+                    except Exception as e:
+                        print(f"Error updating gradient settings: {e}")
+                
+                # FORCE SPECIFIC FONT NAME as fallback with stylesheet (as a second approach)
+                label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
+                
+                # Update positions
+                original_pos = control_data.get('original_pos', QPoint(100, 100))
+                label_x, label_y = original_pos.x(), original_pos.y() + y_offset
+                
+                # Move the label
+                label.move(label_x, label_y)
+                
+                # Force repaint
+                label.update()
         
         # If we have a prefix button, update its text
         if hasattr(self, 'prefix_button'):
@@ -5626,7 +5368,7 @@ class PreviewWindow(QMainWindow):
             except Exception as e:
                 print(f"Error scheduling font verification: {e}")
         
-        print("Text settings applied to all controls with both font and gradient support")
+        print("Text settings applied to all controls with better font handling")
 
     def verify_font_application(self, control_name=None):
         """Verify that fonts are being correctly applied to labels"""
@@ -5661,10 +5403,111 @@ class PreviewWindow(QMainWindow):
         except Exception as e:
             print(f"Error in verify_font_application: {e}")
  
-    # Add these methods to the PreviewWindow class in mame_controls_preview.py
+    def initialize_controller_close(self):
+        """Initialize controller input detection using the inputs package"""
+        try:
+            # Try to import inputs module
+            from inputs import devices, get_gamepad
+            
+            # Check if gamepads are available
+            gamepads = [device for device in devices.gamepads]
+            if not gamepads:
+                print("No gamepads detected, controller close feature disabled")
+                return
+                
+            print(f"Found gamepad: {gamepads[0].name}, enabling controller close feature")
+            
+            # Flag to prevent multiple polling loops
+            self.xinput_polling_active = True
+            
+            # Track last detected button press time to prevent multiple triggers
+            self.last_button_press_time = 0
+            
+            # Create a dedicated thread for controller polling
+            import threading
+            import time
+            import queue
+            
+            # Create a queue for button events
+            self.controller_event_queue = queue.Queue()
+            
+            # Thread function for continuous controller polling
+            def controller_polling_thread():
+                try:
+                    while getattr(self, 'xinput_polling_active', False):
+                        try:
+                            # Get events from controller
+                            events = get_gamepad()
+                            
+                            # Look for button presses
+                            for event in events:
+                                if event.ev_type == "Key" and event.state == 1:
+                                    # Put button press event in queue
+                                    self.controller_event_queue.put(event.code)
+                                    
+                        except Exception as e:
+                            # Ignore expected errors
+                            if "No more events to read" not in str(e):
+                                print(f"Controller polling error: {e}")
+                            
+                        # Short sleep to avoid consuming too much CPU
+                        time.sleep(0.01)
+                except Exception as e:
+                    print(f"Controller thread error: {e}")
+                
+                print("Controller polling thread ended")
+            
+            # Start the polling thread
+            self.controller_thread = threading.Thread(target=controller_polling_thread)
+            self.controller_thread.daemon = True
+            self.controller_thread.start()
+            
+            # Function to check the event queue from the main thread
+            def check_controller_queue():
+                # Process up to 5 events at a time
+                for _ in range(5):
+                    if self.controller_event_queue.empty():
+                        break
+                    
+                    try:
+                        # Get button code from queue
+                        button_code = self.controller_event_queue.get_nowait()
+                        
+                        # Check debounce time (300ms)
+                        current_time = time.time()
+                        if current_time - self.last_button_press_time > 0.3:
+                            print(f"Controller button pressed: {button_code}")
+                            self.last_button_press_time = current_time
+                            
+                            # Close the preview
+                            self.close()
+                            return
+                    except queue.Empty:
+                        break
+                    except Exception as e:
+                        print(f"Error processing controller event: {e}")
+                
+                # Schedule next check if still active
+                if getattr(self, 'xinput_polling_active', False):
+                    from PyQt5.QtCore import QTimer
+                    QTimer.singleShot(33, check_controller_queue)  # ~30Hz checking
+            
+            # Start the event queue checker using QTimer
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, check_controller_queue)
+            print("Controller close feature enabled")
+            
+        except ImportError:
+            print("Inputs package not available, install with: pip install inputs")
+        except Exception as e:
+            print(f"Error setting up controller input: {e}")
+
     def closeEvent(self, event):
         """Override close event to ensure proper cleanup"""
         print("PreviewWindow closeEvent triggered, performing cleanup...")
+        
+        # Stop controller polling
+        self.xinput_polling_active = False
         
         # Cancel any pending timers
         for attr_name in dir(self):
@@ -5686,6 +5529,7 @@ class PreviewWindow(QMainWindow):
         if getattr(self, 'standalone_mode', False):
             QApplication.quit()
 
+    # 9. Modify the cleanup_resources method to remove shadow references
     def cleanup_resources(self):
         """Clean up all resources to ensure proper application shutdown"""
         print("Cleaning up PreviewWindow resources...")
@@ -5713,12 +5557,6 @@ class PreviewWindow(QMainWindow):
                     try:
                         control_data['label'].setParent(None)
                         control_data['label'].deleteLater()
-                    except:
-                        pass
-                if 'shadow' in control_data and control_data['shadow']:
-                    try:
-                        control_data['shadow'].setParent(None)
-                        control_data['shadow'].deleteLater()
                     except:
                         pass
             self.control_labels.clear()
@@ -5764,20 +5602,132 @@ class PreviewWindow(QMainWindow):
         import gc
         gc.collect()
         print("Garbage collection completed")
+    
+    # Add this function to mame_controls_preview.py
+    def export_image_headless(self, output_path, format="png"):
+        """Export preview image in headless mode using existing save_image functionality"""
+        try:
+            print(f"Exporting preview image to {output_path}")
+            
+            # If the original save_image function exists, use it
+            if hasattr(self, 'save_image'):
+                # Get the current output path to restore it later
+                original_output_path = getattr(self, '_output_path', None)
+                
+                # Set the output path temporarily
+                self._output_path = output_path
+                
+                # Call the existing save_image function
+                result = self.save_image()
+                
+                # Restore original path
+                if original_output_path:
+                    self._output_path = original_output_path
+                
+                return result
+            else:
+                print("ERROR: save_image method not available")
+                return False
+        except Exception as e:
+            print(f"Error in export_image_headless: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
+    # Add this to mame_controls_preview.py to handle command line parameters
+    def add_cli_export_support():
+        """Add CLI support for batch export mode to the preview module"""
+        import argparse
+        
+        parser = argparse.ArgumentParser(description='MAME Control Preview')
+        parser.add_argument('--export-image', action='store_true', help='Export image mode')
+        parser.add_argument('--game', type=str, help='ROM name')
+        parser.add_argument('--output', type=str, help='Output image path')
+        parser.add_argument('--format', type=str, default='png', choices=['png', 'jpg'], help='Image format')
+        parser.add_argument('--no-buttons', action='store_true', help='Hide control buttons')
+        parser.add_argument('--clean-mode', action='store_true', help='Clean mode with no drag handles')
+        parser.add_argument('--no-bezel', action='store_true', help='Hide bezel')
+        parser.add_argument('--no-logo', action='store_true', help='Hide logo')
+        
+        args = parser.parse_args()
+        
+        # If export mode is enabled, handle it
+        if args.export_image:
+            if not args.game or not args.output:
+                print("ERROR: --game and --output parameters are required for export mode")
+                sys.exit(1)
+            
+            # Get application paths
+            app_dir = get_application_path()
+            mame_dir = get_mame_parent_dir(app_dir)
+            
+            # Find and load game data
+            from PyQt5.QtWidgets import QApplication
+            app = QApplication(sys.argv)
+            
+            # Create a headless app for image export
+            try:
+                # Load game data from cache 
+                preview_dir = os.path.join(mame_dir, "preview")
+                cache_dir = os.path.join(preview_dir, "cache")
+                cache_path = os.path.join(cache_dir, f"{args.game}_cache.json")
+                
+                if os.path.exists(cache_path):
+                    with open(cache_path, 'r', encoding='utf-8') as f:
+                        game_data = json.load(f)
+                else:
+                    print(f"ERROR: Cache file not found: {cache_path}")
+                    sys.exit(1)
+                    
+                # Create preview window with command line options
+                hide_buttons = args.no_buttons
+                clean_mode = args.clean_mode
+                
+                # Create the preview window (starts invisible)
+                preview = PreviewWindow(
+                    args.game, 
+                    game_data, 
+                    mame_dir,
+                    hide_buttons=hide_buttons,
+                    clean_mode=clean_mode
+                )
+                
+                # Set bezel/logo visibility if specified
+                if args.no_bezel and hasattr(preview, 'bezel_visible'):
+                    preview.bezel_visible = False
+                    
+                if args.no_logo and hasattr(preview, 'logo_visible'):
+                    preview.logo_visible = False
+                    if hasattr(preview, 'logo_label') and preview.logo_label:
+                        preview.logo_label.setVisible(False)
+                
+                # Export the image
+                if preview.export_image_headless(args.output, args.format):
+                    print(f"Successfully exported preview for {args.game} to {args.output}")
+                    sys.exit(0)
+                else:
+                    print(f"Failed to export preview for {args.game}")
+                    sys.exit(1)
+                    
+            except Exception as e:
+                print(f"ERROR in export mode: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+                
+        return args
+
+# 1. First, modify the EnhancedLabel class to remove shadow functionality
 class EnhancedLabel(QLabel):
-    """A label with built-in shadow capabilities"""
-    def __init__(self, text, parent=None, shadow_offset=2, shadow_color=QColor(0, 0, 0)):
+    """A label with improved rendering without shadows"""
+    def __init__(self, text, parent=None):
         super().__init__(text, parent)
-        self.shadow_offset = shadow_offset
-        self.shadow_color = shadow_color
-        self.is_shadow_visible = True
         
         # Set transparent background
         self.setStyleSheet("background-color: transparent;")
         
     def paintEvent(self, event):
-        """Override paint event to draw text with shadow in a single operation"""
+        """Override paint event to draw text with better positioning"""
         if not self.text():
             return
             
@@ -5789,41 +5739,20 @@ class EnhancedLabel(QLabel):
         metrics = QFontMetrics(self.font())
         text_rect = metrics.boundingRect(self.text())
         
-        # Calculate text position (centered in the label) - convert to integers
+        # Calculate text position (centered in the label)
         x = int((self.width() - text_rect.width()) / 2)
         y = int((self.height() + metrics.ascent() - metrics.descent()) / 2)
-        
-        # Draw shadow if enabled
-        if self.is_shadow_visible:
-            painter.setPen(self.shadow_color)
-            painter.drawText(int(x + self.shadow_offset), int(y + self.shadow_offset), self.text())
         
         # Draw main text
         painter.setPen(self.palette().color(QPalette.WindowText))
         painter.drawText(int(x), int(y), self.text())
         
-    def setShadowVisible(self, visible):
-        """Toggle shadow visibility"""
-        self.is_shadow_visible = visible
-        self.update()  # Force repaint
-        
-    def setShadowOffset(self, offset):
-        """Set shadow offset"""
-        self.shadow_offset = offset
-        self.update()
-        
-    def setShadowColor(self, color):
-        """Set shadow color"""
-        self.shadow_color = color
-        self.update()
-
-
-class DraggableLabel(EnhancedLabel):
-    """An enhanced draggable label with built-in shadow"""
-    def __init__(self, text, parent=None, shadow_offset=2, settings=None, initialized_font=None):
-        super().__init__(text, parent, shadow_offset)
+# 4. Modify the DraggableLabel classes to remove shadow functionality
+class DraggableLabel(QLabel):
+    """A draggable label without shadow functionality"""
+    def __init__(self, text, parent=None, settings=None):
+        super().__init__(text, parent)
         self.settings = settings or {}
-        self.initialized_font = initialized_font
         
         # Apply font settings
         self.update_appearance()
@@ -5910,7 +5839,7 @@ class DraggableLabel(EnhancedLabel):
         """Update appearance based on settings"""
         # If we have an initialized font, use it directly
         from PyQt5.QtCore import Qt
-        if self.initialized_font:
+        if hasattr(self, 'initialized_font') and self.initialized_font:
             self.setFont(self.initialized_font)
             print(f"DraggableLabel using initialized font: {self.initialized_font.family()}")
         else:
@@ -5942,7 +5871,6 @@ class DraggableLabel(EnhancedLabel):
         else:
             self.setText(text)
             
-    # 1. Fix the base DraggableLabel class first
     def mousePressEvent(self, event):
         """Handle mouse press events for dragging with correct offset tracking"""
         from PyQt5.QtCore import Qt
@@ -6137,10 +6065,6 @@ class DraggableLabel(EnhancedLabel):
                 
                 # Apply the final position (if not already applied in snapping code)
                 self.move(new_pos)
-                
-                # Notify the parent to update shadow label if it exists
-                if hasattr(parent, "update_shadow_position"):
-                    parent.update_shadow_position(self)
             
             # Apply the move
             self.move(new_pos)
@@ -6158,21 +6082,33 @@ class DraggableLabel(EnhancedLabel):
             current = current.parent()
         return None
     
-    # Fix the mouseReleaseEvent method in DraggableLabel to properly handle parent navigation
     def mouseReleaseEvent(self, event):
-        """Handle mouse release without crashing on parent navigation"""
+        """Handle mouse release to end dragging"""
+        from PyQt5.QtCore import Qt
+        
         if event.button() == Qt.LeftButton:
             self.dragging = False
-            
-            # Update cursor
             self.setCursor(Qt.OpenHandCursor)
+            
+            # Hide guidance elements
+            if hasattr(self, 'parent'):
+                parent = self.parent()
+                if parent and hasattr(parent, 'hide_alignment_guides'):
+                    parent.hide_alignment_guides()
+                if parent and hasattr(parent, 'hide_measurement_guides'):
+                    parent.hide_measurement_guides()
+                if parent and hasattr(parent, 'hide_position_indicator'):
+                    parent.hide_position_indicator()
+                
+            event.accept()
             
     def contextMenuEvent(self, event):
         """Show context menu on right-click"""
         self.menu.exec_(event.globalPos())
     
     def paintEvent(self, event):
-        """Override paint event to draw without resize handle"""
+        """Override paint event to draw text properly centered"""
+        # Use default QLabel painting
         super().paintEvent(event)
     
     def change_font_size(self, size):
@@ -6184,10 +6120,6 @@ class DraggableLabel(EnhancedLabel):
         # Update settings
         if self.settings:
             self.settings["font_size"] = size
-        
-        # Notify the parent to update shadow label if it exists
-        if hasattr(self.parent(), "update_shadow_font"):
-            self.parent().update_shadow_font(self)
     
     def reset_font_size(self):
         """Reset font size to original"""
@@ -6196,40 +6128,7 @@ class DraggableLabel(EnhancedLabel):
     def change_text_color(self, color):
         """Change text color"""
         self.setStyleSheet(f"color: {color.name()}; background-color: transparent; border: none;")
-        
-        # Find and update the shadow label if possible
-        if hasattr(self.parent(), "update_shadow_for_label"):
-            self.parent().update_shadow_for_label(self)
     
-    def toggle_shadow(self):
-        """Toggle visibility of shadows for all labels"""
-        # If no control labels exist, just return
-        if not hasattr(self, 'control_labels') or not self.control_labels:
-            return
-        
-        # Get the current shadow state from the first label
-        first_label = next(iter(self.control_labels.values()))['label']
-        new_state = not first_label.is_shadow_visible
-        
-        # Update the button text if it exists
-        if hasattr(self, 'shadow_button'):
-            self.shadow_button.setText("Show Shadow" if not new_state else "Hide Shadow")
-        
-        # Apply the new shadow state to all labels
-        for control_name, control_data in self.control_labels.items():
-            if 'label' in control_data and control_data['label']:
-                control_data['label'].setShadowVisible(new_state)
-        
-        print(f"Shadow visibility set to: {new_state}")
-
-    def update_shadow_color(self, color=QColor(0, 0, 0)):
-        """Update shadow color for all labels"""
-        for control_data in self.control_labels.values():
-            if 'label' in control_data and control_data['label']:
-                label = control_data['label']
-                if hasattr(label, 'setShadowColor'):
-                    label.setShadowColor(color)
-
     def duplicate_label(self):
         """Duplicate this label"""
         if hasattr(self.parent(), "duplicate_control_label"):
@@ -6589,7 +6488,7 @@ class TextSettingsDialog(QDialog):
             self.update_preview()
     
     def update_preview(self):
-        """Update the preview label with better spacing for custom fonts"""
+        """Update the preview label with better appearance"""
         try:
             # Get current settings
             font_family = self.font_combo.currentText()
@@ -6644,7 +6543,6 @@ class TextSettingsDialog(QDialog):
                 """
                 
                 # Approach 1: Create a containing group with a left-aligned position
-                # This approach visually separates the prefix and text
                 svg_content += f"""
                 <g>
                 """
@@ -7210,16 +7108,17 @@ class PositionIndicator(QLabel):
         
         self.show_alignment_guides(guide_lines)
 
+# 1. Update GradientPrefixLabel to remove shadow handling
 class GradientPrefixLabel(DraggableLabel):
-    """A label that supports gradient text for prefix and action text"""
-    def __init__(self, text, parent=None, shadow_offset=2, settings=None):
+    """A label that supports gradient text for prefix and action text without shadows"""
+    def __init__(self, text, parent=None, settings=None):
         # Call the parent constructor safely
         try:
-            super().__init__(text, parent, shadow_offset, settings)
+            super().__init__(text, parent, settings)
         except Exception as e:
             print(f"Error in GradientPrefixLabel initialization calling super(): {e}")
-            # Fallback to EnhancedLabel if DraggableLabel fails
-            EnhancedLabel.__init__(self, text, parent, shadow_offset)
+            # Fallback to QLabel if DraggableLabel fails
+            QLabel.__init__(self, text, parent)
             # Set draggable attributes manually
             self.draggable = False
             self.dragging = False
@@ -7248,7 +7147,7 @@ class GradientPrefixLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Paint event with correct top-to-bottom gradient color order"""
+        """Paint event with correct top-to-bottom gradient color order and no shadows"""
         if not self.text():
             return
             
@@ -7280,14 +7179,6 @@ class GradientPrefixLabel(DraggableLabel):
             
             # Horizontally center the combined text block
             x = int((self.width() - total_width) / 2)
-            
-            # Draw shadow if enabled (for the complete text)
-            if hasattr(self, 'is_shadow_visible') and self.is_shadow_visible:
-                shadow_color = getattr(self, 'shadow_color', QColor(0, 0, 0))
-                shadow_offset = getattr(self, 'shadow_offset', 2)
-                painter.setPen(shadow_color)
-                painter.drawText(int(x + shadow_offset), int(y + shadow_offset), 
-                                prefix_text + self.action)
             
             # Calculate prefix rectangle for gradient
             prefix_rect = metrics.boundingRect(prefix_text)
@@ -7345,13 +7236,6 @@ class GradientPrefixLabel(DraggableLabel):
             text = self.text()
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
-            
-            # Draw shadow
-            if hasattr(self, 'is_shadow_visible') and self.is_shadow_visible:
-                shadow_color = getattr(self, 'shadow_color', QColor(0, 0, 0))
-                shadow_offset = getattr(self, 'shadow_offset', 2)
-                painter.setPen(shadow_color)
-                painter.drawText(int(x + shadow_offset), int(y + shadow_offset), text)
             
             # Create text rectangle for gradient
             text_rect = metrics.boundingRect(text)
@@ -7379,16 +7263,18 @@ class GradientPrefixLabel(DraggableLabel):
             # Draw text
             painter.drawText(int(x), int(y), text)
 
+# 2. Update ColoredPrefixLabel to remove shadow handling
+
 class ColoredPrefixLabel(DraggableLabel):
-    """A label that supports different colors for prefix and action text"""
-    def __init__(self, text, parent=None, shadow_offset=2, settings=None):
+    """A label that supports different colors for prefix and action text without shadows"""
+    def __init__(self, text, parent=None, settings=None):
         # Call the parent constructor safely
         try:
-            super().__init__(text, parent, shadow_offset, settings)
+            super().__init__(text, parent, settings)
         except Exception as e:
             print(f"Error in ColoredPrefixLabel initialization calling super(): {e}")
-            # Fallback to EnhancedLabel if DraggableLabel fails
-            EnhancedLabel.__init__(self, text, parent, shadow_offset)
+            # Fallback to QLabel if DraggableLabel fails
+            QLabel.__init__(self, text, parent)
             # Set draggable attributes manually
             self.draggable = False
             self.dragging = False
@@ -7409,7 +7295,7 @@ class ColoredPrefixLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Override paint event to draw text with different colors"""
+        """Override paint event to draw text with different colors without shadows"""
         if not self.text():
             return
 
@@ -7446,13 +7332,6 @@ class ColoredPrefixLabel(DraggableLabel):
             # Horizontally center the combined text block
             x = int((self.width() - total_width) / 2)
 
-            # Draw shadow (full text shadow if enabled)
-            if hasattr(self, 'is_shadow_visible') and self.is_shadow_visible:
-                shadow_color = getattr(self, 'shadow_color', QColor(0, 0, 0))
-                shadow_offset = getattr(self, 'shadow_offset', 2)
-                painter.setPen(shadow_color)
-                painter.drawText(x + shadow_offset, y + shadow_offset, prefix_text + self.action)
-
             # Draw prefix
             painter.setPen(prefix_color)
             painter.drawText(x, y, prefix_text)
@@ -7468,20 +7347,15 @@ class ColoredPrefixLabel(DraggableLabel):
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
 
-            if hasattr(self, 'is_shadow_visible') and self.is_shadow_visible:
-                shadow_color = getattr(self, 'shadow_color', QColor(0, 0, 0))
-                shadow_offset = getattr(self, 'shadow_offset', 2)
-                painter.setPen(shadow_color)
-                painter.drawText(x + shadow_offset, y + shadow_offset, text)
-
             painter.setPen(action_color)
             painter.drawText(x, y, text)
 
-# 4. Similar approach for ColoredDraggableLabel
+
+# 6. Modify the ColoredDraggableLabel class to remove shadow functionality
 class ColoredDraggableLabel(DraggableLabel):
     """A draggable label that supports different colors for prefix and action text"""
-    def __init__(self, text, parent=None, shadow_offset=2, settings=None):
-        super().__init__(text, parent, shadow_offset, settings)
+    def __init__(self, text, parent=None, settings=None):
+        super().__init__(text, parent, settings)
         self.settings = settings or {}
         self.prefix = ""
         self.action = ""
@@ -7508,7 +7382,7 @@ class ColoredDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Override paint event to draw text with different colors"""
+        """Override paint event to draw text with different colors without shadows"""
         if not self.text():
             return
 
@@ -7537,11 +7411,6 @@ class ColoredDraggableLabel(DraggableLabel):
             # Horizontally center the combined text block
             x = int((self.width() - total_width) / 2)
 
-            # Draw shadow (full text shadow if enabled)
-            if self.is_shadow_visible:
-                painter.setPen(self.shadow_color)
-                painter.drawText(x + self.shadow_offset, y + self.shadow_offset, prefix_text + self.action)
-
             # Draw prefix
             painter.setPen(prefix_color)
             painter.drawText(x, y, prefix_text)
@@ -7557,17 +7426,14 @@ class ColoredDraggableLabel(DraggableLabel):
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
 
-            if self.is_shadow_visible:
-                painter.setPen(self.shadow_color)
-                painter.drawText(x + self.shadow_offset, y + self.shadow_offset, text)
-
             painter.setPen(action_color)
             painter.drawText(x, y, text)
 
+# 5. Modify the GradientDraggableLabel class to remove shadow functionality
 class GradientDraggableLabel(DraggableLabel):
     """A draggable label that supports gradient text for prefix and action text"""
-    def __init__(self, text, parent=None, shadow_offset=2, settings=None):
-        super().__init__(text, parent, shadow_offset, settings)
+    def __init__(self, text, parent=None, settings=None):
+        super().__init__(text, parent, settings)
         self.settings = settings or {}
         self.prefix = ""
         self.action = ""
@@ -7602,7 +7468,7 @@ class GradientDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Paint event with gradient rendering without resize handle"""
+        """Paint event with gradient rendering without shadows"""
         if not self.text():
             return
             
@@ -7626,12 +7492,6 @@ class GradientDraggableLabel(DraggableLabel):
             
             # Horizontally center the combined text block
             x = int((self.width() - total_width) / 2)
-            
-            # Draw shadow if enabled (for the complete text)
-            if self.is_shadow_visible:
-                painter.setPen(self.shadow_color)
-                painter.drawText(int(x + self.shadow_offset), int(y + self.shadow_offset), 
-                                prefix_text + self.action)
             
             # Calculate prefix rectangle for gradient
             prefix_rect = metrics.boundingRect(prefix_text)
@@ -7689,11 +7549,6 @@ class GradientDraggableLabel(DraggableLabel):
             text = self.text()
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
-            
-            # Draw shadow
-            if self.is_shadow_visible:
-                painter.setPen(self.shadow_color)
-                painter.drawText(int(x + self.shadow_offset), int(y + self.shadow_offset), text)
             
             # Create text rectangle for gradient
             text_rect = metrics.boundingRect(text)
