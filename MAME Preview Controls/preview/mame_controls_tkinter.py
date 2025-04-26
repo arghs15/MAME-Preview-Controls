@@ -940,88 +940,115 @@ class MAMEControlConfig(ctk.CTk):
             # Restore scroll position
             self.control_frame._scrollbar.set(*scroll_pos)
 
-    # Update create_layout method with debugging
     def create_layout(self):
-        """Create the main application layout with debug tracing"""
+        """Create the main application layout with buttons across the top"""
         debug_print("Creating application layout...")
         
         try:
-            # Configure grid
-            self.grid_columnconfigure(0, weight=0)
-            self.grid_columnconfigure(1, weight=3)
-            self.grid_rowconfigure(0, weight=1)
-            debug_print("Grid configuration set")
+            # Configure main grid with 3 rows (buttons, main content, status)
+            self.grid_columnconfigure(0, weight=1)     # Single column spans the width
+            self.grid_rowconfigure(0, weight=0)        # Top button bar (fixed height)
+            self.grid_rowconfigure(1, weight=1)        # Main content area (expands)
+            debug_print("Main grid configuration set")
 
-            # Create left panel (game list)
-            debug_print("Creating left panel...")
-            self.left_panel = ctk.CTkFrame(self)
-            self.left_panel.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-            self.left_panel.grid_columnconfigure(0, weight=1)
-            self.left_panel.grid_rowconfigure(2, weight=1)
-            debug_print("Left panel created")
-
-            # Create stats frame at the top of left panel
-            debug_print("Creating stats frame...")
-            self.stats_frame = ctk.CTkFrame(self.left_panel)
-            self.stats_frame.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-            self.stats_frame.grid_columnconfigure(1, weight=1)
-            self.stats_frame.grid_columnconfigure(3, weight=0)
-            debug_print("Stats frame created")
-
-            # Stats label
-            self.stats_label = ctk.CTkLabel(self.stats_frame, text="Loading...", 
-                                        font=("Arial", 12))
-            self.stats_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+            # Create top button bar spanning the entire width - SIMPLIFIED approach
+            debug_print("Creating top button bar...")
+            self.top_bar = ctk.CTkFrame(self)
+            self.top_bar.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="ew")
+            
+            # Configure the top bar for three sections
+            self.top_bar.columnconfigure(0, weight=0)  # Stats label (fixed width)
+            self.top_bar.columnconfigure(1, weight=1)  # Main buttons (expandable)
+            self.top_bar.columnconfigure(2, weight=0)  # Preview buttons (fixed width)
+            
+            # Stats label in the left section
+            self.stats_label = ctk.CTkLabel(self.top_bar, text="Loading...", 
+                                        font=("Arial", 12), width=200)
+            self.stats_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
             debug_print("Stats label created")
-
-            # Unmatched ROMs button
-            '''self.unmatched_button = ctk.CTkButton(
-                self.stats_frame,
-                text="Show Unmatched ROMs",
-                command=self.show_unmatched_roms,
-                width=150
-            )
-            self.unmatched_button.grid(row=0, column=1, padx=5, pady=5, sticky="e")'''
             
-            # Creating remaining UI elements...
-            debug_print("Creating buttons...")
+            # Center section: Create a frame for main application buttons
+            self.button_frame = ctk.CTkFrame(self.top_bar)
+            self.button_frame.grid(row=0, column=1, pady=5, sticky="w")
             
-            # Generate configs button
+            # Add application buttons to the center frame
             self.generate_configs_button = ctk.CTkButton(
-                self.stats_frame,
+                self.button_frame,
                 text="Generate Info Files",
                 command=self.generate_all_configs,
                 width=150
             )
-            self.generate_configs_button.grid(row=0, column=2, padx=5, pady=5, sticky="e")
+            self.generate_configs_button.pack(side="left", padx=5, pady=5)
 
-            # Generate configs button
             self.analyze_button = ctk.CTkButton(
-                self.stats_frame,
+                self.button_frame,
                 text="Analyze Controls",
                 command=self.analyze_controls,
                 width=150
             )
-            self.analyze_button.grid(row=0, column=4, padx=5, pady=5, sticky="e")
-            debug_print("Buttons created")
+            self.analyze_button.pack(side="left", padx=5, pady=5)
 
-            # Batch export button
-            self.batch_export_button = ctk.CTkButton(
-                self.stats_frame,
-                text="Batch Export",
-                command=self.batch_export_images,
-                width=150
-            )
-            self.batch_export_button.grid(row=0, column=5, padx=5, pady=5, sticky="e")
-            
-            # Clear cache button
             self.clear_cache_button = ctk.CTkButton(
-                self.stats_frame,
+                self.button_frame,
                 text="Clear Cache",
                 command=self.clear_cache,
                 width=150
             )
-            self.clear_cache_button.grid(row=0, column=3, padx=5, pady=5, sticky="e")
+            self.clear_cache_button.pack(side="left", padx=5, pady=5)
+            
+            self.batch_export_button = ctk.CTkButton(
+                self.button_frame,
+                text="Batch Export",
+                command=self.batch_export_images,
+                width=150
+            )
+            self.batch_export_button.pack(side="left", padx=5, pady=5)
+            debug_print("Main buttons created")
+            
+            # Right section: Create a frame for preview-related buttons
+            self.preview_buttons_frame = ctk.CTkFrame(self.top_bar)
+            self.preview_buttons_frame.grid(row=0, column=2, padx=10, pady=5, sticky="e")
+            
+            # Add preview button to the right frame
+            self.preview_button = ctk.CTkButton(
+                self.preview_buttons_frame,
+                text="Preview Controls",
+                command=self.show_preview,
+                width=150
+            )
+            self.preview_button.pack(side="left", padx=5, pady=5)
+            
+            # Hide buttons toggle next to preview button
+            self.hide_buttons_toggle = ctk.CTkSwitch(
+                self.preview_buttons_frame,
+                text="Hide Preview Buttons",
+                command=self.toggle_hide_preview_buttons
+            )
+            self.hide_buttons_toggle.pack(side="left", padx=10, pady=5)
+            debug_print("Preview buttons created")
+
+            # Create main content frame for left and right panels
+            self.main_content = ctk.CTkFrame(self)
+            self.main_content.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+            
+            # Use fixed percentages for panel sizes
+            left_width = int(self.winfo_width() * 0.4) if self.winfo_width() > 100 else 400
+            right_width = int(self.winfo_width() * 0.6) if self.winfo_width() > 100 else 600
+            
+            self.main_content.columnconfigure(0, minsize=left_width)  # Left panel 40%
+            self.main_content.columnconfigure(1, minsize=right_width)  # Right panel 60%
+            self.main_content.grid_rowconfigure(0, weight=1)          # Full height
+            
+            # Add resize handler to maintain percentages
+            self.bind("<Configure>", self.on_window_resize)
+            
+            # Create left panel (game list)
+            debug_print("Creating left panel...")
+            self.left_panel = ctk.CTkFrame(self.main_content)
+            self.left_panel.grid(row=0, column=0, padx=(0, 5), pady=0, sticky="nsew")
+            self.left_panel.grid_columnconfigure(0, weight=1)
+            self.left_panel.grid_rowconfigure(1, weight=1)  # Game list expands
+            debug_print("Left panel created")
 
             # Search box
             debug_print("Creating search box...")
@@ -1030,13 +1057,13 @@ class MAMEControlConfig(ctk.CTk):
             self.search_entry = ctk.CTkEntry(self.left_panel, 
                                         placeholder_text="Search games...",
                                         textvariable=self.search_var)
-            self.search_entry.grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+            self.search_entry.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
             debug_print("Search box created")
 
             # Game list with improved styling
             debug_print("Creating game list...")
             self.game_list = ctk.CTkTextbox(self.left_panel, font=("Arial", 13))
-            self.game_list.grid(row=2, column=0, padx=5, pady=5, sticky="nsew")
+            self.game_list.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
             self.game_list._textbox.tag_configure(self.highlight_tag, background="#1a5fb4", foreground="white")
             self.game_list.configure(padx=5, pady=5)
             self.game_list.bind("<Button-1>", self.on_game_select)
@@ -1044,50 +1071,41 @@ class MAMEControlConfig(ctk.CTk):
 
             # Create right panel (control display)
             debug_print("Creating right panel...")
-            self.right_panel = ctk.CTkFrame(self)
-            self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-            self.right_panel.grid_columnconfigure(0, weight=1)
-            self.right_panel.grid_rowconfigure(2, weight=1)
+            self.right_panel = ctk.CTkFrame(self.main_content)
+            self.right_panel.grid(row=0, column=1, padx=(5, 0), pady=0, sticky="nsew")
+            
+            # Configure right panel layout - simplified now that preview buttons are moved
+            self.right_panel.grid_columnconfigure(0, weight=1)    # Title and controls get full width
+            self.right_panel.grid_rowconfigure(0, weight=0)       # Title row (fixed)
+            self.right_panel.grid_rowconfigure(1, weight=0)       # Toggle row (fixed)
+            self.right_panel.grid_rowconfigure(2, weight=1)       # Control frame (expandable)
             debug_print("Right panel created")
 
-            # Game title
-            self.game_title = ctk.CTkLabel(self.right_panel, 
-                                        text="Select a game",
-                                        font=("Arial", 20, "bold"))
-            self.game_title.grid(row=0, column=0, padx=5, pady=5)
+            # Game title now gets full width of right panel
+            self.game_title = ctk.CTkLabel(
+                self.right_panel, 
+                text="Select a game",
+                font=("Arial", 20, "bold"),
+                anchor="w",
+                justify="left",
+                wraplength=right_width - 50  # More space for the title now
+            )
+            self.game_title.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
             debug_print("Game title created")
 
-            # Add Preview button next to the game title
-            self.preview_button = ctk.CTkButton(
-                self.right_panel,
-                text="Preview Controls",
-                command=self.show_preview,
-                width=150
-            )
-            self.preview_button.grid(row=0, column=1, padx=5, pady=5, sticky="e")
-            debug_print("Preview button created")
-
-            self.hide_buttons_toggle = ctk.CTkSwitch(
-                self.right_panel,
-                text="Hide Preview Buttons",
-                command=self.toggle_hide_preview_buttons
-            )
-            self.hide_buttons_toggle.grid(row=0, column=2, padx=5, pady=5, sticky="e")
-            debug_print("Hide buttons toggle created")
-
-            # Add XInput toggle switch
+            # XInput toggle switch
             self.xinput_toggle = ctk.CTkSwitch(
                 self.right_panel,
                 text="Use XInput Mappings",
                 command=self.toggle_xinput
             )
             self.xinput_toggle.select()  # Set it on by default
-            self.xinput_toggle.grid(row=1, column=0, padx=5, pady=5)
+            self.xinput_toggle.grid(row=1, column=0, padx=5, pady=5, sticky="w")
             debug_print("XInput toggle created")
 
-            # Controls display
+            # Controls display - main content area
             self.control_frame = ctk.CTkScrollableFrame(self.right_panel)
-            self.control_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
+            self.control_frame.grid(row=2, column=0, padx=5, pady=5, sticky="nsew")
             debug_print("Control frame created")
             
             debug_print("Layout creation complete")
@@ -1095,6 +1113,148 @@ class MAMEControlConfig(ctk.CTk):
             debug_print(f"ERROR creating layout: {e}")
             traceback.print_exc()
             messagebox.showerror("Layout Error", f"Failed to create layout: {e}")
+
+    # Helper function to dynamically add more buttons to the top bar
+    def add_button(self, text, command, width=150):
+        """Add a button to the top bar"""
+        button = ctk.CTkButton(
+            self.top_bar,
+            text=text,
+            command=command,
+            width=width
+        )
+        button.pack(side="left", padx=5, pady=5)
+        return button
+
+    def on_window_resize(self, event=None):
+        """Handle window resize to maintain fixed panel proportions"""
+        if event and event.widget == self:
+            window_width = event.width
+            
+            # Only handle meaningful resize events (prevent 1px adjustments)
+            if window_width > 100:
+                # Calculate the appropriate panel widths (40/60 split)
+                left_width = int(window_width * 0.4)  # 40% for left panel
+                right_width = int(window_width * 0.6)  # 60% for right panel
+                
+                # Apply fixed width to the panels
+                self.main_content.columnconfigure(0, minsize=left_width)
+                self.main_content.columnconfigure(1, minsize=right_width)
+                
+                # Adjust game title wraplength to prevent text overflow
+                if hasattr(self, 'game_title'):
+                    title_width = right_width - 200  # Leave room for buttons and padding
+                    self.game_title.configure(wraplength=title_width if title_width > 300 else 300)
+
+    def on_game_select(self, event):
+        """Handle game selection with stable panel sizes"""
+        try:
+            # Remember current panel sizes before selection
+            left_width = self.main_content.winfo_width() * 0.4
+            right_width = self.main_content.winfo_width() * 0.6
+            
+            # Get the selected game name
+            index = self.game_list.index(f"@{event.x},{event.y}")
+            
+            # Get the line number (starting from 1)
+            line_num = int(index.split('.')[0])
+            
+            # Get the text from this line
+            line = self.game_list.get(f"{line_num}.0", f"{line_num}.0 lineend")
+            
+            # Skip if line is empty or "No matching ROMs found"
+            if not line or line.startswith("No matching ROMs"):
+                return
+                
+            # Highlight the selected line
+            self.highlight_selected_game(line_num)
+            
+            # Remove prefix indicators
+            if line.startswith("* "):
+                line = line[2:]
+            if line.startswith("+ ") or line.startswith("- "):
+                line = line[2:]
+                    
+            romname = line.split(" - ")[0]
+            self.current_game = romname
+
+            # Get game data
+            game_data = self.get_game_data(romname)
+            
+            # Clear existing display
+            for widget in self.control_frame.winfo_children():
+                widget.destroy()
+
+            if not game_data:
+                # Clear display for ROMs without control data
+                self.game_title.configure(text=f"No control data: {romname}")
+                return
+
+            # Update game title - ensure full title is visible
+            source_text = f" ({game_data.get('source', 'unknown')})"
+            title_text = f"{game_data['gamename']}{source_text}"
+            
+            # Update title text ensuring left-alignment with proper wrapping
+            self.game_title.configure(text=title_text)
+
+            # Configure columns for the controls table
+            self.control_frame.grid_columnconfigure(0, weight=2)  # Control name
+            self.control_frame.grid_columnconfigure(1, weight=2)  # Default action
+            self.control_frame.grid_columnconfigure(2, weight=3)  # Current mapping
+
+            row = 0
+
+            # Display basic game info
+            info_frame = ctk.CTkFrame(self.control_frame)
+            info_frame.grid(row=row, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+            info_frame.grid_columnconfigure(0, weight=1)
+
+            # Game info with larger font
+            info_text = (
+                f"ROM: {game_data['romname']}\n\n"
+                f"Players: {game_data['numPlayers']}\n"
+                f"Alternating: {game_data['alternating']}\n"
+                f"Mirrored: {game_data['mirrored']}"
+            )
+            if game_data.get('miscDetails'):
+                info_text += f"\n\nDetails: {game_data['miscDetails']}"
+
+            info_label = ctk.CTkLabel(
+                info_frame, 
+                text=info_text,
+                font=("Arial", 14),
+                justify="left",
+                anchor="w",
+                wraplength=right_width - 50  # Dynamic width based on panel size
+            )
+            info_label.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+            row += 1
+
+            # Get custom controls if they exist (cached lookup)
+            cfg_controls = {}
+            if romname in self.custom_configs:
+                # Only parse the custom configs if we need them
+                cfg_controls = self.parse_cfg_controls(self.custom_configs[romname])
+                
+                # Convert mappings if XInput is enabled
+                if self.use_xinput:
+                    cfg_controls = {
+                        control: self.convert_mapping(mapping, True)
+                        for control, mapping in cfg_controls.items()
+                    }
+
+            # Display controls 
+            self.display_controls_table(row, game_data, cfg_controls)
+            
+            # Restore panel sizes to maintain stable layout
+            self.main_content.columnconfigure(0, minsize=left_width)
+            self.main_content.columnconfigure(1, minsize=right_width)
+            self.update_idletasks()
+
+        except Exception as e:
+            print(f"Error displaying game: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     #######################################################################
     #CONFIF TO CREATE INFO FILES FOR RETROFE
@@ -3218,105 +3378,7 @@ class MAMEControlConfig(ctk.CTk):
         
         # Ensure the selected item is visible
         self.game_list.see(f"{line_index}.0")
-        
-    def on_game_select(self, event):
-        """Handle game selection and display controls with improved performance"""
-        try:
-            # Get the selected game name
-            index = self.game_list.index(f"@{event.x},{event.y}")
-            
-            # Get the line number (starting from 1)
-            line_num = int(index.split('.')[0])
-            
-            # Get the text from this line
-            line = self.game_list.get(f"{line_num}.0", f"{line_num}.0 lineend")
-            
-            # Skip if line is empty or "No matching ROMs found"
-            if not line or line.startswith("No matching ROMs"):
-                return
-                
-            # Highlight the selected line
-            self.highlight_selected_game(line_num)
-            
-            # Remove prefix indicators
-            if line.startswith("* "):
-                line = line[2:]
-            if line.startswith("+ ") or line.startswith("- "):
-                line = line[2:]
-                    
-            romname = line.split(" - ")[0]
-            self.current_game = romname
-
-            # Get game data
-            game_data = self.get_game_data(romname)
-            
-            # Clear existing display
-            for widget in self.control_frame.winfo_children():
-                widget.destroy()
-
-            if not game_data:
-                # Clear display for ROMs without control data
-                self.game_title.configure(text=f"No control data: {romname}")
-                return
-
-            # Update game title
-            source_text = f" ({game_data.get('source', 'unknown')})"
-            self.game_title.configure(text=f"{game_data['gamename']}{source_text}")
-
-            # Configure columns for the controls table
-            self.control_frame.grid_columnconfigure(0, weight=2)  # Control name
-            self.control_frame.grid_columnconfigure(1, weight=2)  # Default action
-            self.control_frame.grid_columnconfigure(2, weight=3)  # Current mapping
-
-            row = 0
-
-            # Display basic game info
-            info_frame = ctk.CTkFrame(self.control_frame)
-            info_frame.grid(row=row, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-            info_frame.grid_columnconfigure(0, weight=1)
-
-            # Game info with larger font
-            info_text = (
-                f"ROM: {game_data['romname']}\n\n"
-                f"Players: {game_data['numPlayers']}\n"
-                f"Alternating: {game_data['alternating']}\n"
-                f"Mirrored: {game_data['mirrored']}"
-            )
-            if game_data.get('miscDetails'):
-                info_text += f"\n\nDetails: {game_data['miscDetails']}"
-
-            info_label = ctk.CTkLabel(
-                info_frame, 
-                text=info_text,
-                font=("Arial", 14),
-                justify="left",
-                anchor="w",
-                wraplength=800
-            )
-            info_label.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-            row += 1
-
-            # Get custom controls if they exist (cached lookup)
-            cfg_controls = {}
-            if romname in self.custom_configs:
-                # Only parse the custom configs if we need them
-                cfg_controls = self.parse_cfg_controls(self.custom_configs[romname])
-                
-                # Convert mappings if XInput is enabled
-                if self.use_xinput:
-                    cfg_controls = {
-                        control: self.convert_mapping(mapping, True)
-                        for control, mapping in cfg_controls.items()
-                    }
-
-            # Display controls 
-            self.display_controls_table(row, game_data, cfg_controls)
-
-        except Exception as e:
-            print(f"Error displaying game: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            
+                   
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """Extract control table display to a separate method for clarity"""
         row = start_row
