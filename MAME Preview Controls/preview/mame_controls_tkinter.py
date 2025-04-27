@@ -1371,35 +1371,46 @@ class MAMEControlConfig(ctk.CTk):
                 except Exception as alt_e:
                     print(f"Error loading from legacy path: {alt_e}")
             
-            # Last resort: create a default template on the fly
-            print("Creating default template content")
-            default_content = """# MAME Controls Info File
-    # Auto-generated default template
-
-    controller A t = A Button
-    controller B t = B Button
-    controller X t = X Button
-    controller Y t = Y Button
-    controller LB t = Left Bumper
-    controller RB t = Right Bumper
-    controller LT t = Left Trigger
-    controller RT t = Right Trigger
-    controller LSB t = Left Stick Button
-    controller RSB t = Right Stick Button
-    controller L-stick t = Left Stick
-    controller R-stick t = Right Stick
-    controller D-pad t = D-Pad
-    """
-            # Try to save this for future use
-            try:
-                os.makedirs(os.path.dirname(template_path), exist_ok=True)
-                with open(template_path, 'w', encoding='utf-8') as f:
-                    f.write(default_content)
-                print(f"Created new default template at: {template_path}")
-            except Exception as save_e:
-                print(f"Could not save default template: {save_e}")
-                
-            return default_content
+        # Last resort: create a default template on the fly
+        print("Creating default template content")
+        default_content = """controller D-pad		= 
+controller D-pad t		= 
+controller L-stick		= 
+controller L-stick t	= 
+controller R-stick		= 
+controller R-stick t	= 
+controller A			= 
+controller A t			= 
+controller B			= 
+controller B t			= 
+controller X			= 
+controller X t			= 
+controller Y			= 
+controller Y t			= 
+controller LB			= 
+controller LB t			= 
+controller LT			= 
+controller LT t			= 
+controller RB			= 
+controller RB t			= 
+controller RT			= 
+controller RT t			= 
+controller start		= 
+controller start t		= Start
+controller select		= 
+controller select t		= Coin
+controller xbox			= 
+controller xbox t		= Exit"""
+        # Try to save this for future use
+        try:
+            os.makedirs(os.path.dirname(template_path), exist_ok=True)
+            with open(template_path, 'w', encoding='utf-8') as f:
+                f.write(default_content)
+            print(f"Created new default template at: {template_path}")
+        except Exception as save_e:
+            print(f"Could not save default template: {save_e}")
+            
+        return default_content
     
     def generate_game_config(self, game_data: dict) -> str:
         """Generate config file content for a specific game"""
@@ -1411,49 +1422,56 @@ class MAMEControlConfig(ctk.CTk):
         template_lines = template.splitlines()
         output_lines = []
         
-        # Get the position of the = sign from the template to maintain alignment
-        equals_positions = []
-        for line in template_lines:
-            if '=' in line:
-                pos = line.find('=')
-                equals_positions.append(pos)
-        
-        # Get the maximum position to align all equals signs
-        max_equals_pos = max(equals_positions) if equals_positions else 0
+        # Create a dictionary to track which controls are used by this game
+        used_controls = {}
+        for player in game_data.get('players', []):
+            for label in player.get('labels', []):
+                control_name = label['name']
+                action = label['value']
+                
+                # Map control to config field
+                config_field, _ = self.map_control_to_xinput_config(control_name)
+                if config_field:
+                    used_controls[config_field.strip()] = action
         
         # Process each line
         for line in template_lines:
+            # Keep comments and empty lines as-is
+            if line.strip().startswith('#') or not line.strip():
+                output_lines.append(line)
+                continue
+                
+            # Process lines with equals sign
             if '=' in line:
-                # Split at equals but preserve original spacing
-                field_part = line[:line.find('=')].rstrip()
-                default_value = line[line.find('=')+1:].strip()
+                # Split at equals to preserve the exact tab alignment
+                parts = line.split('=', 1)
+                field_part = parts[0]  # This maintains all whitespace/tabs
+                field_name = field_part.strip()
+                
+                # Special case for default values that should always be set
+                if field_name == "controller start t":
+                    output_lines.append(f"{field_part}= Start")
+                    continue
+                elif field_name == "controller select t":
+                    output_lines.append(f"{field_part}= Coin")
+                    continue
+                elif field_name == "controller xbox t":
+                    output_lines.append(f"{field_part}= Exit")
+                    continue
                 
                 # If it's a tooltip field (ends with 't')
-                if field_part.strip().endswith('t'):
-                    action_found = False
-                    
-                    # Look through game controls for a matching action
-                    for player in game_data.get('players', []):
-                        for label in player.get('labels', []):
-                            control_name = label['name']
-                            action = label['value']
-                            
-                            # Map control to config field
-                            config_field, _ = self.map_control_to_xinput_config(control_name)
-                            
-                            if config_field == field_part.strip():
-                                # Add the line with proper alignment and the action
-                                padding = ' ' * (max_equals_pos - len(field_part))
-                                output_lines.append(f"{field_part}{padding}= {action}")
-                                action_found = True
-                                break
-                                
-                    if not action_found:
-                        # Keep original line with exact spacing
-                        output_lines.append(line)
+                if field_name.endswith('t'):
+                    # Check if this control is used by the game
+                    if field_name in used_controls:
+                        # Replace the value part with the game-specific action
+                        new_line = f"{field_part}= {used_controls[field_name]}"
+                        output_lines.append(new_line)
+                    else:
+                        # Keep the field but with empty value
+                        output_lines.append(f"{field_part}= ")
                 else:
-                    # For non-tooltip fields, keep the original line exactly
-                    output_lines.append(line)
+                    # For non-tooltip fields, keep the field with empty value
+                    output_lines.append(f"{field_part}= ")
             else:
                 # For lines without '=', keep them exactly as is
                 output_lines.append(line)
@@ -1473,6 +1491,8 @@ class MAMEControlConfig(ctk.CTk):
             'P1_BUTTON8': ('controller RT t', 'Right Trigger'),# RT
             'P1_BUTTON9': ('controller LSB t', 'L3'),          # Left Stick Button
             'P1_BUTTON10': ('controller RSB t', 'R3'),         # Right Stick Button
+            'P1_BUTTON11': ('controller Start t', 'Start'),          # Left Stick Button
+            'P1_BUTTON12': ('controller Select t', 'Select'),         # Right Stick Button
             'P1_JOYSTICK_UP': ('controller L-stick t', 'Left Stick Up'),
             'P1_JOYSTICK_DOWN': ('controller L-stick t', 'Left Stick Down'),
             'P1_JOYSTICK_LEFT': ('controller L-stick t', 'Left Stick Left'),
