@@ -41,7 +41,6 @@ Pillow>=8.0.0
 1. Clone the repository:
    ```
    https://github.com/arghs15/MAME-Preview-Controls.git
-   cd mame-controls-preview
    ```
 
 2. Install dependencies:
