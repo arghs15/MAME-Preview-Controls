@@ -1396,11 +1396,11 @@ controller RB t			=
 controller RT			= 
 controller RT t			= 
 controller start		= 
-controller start t		= Start
+controller start t		=
 controller select		= 
-controller select t		= Coin
+controller select t		=
 controller xbox			= 
-controller xbox t		= Exit"""
+controller xbox t		= """
         # Try to save this for future use
         try:
             os.makedirs(os.path.dirname(template_path), exist_ok=True)
@@ -1455,9 +1455,9 @@ controller xbox t		= Exit"""
                 elif field_name == "controller select t":
                     output_lines.append(f"{field_part}= Coin")
                     continue
-                elif field_name == "controller xbox t":
-                    output_lines.append(f"{field_part}= Exit")
-                    continue
+                #elif field_name == "controller xbox t":
+                    #output_lines.append(f"{field_part}= Exit")
+                    #continue
                 
                 # If it's a tooltip field (ends with 't')
                 if field_name.endswith('t'):
@@ -3318,8 +3318,6 @@ controller xbox t		= Exit"""
                     
         return mapping
         
-    # Update load_all_data with debugging
-       
     def select_first_rom(self):
         """Select and display the first available ROM with improved performance"""
         # Get the first available ROM that has game data (using cache when possible)
@@ -3383,8 +3381,9 @@ controller xbox t		= Exit"""
                 self.x = 10
                 self.y = target_line * 20
         
-        # Simulate a selection
-        self.on_game_select(MockEvent())
+        # IMPORTANT: Add a delay to allow the UI to fully initialize before selecting a game
+        # This ensures the layout calculations are complete before showing game information
+        self.after(200, lambda: self.on_game_select(MockEvent()))
             
     def highlight_selected_game(self, line_index):
         """Highlight the selected game in the list"""
