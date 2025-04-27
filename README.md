@@ -74,7 +74,9 @@ mame/                  # Your MAME installation directory
 │   └── logos/               # Game logos
 ├── roms/                # Your MAME ROMs
 ├── plugins/             # MAME Lua plugins directory
-│   └── controls.lua     # Controls display plugin
+│   └── controls/          # Directory for control plugins
+│       ├── init.lua    # Controls display plugin
+│       └── plugin.json    # JSON file for plugin configurations
 └── cfg/                 # MAME control configuration files
 ```
 
