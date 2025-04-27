@@ -40,14 +40,11 @@ Pillow>=8.0.0
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/mame-controls-preview.git
+   https://github.com/arghs15/MAME-Preview-Controls.git
    cd mame-controls-preview
    ```
 
 2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
 
 3. Run the application:
    ```
