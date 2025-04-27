@@ -4265,28 +4265,28 @@ class MAMEControlConfig(ctk.CTk):
         # === OUTPUT OPTIONS - RIGHT SIDE ===
         output_options = ctk.CTkFrame(settings_section)
         output_options.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        
+
         # Title and options for output settings
         ctk.CTkLabel(
             output_options,
             text="Output Options",
             font=("Arial", 14, "bold")
         ).pack(anchor="w", padx=10, pady=(5, 10))
-        
-        # Image format
+
+        # Image format - only PNG option
         format_frame = ctk.CTkFrame(output_options, fg_color="transparent")
         format_frame.pack(fill="x", padx=20, pady=2)
-        
+
         ctk.CTkLabel(
             format_frame,
             text="Image Format:",
             width=100
         ).pack(side="left")
-        
+
         format_var = ctk.StringVar(value="PNG")
         format_combo = ctk.CTkComboBox(
             format_frame,
-            values=["PNG", "JPG"],
+            values=["PNG"],  # Only PNG option
             variable=format_var,
             width=120
         )
