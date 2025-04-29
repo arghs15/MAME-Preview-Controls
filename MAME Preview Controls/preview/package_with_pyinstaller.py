@@ -32,7 +32,7 @@ def main():
         "--onedir",         # Create a directory with all files
         "--contents-directory=myData",  # Hide implementation details
         "--windowed",
-        "--hidden-import=mame_controls_pyqt",
+        "--hidden-import=preview_bridge",
         "--hidden-import=mame_controls_tkinter", 
         "--hidden-import=mame_controls_preview",
         "--collect-all=psutil",  # Ensure psutil is included
