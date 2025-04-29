@@ -1501,8 +1501,19 @@ class MAMEControlConfig(QMainWindow):
             self.preview_window.raise_()
             
             # Add a short delay to allow window to settle
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(100, lambda: self.ensure_full_dimensions(self.preview_window, screen_geometry))
+            #from PyQt5.QtCore import QTimer
+            # Replace this line:
+            #QTimer.singleShot(100, lambda: self.ensure_full_dimensions(self.preview_window, screen_geometry))
+
+            # With this safer version:
+            from PyQt5 import sip
+            def check_window_dimensions():
+                if hasattr(self, 'preview_window') and self.preview_window and not sip.isdeleted(self.preview_window):
+                    self.ensure_full_dimensions(self.preview_window, screen_geometry)
+                else:
+                    print("Cannot check dimensions: preview window has been deleted")
+
+            QTimer.singleShot(100, check_window_dimensions)
             
             preview_time = time.time() - preview_start
             total_time = time.time() - start_time
@@ -1517,7 +1528,10 @@ class MAMEControlConfig(QMainWindow):
 
     def ensure_full_dimensions(self, window, screen_geometry):
         """Ensure the window and all children use the full dimensions"""
-        if not window:
+        # Add safety check to prevent access to deleted objects
+        from PyQt5 import sip
+        if not window or sip.isdeleted(window):
+            print("Window was deleted before dimensions could be checked")
             return
             
         # Log all dimensions

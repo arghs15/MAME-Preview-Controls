@@ -278,6 +278,34 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    # Add this method to the PreviewWindow class to map button prefixes to control names
+    def get_control_name_from_prefix(self, prefix):
+        """Map a button prefix back to a standard control name for position lookup"""
+        prefix_to_control = {
+            "A": "P1_BUTTON1",
+            "B": "P1_BUTTON2",
+            "X": "P1_BUTTON3",
+            "Y": "P1_BUTTON4",
+            "LB": "P1_BUTTON5",
+            "RB": "P1_BUTTON6",
+            "LT": "P1_BUTTON7",
+            "RT": "P1_BUTTON8",
+            "LS": "P1_BUTTON9",
+            "RS": "P1_BUTTON10",
+            "LS↑": "P1_JOYSTICK_UP",
+            "LS↓": "P1_JOYSTICK_DOWN",
+            "LS←": "P1_JOYSTICK_LEFT",
+            "LS→": "P1_JOYSTICK_RIGHT",
+            "RS↑": "P1_JOYSTICK2_UP",
+            "RS↓": "P1_JOYSTICK2_DOWN",
+            "RS←": "P1_JOYSTICK2_LEFT",
+            "RS→": "P1_JOYSTICK2_RIGHT",
+            "START": "P1_START",
+            "BACK": "P1_SELECT"
+        }
+        
+        return prefix_to_control.get(prefix, "")
+    
     # Add this method to the PreviewWindow class
     def resizeEvent(self, event):
         """Handle main window resize events"""
@@ -4337,192 +4365,7 @@ class PreviewWindow(QMainWindow):
             print(f"Error saving text settings: {e}")
             import traceback
             traceback.print_exc()
-
-    # 1. First, fix the create_control_labels method in PreviewWindow
-    def create_control_labels(self, clean_mode=False):
-        """Create control labels without shadows and respect clean_mode"""
-        if not self.game_data or 'players' not in self.game_data:
-            return
-        
-        # CRITICAL FIX: Make sure we have properly loaded fonts
-        if not hasattr(self, 'current_font') or self.current_font is None:
-            print("Font not initialized before creating labels - forcing font loading")
-            self.load_and_register_fonts()
-        
-        # Load saved positions
-        saved_positions = {}
-        if hasattr(self, 'load_saved_positions'):
-            try:
-                saved_positions = self.load_saved_positions()
-            except Exception as e:
-                print(f"Error loading saved positions: {e}")
-        
-        # Make sure joystick_visible is set before we start creating controls
-        if not hasattr(self, 'joystick_visible'):
-            # Load from settings if possible
-            bezel_settings = {}
-            if hasattr(self, 'load_bezel_settings'):
-                try:
-                    bezel_settings = self.load_bezel_settings()
-                except Exception as e:
-                    print(f"Error loading bezel settings: {e}")
-            self.joystick_visible = bezel_settings.get("joystick_visible", True)
-            print(f"Pre-initialized joystick visibility to: {self.joystick_visible}")
-        
-        # Process controls
-        for player in self.game_data.get('players', []):
-            if player['number'] != 1:  # Only show Player 1 controls
-                continue
-                    
-            # Create a label for each control
-            grid_x, grid_y = 0, 0
-            for control in player.get('labels', []):
-                control_name = control['name']
-                action_text = control['value']
-                
-                # Get button prefix based on control_name
-                button_prefix = ""
-                if hasattr(self, 'get_button_prefix'):
-                    button_prefix = self.get_button_prefix(control_name)
-                
-                # Determine visibility
-                is_visible = True
-                if "JOYSTICK" in control_name:
-                    is_visible = getattr(self, 'joystick_visible', True)
-                
-                # Apply text settings
-                if self.text_settings.get("use_uppercase", False):
-                    action_text = action_text.upper()
-                
-                # Add prefix if enabled in settings
-                display_text = action_text
-                if self.text_settings.get("show_button_prefix", True) and button_prefix:
-                    display_text = f"{button_prefix}: {action_text}"
-                
-                # Get position
-                if control_name in saved_positions:
-                    # Get saved position
-                    pos_x, pos_y = saved_positions[control_name]
-                    
-                    # Apply y-offset from text settings
-                    y_offset = self.text_settings.get("y_offset", -40)
-                    
-                    # Use saved position
-                    x, y = pos_x, pos_y + y_offset
-                    original_pos = QPoint(pos_x, pos_y)  # Store without offset
-                else:
-                    # Default position based on a grid layout
-                    x = 100 + (grid_x * 150)
-                    y = 100 + (grid_y * 40)
-                    
-                    # Apply y-offset from text settings
-                    y_offset = self.text_settings.get("y_offset", -40)
-                    y += y_offset
-                    
-                    # Store original position without offset
-                    original_pos = QPoint(x, y - y_offset)
-                    
-                    # Update grid position
-                    grid_x = (grid_x + 1) % 5
-                    if grid_x == 0:
-                        grid_y += 1
-                
-                # Determine if we should use gradient
-                use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
-                use_action_gradient = self.text_settings.get("use_action_gradient", False)
-                use_gradient = use_prefix_gradient or use_action_gradient
-                
-                try:
-                    # Create the appropriate label type
-                    if use_gradient:
-                        # Use the gradient-enabled label
-                        label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings)
-                    else:
-                        # Use the color-enabled label
-                        label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings)
-                    
-                    # CRITICAL FIX: Apply font with priority order and debug info
-                    font_applied = False
-                    
-                    # 1. First try current_font (most specific)
-                    if hasattr(self, 'current_font') and self.current_font:
-                        label.setFont(self.current_font)
-                        print(f"Applied current_font to {control_name}: {self.current_font.family()}")
-                        font_applied = True
-                    
-                    # 2. Next try initialized_font
-                    elif hasattr(self, 'initialized_font') and self.initialized_font:
-                        label.setFont(self.initialized_font)
-                        print(f"Applied initialized_font to {control_name}: {self.initialized_font.family()}")
-                        font_applied = True
-                    
-                    # 3. If neither is available, create a new font with identical specs
-                    # to what would have been created by load_and_register_fonts
-                    if not font_applied:
-                        from PyQt5.QtGui import QFont
-                        font_family = self.text_settings.get("font_family", "Arial")
-                        font_size = self.text_settings.get("font_size", 28)
-                        font = QFont(font_family, font_size)
-                        font.setBold(self.text_settings.get("bold_strength", 2) > 0)
-                        font.setStyleStrategy(QFont.PreferMatch)  # CRITICAL: Ensure exact matching
-                        label.setFont(font)
-                        print(f"Created new font for {control_name}: {font.family()} (fallback)")
-                    
-                    # Position the label
-                    label.move(x, y)
-                    
-                    # CRITICAL FIX: Make sure to set draggable flag correctly based on clean_mode
-                    label.draggable = not clean_mode
-                    
-                    # CRITICAL FIX: Disable cursor change in clean mode
-                    if clean_mode:
-                        label.setCursor(Qt.ArrowCursor)
-                    
-                    # For gradient labels, explicitly set gradient properties
-                    if use_gradient and hasattr(label, 'use_prefix_gradient'):
-                        label.use_prefix_gradient = use_prefix_gradient
-                        label.use_action_gradient = use_action_gradient
-                        
-                        # Set gradient colors
-                        label.prefix_gradient_start = QColor(self.text_settings.get("prefix_gradient_start", "#FFC107"))
-                        label.prefix_gradient_end = QColor(self.text_settings.get("prefix_gradient_end", "#FF5722"))
-                        label.action_gradient_start = QColor(self.text_settings.get("action_gradient_start", "#2196F3"))
-                        label.action_gradient_end = QColor(self.text_settings.get("action_gradient_end", "#4CAF50"))
-                    
-                    # CRITICAL FIX: Apply text color via stylesheet as a reinforcement
-                    text_color = self.text_settings.get("action_color", "#FFFFFF")
-                    label.setStyleSheet(f"color: {text_color}; background-color: transparent; font-family: '{label.font().family()}';")
-                    
-                    # Apply visibility
-                    label.setVisible(is_visible)
-                    
-                    # CRITICAL FIX: Only assign drag events if not in clean mode
-                    if not clean_mode:
-                        label.mousePressEvent = lambda event, lbl=label: self.on_label_press(event, lbl)
-                        label.mouseMoveEvent = lambda event, lbl=label: self.on_label_move(event, lbl)
-                        label.mouseReleaseEvent = lambda event, lbl=label: self.on_label_release(event, lbl)
-                    else:
-                        # In clean mode, make sure we don't respond to mouse events
-                        label.mousePressEvent = lambda event: None
-                        label.mouseMoveEvent = lambda event: None
-                        label.mouseReleaseEvent = lambda event: None
-                    
-                    # Store the label
-                    self.control_labels[control_name] = {
-                        'label': label,
-                        'action': action_text,
-                        'prefix': button_prefix,
-                        'original_pos': original_pos
-                    }
-                except Exception as e:
-                    print(f"Error creating label for {control_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-        
-        # Force a canvas update
-        self.canvas.update()
-        print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
-                
+          
     def on_label_press(self, event, label):
         """Handle mouse press on label"""
         from PyQt5.QtCore import Qt
@@ -5089,62 +4932,213 @@ class PreviewWindow(QMainWindow):
         
         print(f"Text settings updated and applied: {self.text_settings}")
 
-    def recreate_control_labels_with_case(self):
-        """Recreate all control labels with proper case handling"""
-        # Get current settings
-        use_uppercase = self.text_settings.get("use_uppercase", False)
-        
-        # Process each control label
-        for control_name, control_data in self.control_labels.items():
-            if 'label' in control_data and 'action' in control_data:
-                label = control_data['label']
-                
-                # Get the correct case version of the action text
-                if hasattr(self, '_original_case_data') and control_name in self._original_case_data:
-                    # Use the stored original case
-                    original_text = self._original_case_data[control_name]
-                else:
-                    # If no stored original, use current and force lowercase
-                    original_text = control_data['action'].lower()
-                    # Store for future use
-                    if not hasattr(self, '_original_case_data'):
-                        self._original_case_data = {}
-                    self._original_case_data[control_name] = original_text
-                
-                # Apply uppercase if needed
-                if use_uppercase:
-                    action_text = original_text.upper()
-                else:
-                    action_text = original_text
-                
-                # Update the stored action with the proper case
-                control_data['action'] = action_text
-                
-                # Apply to label
-                prefix = control_data.get('prefix', '')
-                if self.text_settings.get("show_button_prefix", True) and prefix:
-                    display_text = f"{prefix}: {action_text}"
-                else:
-                    display_text = action_text
-                
-                # Update the text
-                label.setText(display_text)
-                
-                # Parse text correctly for specialized labels
-                if hasattr(label, 'parse_text'):
-                    try:
-                        label.parse_text(display_text)
-                    except Exception as e:
-                        print(f"Error parsing text for {control_name}: {e}")
-                
-                # Force repaint
-                label.update()
-        
-        # Force a canvas update to ensure all changes are visible
-        if hasattr(self, 'canvas'):
-            self.canvas.update()
+    def create_control_labels(self, clean_mode=False):
+        """Create control labels without shadows and respect clean_mode"""
+        if not self.game_data or 'players' not in self.game_data:
+            return
             
-        print(f"Recreated all control labels with {'uppercase' if use_uppercase else 'lowercase'} text")
+        # CRITICAL FIX: Make sure we have properly loaded fonts
+        if not hasattr(self, 'current_font') or self.current_font is None:
+            print("Font not initialized before creating labels - forcing font loading")
+            self.load_and_register_fonts()
+        
+        # Load saved positions
+        saved_positions = {}
+        if hasattr(self, 'load_saved_positions'):
+            try:
+                saved_positions = self.load_saved_positions()
+            except Exception as e:
+                print(f"Error loading saved positions: {e}")
+        
+        # Make sure joystick_visible is set before we start creating controls
+        if not hasattr(self, 'joystick_visible'):
+            # Load from settings if possible
+            bezel_settings = {}
+            if hasattr(self, 'load_bezel_settings'):
+                try:
+                    bezel_settings = self.load_bezel_settings()
+                except Exception as e:
+                    print(f"Error loading bezel settings: {e}")
+            self.joystick_visible = bezel_settings.get("joystick_visible", True)
+            print(f"Pre-initialized joystick visibility to: {self.joystick_visible}")
+        
+        # Process controls
+        for player in self.game_data.get('players', []):
+            if player['number'] != 1:  # Only show Player 1 controls
+                continue
+                    
+            # Create a label for each control
+            grid_x, grid_y = 0, 0
+            for control in player.get('labels', []):
+                control_name = control['name']
+                action_text = control['value']
+                
+                # Get button prefix based on mapping if available, or control name otherwise
+                button_prefix = ""
+                if 'mapping' in control and control.get('is_custom', False):
+                    # Use the mapping to determine the button prefix
+                    button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
+                elif hasattr(self, 'get_button_prefix'):
+                    # Default: use control name to determine prefix
+                    button_prefix = self.get_button_prefix(control_name)
+                
+                # Determine visibility
+                is_visible = True
+                if "JOYSTICK" in control_name:
+                    is_visible = getattr(self, 'joystick_visible', True)
+                
+                # Apply text settings
+                if self.text_settings.get("use_uppercase", False):
+                    action_text = action_text.upper()
+                
+                # Add prefix if enabled in settings
+                show_button_prefix = self.text_settings.get("show_button_prefix", True)
+                display_text = f"{button_prefix}: {action_text}" if show_button_prefix and button_prefix else action_text
+                
+                # Get position
+                if control_name in saved_positions:
+                    # Get saved position
+                    pos_x, pos_y = saved_positions[control_name]
+                    
+                    # Apply y-offset from text settings
+                    y_offset = self.text_settings.get("y_offset", -40)
+                    
+                    # Use saved position
+                    x, y = pos_x, pos_y + y_offset
+                    original_pos = QPoint(pos_x, pos_y)  # Store without offset
+                else:
+                    # Default position based on a grid layout
+                    x = 100 + (grid_x * 150)
+                    y = 100 + (grid_y * 40)
+                    
+                    # Apply y-offset from text settings
+                    y_offset = self.text_settings.get("y_offset", -40)
+                    y += y_offset
+                    
+                    # Store original position without offset
+                    original_pos = QPoint(x, y - y_offset)
+                    
+                    # Update grid position
+                    grid_x = (grid_x + 1) % 5
+                    if grid_x == 0:
+                        grid_y += 1
+                
+                # Determine if we should use gradient
+                use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+                use_action_gradient = self.text_settings.get("use_action_gradient", False)
+                use_gradient = use_prefix_gradient or use_action_gradient
+                
+                try:
+                    # Create the appropriate label type
+                    if use_gradient:
+                        # Use the gradient-enabled label
+                        label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings)
+                    else:
+                        # Use the color-enabled label
+                        label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings)
+                    
+                    # CRITICAL FIX: Apply font with priority order and debug info
+                    font_applied = False
+                    
+                    # 1. First try current_font (most specific)
+                    if hasattr(self, 'current_font') and self.current_font:
+                        label.setFont(self.current_font)
+                        print(f"Applied current_font to {control_name}: {self.current_font.family()}")
+                        font_applied = True
+                    
+                    # 2. Next try initialized_font
+                    elif hasattr(self, 'initialized_font') and self.initialized_font:
+                        label.setFont(self.initialized_font)
+                        print(f"Applied initialized_font to {control_name}: {self.initialized_font.family()}")
+                        font_applied = True
+                    
+                    # 3. If neither is available, create a new font with identical specs
+                    # to what would have been created by load_and_register_fonts
+                    if not font_applied:
+                        from PyQt5.QtGui import QFont
+                        font_family = self.text_settings.get("font_family", "Arial")
+                        font_size = self.text_settings.get("font_size", 28)
+                        font = QFont(font_family, font_size)
+                        font.setBold(self.text_settings.get("bold_strength", 2) > 0)
+                        font.setStyleStrategy(QFont.PreferMatch)  # CRITICAL: Ensure exact matching
+                        label.setFont(font)
+                        print(f"Created new font for {control_name}: {font.family()} (fallback)")
+                    
+                    # Position the label
+                    label.move(x, y)
+                    
+                    # CRITICAL FIX: Make sure to set draggable flag correctly based on clean_mode
+                    label.draggable = not clean_mode
+                    
+                    # CRITICAL FIX: Disable cursor change in clean mode
+                    if clean_mode:
+                        label.setCursor(Qt.ArrowCursor)
+                    
+                    # For gradient labels, explicitly set gradient properties
+                    if use_gradient and hasattr(label, 'use_prefix_gradient'):
+                        label.use_prefix_gradient = use_prefix_gradient
+                        label.use_action_gradient = use_action_gradient
+                        
+                        # Set gradient colors
+                        label.prefix_gradient_start = QColor(self.text_settings.get("prefix_gradient_start", "#FFC107"))
+                        label.prefix_gradient_end = QColor(self.text_settings.get("prefix_gradient_end", "#FF5722"))
+                        label.action_gradient_start = QColor(self.text_settings.get("action_gradient_start", "#2196F3"))
+                        label.action_gradient_end = QColor(self.text_settings.get("action_gradient_end", "#4CAF50"))
+                    
+                    # CRITICAL FIX: Apply text color via stylesheet as a reinforcement
+                    text_color = self.text_settings.get("action_color", "#FFFFFF")
+                    label.setStyleSheet(f"color: {text_color}; background-color: transparent; font-family: '{label.font().family()}';")
+                    
+                    # Apply visibility
+                    label.setVisible(is_visible)
+                    
+                    # CRITICAL FIX: Only assign drag events if not in clean mode
+                    if not clean_mode:
+                        label.mousePressEvent = lambda event, lbl=label: self.on_label_press(event, lbl)
+                        label.mouseMoveEvent = lambda event, lbl=label: self.on_label_move(event, lbl)
+                        label.mouseReleaseEvent = lambda event, lbl=label: self.on_label_release(event, lbl)
+                    else:
+                        # In clean mode, make sure we don't respond to mouse events
+                        label.mousePressEvent = lambda event: None
+                        label.mouseMoveEvent = lambda event: None
+                        label.mouseReleaseEvent = lambda event: None
+                    
+                    # Store the label
+                    self.control_labels[control_name] = {
+                        'label': label,
+                        'action': action_text,
+                        'prefix': button_prefix,
+                        'original_pos': original_pos
+                    }
+                except Exception as e:
+                    print(f"Error creating label for {control_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+        # Force a canvas update
+        self.canvas.update()
+        print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
+
+    def get_button_prefix_from_mapping(self, mapping):
+        """Get the button prefix based on XINPUT mapping"""
+        xinput_to_prefix = {
+            "XINPUT_1_A": "A",
+            "XINPUT_1_B": "B",
+            "XINPUT_1_X": "X",
+            "XINPUT_1_Y": "Y",
+            "XINPUT_1_SHOULDER_L": "LB",
+            "XINPUT_1_SHOULDER_R": "RB",
+            "XINPUT_1_TRIGGER_L": "LT",
+            "XINPUT_1_TRIGGER_R": "RT",
+            "XINPUT_1_THUMB_L": "LS",
+            "XINPUT_1_THUMB_R": "RS",
+            "XINPUT_1_DPAD_UP": "D↑",
+            "XINPUT_1_DPAD_DOWN": "D↓",
+            "XINPUT_1_DPAD_LEFT": "D←",
+            "XINPUT_1_DPAD_RIGHT": "D→"
+        }
+        
+        return xinput_to_prefix.get(mapping, "")
 
     def apply_text_settings(self, uppercase_changed=False):
         """Apply current text settings to all controls with both font and gradient support"""

@@ -3026,7 +3026,6 @@ controller xbox t		= """
         
         return generic_control_games, missing_control_games
     
-    # 1. Update the show_preview method in mame_controls_tkinter.py to properly cache data with defaults:
     def show_preview(self):
         """Launch the preview window with caching to ensure default controls are included"""
         if not self.current_game:
@@ -3039,12 +3038,28 @@ controller xbox t		= """
             messagebox.showinfo("No Control Data", f"No control data found for {self.current_game}")
             return
         
+        # IMPORTANT: Get custom control configuration if it exists
+        cfg_controls = {}
+        if self.current_game in self.custom_configs:
+            # Parse the custom config
+            cfg_controls = self.parse_cfg_controls(self.custom_configs[self.current_game])
+            
+            # Convert if XInput is enabled
+            if self.use_xinput:
+                cfg_controls = {
+                    control: self.convert_mapping(mapping, True)
+                    for control, mapping in cfg_controls.items()
+                }
+            
+            # Modify game_data to include custom mappings
+            # This is the critical part that's missing
+            self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+        
         # Create cache directory if it doesn't exist yet
         cache_dir = os.path.join(self.preview_dir, "cache")
         os.makedirs(cache_dir, exist_ok=True)
         
         # Save the processed game data to the cache file
-        # This ensures default control names are preserved for the preview
         cache_path = os.path.join(cache_dir, f"{self.current_game}_cache.json")
         try:
             with open(cache_path, 'w', encoding='utf-8') as f:
@@ -3108,6 +3123,25 @@ controller xbox t		= """
             print(f"Error launching preview: {e}")
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
 
+    def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
+        """Update game_data to include the custom control mappings from cfg_controls"""
+        if not cfg_controls:
+            return
+            
+        # For each player in the game data
+        for player in game_data.get('players', []):
+            # For each control in this player
+            for label in player.get('labels', []):
+                control_name = label['name']
+                
+                # If this control has a custom mapping in the cfg file, store it
+                if control_name in cfg_controls:
+                    # Add or update a 'mapping' key to store the current mapping
+                    label['mapping'] = cfg_controls[control_name]
+                    
+                    # You could also add a flag to indicate this is a custom mapping
+                    label['is_custom'] = True
+    
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
         self.hide_preview_buttons = self.hide_buttons_toggle.get()
@@ -3399,16 +3433,17 @@ controller xbox t		= """
         self.game_list.see(f"{line_index}.0")
                    
     def display_controls_table(self, start_row, game_data, cfg_controls):
-        """Extract control table display to a separate method for clarity"""
+        """Display controls with proper mapping between buttons and actions"""
         row = start_row
         
         # Column headers with consistent styling
-        headers = ["Control", "Default Action", "Current Mapping"]
+        # We're changing to a button-centric view
+        headers = ["Controller Button", "Game Action"]
         header_frame = ctk.CTkFrame(self.control_frame)
-        header_frame.grid(row=row, column=0, columnspan=3, padx=5, pady=(20,5), sticky="ew")
+        header_frame.grid(row=row, column=0, columnspan=2, padx=5, pady=(20,5), sticky="ew")
         
         for col, header in enumerate(headers):
-            header_frame.grid_columnconfigure(col, weight=[2,2,3][col])
+            header_frame.grid_columnconfigure(col, weight=1)
             header_label = ctk.CTkLabel(
                 header_frame,
                 text=header,
@@ -3419,45 +3454,137 @@ controller xbox t		= """
 
         # Create a frame for the controls list
         controls_frame = ctk.CTkFrame(self.control_frame)
-        controls_frame.grid(row=row, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-        for col in range(3):
-            controls_frame.grid_columnconfigure(col, weight=[2,2,3][col])
+        controls_frame.grid(row=row, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+        for col in range(2):
+            controls_frame.grid_columnconfigure(col, weight=1)
         
-        # Get control comparisons
-        comparisons = self.compare_controls(game_data, cfg_controls)
+        # We need to reorganize controls based on current mappings
+        # Define the standard controller buttons for reference
+        standard_buttons = [
+            "P1 A Button",
+            "P1 B Button",
+            "P1 X Button",
+            "P1 Y Button",
+            "P1 LB Button",
+            "P1 RB Button",
+            "P1 LT Button",
+            "P1 RT Button",
+            "P1 Left Stick",
+            "P1 Right Stick",
+            "P1 D-Pad",
+            "P1 Start",
+            "P1 Select"
+        ]
+        
+        # First, build a reverse mapping from custom mappings
+        button_to_action = {}
+        
+        # Define a mapping from XInput controls to standard controller buttons
+        xinput_to_button = {
+            "XINPUT_1_A": "P1 A Button",
+            "XINPUT_1_B": "P1 B Button", 
+            "XINPUT_1_X": "P1 X Button",
+            "XINPUT_1_Y": "P1 Y Button",
+            "XINPUT_1_SHOULDER_L": "P1 LB Button",
+            "XINPUT_1_SHOULDER_R": "P1 RB Button",
+            "XINPUT_1_TRIGGER_L": "P1 LT Button",
+            "XINPUT_1_TRIGGER_R": "P1 RT Button",
+            "XINPUT_1_THUMB_L": "P1 Left Stick Button",
+            "XINPUT_1_THUMB_R": "P1 Right Stick Button",
+            "XINPUT_1_DPAD_UP": "P1 D-Pad Up",
+            "XINPUT_1_DPAD_DOWN": "P1 D-Pad Down",
+            "XINPUT_1_DPAD_LEFT": "P1 D-Pad Left",
+            "XINPUT_1_DPAD_RIGHT": "P1 D-Pad Right"
+        }
+        
+        # Default mapping from MAME control to controller button (when no custom mapping exists)
+        default_button_map = {
+            "P1_BUTTON1": "P1 A Button",
+            "P1_BUTTON2": "P1 B Button",
+            "P1_BUTTON3": "P1 X Button",
+            "P1_BUTTON4": "P1 Y Button",
+            "P1_BUTTON5": "P1 LB Button",
+            "P1_BUTTON6": "P1 RB Button",
+            "P1_BUTTON7": "P1 LT Button",
+            "P1_BUTTON8": "P1 RT Button",
+            "P1_BUTTON9": "P1 Left Stick Button",
+            "P1_BUTTON10": "P1 Right Stick Button",
+            "P1_JOYSTICK_UP": "P1 Left Stick Up",
+            "P1_JOYSTICK_DOWN": "P1 Left Stick Down",
+            "P1_JOYSTICK_LEFT": "P1 Left Stick Left",
+            "P1_JOYSTICK_RIGHT": "P1 Left Stick Right"
+        }
+        
+        # If a custom config exists, process it first to find which buttons map to which actions
+        if cfg_controls:
+            # Process the control mapping entries
+            for mame_control, mapping in cfg_controls.items():
+                # Skip non-player 1 controls for now
+                if not mame_control.startswith("P1_"):
+                    continue
+                    
+                # Find which game action this control is mapped to
+                game_action = None
+                for player in game_data.get('players', []):
+                    for label in player.get('labels', []):
+                        if label['name'] == mame_control:
+                            game_action = label['value']
+                            break
+                    if game_action:
+                        break
+                        
+                if not game_action:
+                    continue  # Skip if no action found
+                    
+                # Convert the mapping to a controller button
+                if "XINPUT" in mapping and mapping in xinput_to_button:
+                    controller_button = xinput_to_button[mapping]
+                else:
+                    # Try to interpret JOYCODE mapping
+                    controller_button = self.joycode_to_button(mapping)
+                    
+                if controller_button:
+                    button_to_action[controller_button] = game_action
+                
+        # For controls without custom mappings, use default button assignments
+        for player in game_data.get('players', []):
+            if player['number'] != 1:  # Only handle player 1 for now
+                continue
+                
+            for label in player.get('labels', []):
+                mame_control = label['name']
+                game_action = label['value']
+                
+                # Skip if already handled by custom mapping
+                controller_button = default_button_map.get(mame_control)
+                if controller_button and controller_button not in button_to_action:
+                    button_to_action[controller_button] = game_action
+        
+        # Now display the buttons in a consistent order
         control_row = 0
+        for button in standard_buttons:
+            # Check if we have an action mapped to this button
+            if button in button_to_action:
+                action = button_to_action[button]
+                
+                # Display the controller button name
+                button_label = ctk.CTkLabel(
+                    controls_frame,
+                    text=button,
+                    font=("Arial", 12)
+                )
+                button_label.grid(row=control_row, column=0, padx=5, pady=2, sticky="w")
+                
+                # Display the game action
+                action_label = ctk.CTkLabel(
+                    controls_frame,
+                    text=action,
+                    font=("Arial", 12)
+                )
+                action_label.grid(row=control_row, column=1, padx=5, pady=2, sticky="w")
+                
+                control_row += 1
         
-        # Display the controls
-        for control_name, default_label, current_mapping, is_different in comparisons:
-            # Control name
-            display_control = self.format_control_name(control_name)
-            name_label = ctk.CTkLabel(
-                controls_frame,
-                text=display_control,
-                font=("Arial", 12)
-            )
-            name_label.grid(row=control_row, column=0, padx=5, pady=2, sticky="w")
-            
-            # Default action
-            default_label = ctk.CTkLabel(
-                controls_frame,
-                text=default_label,
-                font=("Arial", 12)
-            )
-            default_label.grid(row=control_row, column=1, padx=5, pady=2, sticky="w")
-            
-            # Current mapping
-            display_mapping = self.format_mapping_display(current_mapping)
-            
-            mapping_label = ctk.CTkLabel(
-                controls_frame,
-                text=display_mapping,
-                text_color="yellow" if is_different else None,
-                font=("Arial", 12)
-            )
-            mapping_label.grid(row=control_row, column=2, padx=5, pady=2, sticky="w")
-            
-            control_row += 1
         row += 1
 
         # Display raw custom config if it exists
@@ -3468,7 +3595,7 @@ controller xbox t		= """
                 text="RAW CONFIGURATION FILE",
                 font=("Arial", 16, "bold")
             )
-            custom_header.grid(row=row, column=0, columnspan=3,
+            custom_header.grid(row=row, column=0, columnspan=2,
                             padx=5, pady=(20,5), sticky="w")
             row += 1
 
@@ -3477,12 +3604,40 @@ controller xbox t		= """
                 height=200,
                 width=200
             )
-            custom_text.grid(row=row, column=0, columnspan=3,
+            custom_text.grid(row=row, column=0, columnspan=2,
                         padx=20, pady=5, sticky="ew")
             custom_text.insert("1.0", self.custom_configs[romname])
             custom_text.configure(state="disabled")
         
         return row + 1
+
+    def joycode_to_button(self, joycode):
+        """Convert a JOYCODE mapping to a controller button name"""
+        if not joycode or "JOYCODE" not in joycode:
+            return None
+            
+        joycode_mapping = {
+            "JOYCODE_1_BUTTON1": "P1 A Button",
+            "JOYCODE_1_BUTTON2": "P1 B Button",
+            "JOYCODE_1_BUTTON3": "P1 X Button",
+            "JOYCODE_1_BUTTON4": "P1 Y Button",
+            "JOYCODE_1_BUTTON5": "P1 LB Button",
+            "JOYCODE_1_BUTTON6": "P1 RB Button",
+            "JOYCODE_1_BUTTON7": "P1 LT Button",
+            "JOYCODE_1_BUTTON8": "P1 RT Button",
+            "JOYCODE_1_BUTTON9": "P1 Left Stick Button",
+            "JOYCODE_1_BUTTON10": "P1 Right Stick Button",
+            "JOYCODE_1_DPADUP": "P1 D-Pad Up",
+            "JOYCODE_1_DPADDOWN": "P1 D-Pad Down",
+            "JOYCODE_1_DPADLEFT": "P1 D-Pad Left",
+            "JOYCODE_1_DPADRIGHT": "P1 D-Pad Right",
+            "JOYCODE_1_YAXIS_UP_SWITCH": "P1 Left Stick Up",
+            "JOYCODE_1_YAXIS_DOWN_SWITCH": "P1 Left Stick Down",
+            "JOYCODE_1_XAXIS_LEFT_SWITCH": "P1 Left Stick Left",
+            "JOYCODE_1_XAXIS_RIGHT_SWITCH": "P1 Left Stick Right"
+        }
+        
+        return joycode_mapping.get(joycode)
     
     def compare_controls(self, game_data: Dict, cfg_controls: Dict) -> List[Tuple[str, str, str, bool]]:
         """Compare controls with game-specific and default mappings"""
@@ -4541,7 +4696,7 @@ controller xbox t		= """
             
             # Set up for processing
             total_roms = len(roms_to_process)
-            processed = 0
+            processed = 0   
             failed = 0
             
             # Reset cancellation flag
@@ -4690,4 +4845,4 @@ controller xbox t		= """
             width=120,
             height=40
         )
-        cancel_button.pack(side="left")
+        cancel_button.pack(side="left") 
