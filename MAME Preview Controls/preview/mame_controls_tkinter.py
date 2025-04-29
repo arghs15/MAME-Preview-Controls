@@ -221,6 +221,15 @@ class MAMEControlConfig(ctk.CTk):
             # Initialize the position manager
             self.position_manager = PositionManager(self)
 
+            # Initialize the preview bridge for PyQt functionality
+            try:
+                from preview_bridge import PreviewBridge
+                self.preview_bridge = PreviewBridge()
+                debug_print("Preview bridge initialized")
+            except ImportError:
+                debug_print("Warning: Could not import preview_bridge. Preview functionality will be limited.")
+                self.preview_bridge = None
+
             # Configure the window
             self.title("MAME Control Configuration Checker")
             self.geometry("1024x768")
@@ -3068,6 +3077,27 @@ controller xbox t		= """
         except Exception as e:
             print(f"Warning: Could not save cache file: {e}")
         
+        # Use the bridge to show the preview if available
+        if hasattr(self, 'preview_bridge') and self.preview_bridge:
+            success = self.preview_bridge.show_preview(
+                self.current_game,
+                game_data,
+                self.hide_preview_buttons,
+                clean_mode=False  # Default to regular mode
+            )
+            
+            if not success:
+                # Fall back to the command-line approach if bridge fails
+                self._show_preview_legacy()
+        else:
+            # Use the legacy approach if bridge is not available
+            self._show_preview_legacy()
+
+    def _show_preview_legacy(self):
+        """Legacy method to launch preview via command line when bridge is not available"""
+        if not self.current_game:
+            return
+                
         # Handle PyInstaller frozen executable
         if getattr(sys, 'frozen', False):
             command = [
@@ -3085,25 +3115,24 @@ controller xbox t		= """
             self.preview_processes.append(process)
             return
         
-        # Use script-based approach
+        # Script-based approach
         try:
-            # First check the main app directory
-            script_path = os.path.join(self.app_dir, "mame_controls_main.py")
-            
-            # If not found, check the MAME root directory
-            if not os.path.exists(script_path):
-                script_path = os.path.join(self.mame_dir, "mame_controls_main.py")
-            
-            # Still not found, check preview directory
-            if not os.path.exists(script_path):
-                script_path = os.path.join(self.preview_dir, "mame_controls_main.py")
-                
-            # If none of the above worked, we can't find the main script
-            if not os.path.exists(script_path):
+            # Find the main script
+            script_path = None
+            for path in [
+                os.path.join(self.app_dir, "mame_controls_main.py"),
+                os.path.join(self.mame_dir, "mame_controls_main.py"),
+                os.path.join(self.preview_dir, "mame_controls_main.py")
+            ]:
+                if os.path.exists(path):
+                    script_path = path
+                    break
+                    
+            if not script_path:
                 messagebox.showerror("Error", "Could not find mame_controls_main.py")
                 return
                 
-            # Found the script, build the command
+            # Launch the script
             command = [
                 sys.executable,
                 script_path,
@@ -3122,6 +3151,73 @@ controller xbox t		= """
         except Exception as e:
             print(f"Error launching preview: {e}")
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
+
+    # Add a new method for batch exporting images using the bridge
+    def batch_export_images_with_bridge(self, output_dir, format="png", roms_to_process=None,
+                                    hide_buttons=True, clean_mode=True, show_bezel=True, show_logo=True):
+        """Use the preview bridge to batch export images without launching external processes"""
+        if not hasattr(self, 'preview_bridge') or not self.preview_bridge:
+            messagebox.showerror("Error", "Preview bridge not available")
+            return False
+            
+        # If no ROMs provided, use current game
+        if not roms_to_process:
+            if not self.current_game:
+                messagebox.showinfo("No Game Selected", "Please select a game first")
+                return False
+            roms_to_process = [self.current_game]
+        
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Track results
+        results = {
+            "success": 0,
+            "failed": 0,
+            "skipped": 0
+        }
+        
+        # Process each ROM
+        for rom_name in roms_to_process:
+            try:
+                # Get game data
+                game_data = self.get_game_data(rom_name)
+                if not game_data:
+                    print(f"Skipping {rom_name}: No game data found")
+                    results["skipped"] += 1
+                    continue
+                    
+                # Export the image
+                output_path = os.path.join(output_dir, f"{rom_name}.{format}")
+                success = self.preview_bridge.export_preview_image(
+                    rom_name,
+                    output_path,
+                    format,
+                    show_bezel,
+                    show_logo
+                )
+                
+                if success:
+                    print(f"Exported {rom_name} to {output_path}")
+                    results["success"] += 1
+                else:
+                    print(f"Failed to export {rom_name}")
+                    results["failed"] += 1
+                    
+            except Exception as e:
+                print(f"Error processing {rom_name}: {e}")
+                results["failed"] += 1
+        
+        # Report results
+        message = (
+            f"Export complete:\n"
+            f"- Successfully exported: {results['success']}\n"
+            f"- Failed: {results['failed']}\n"
+            f"- Skipped: {results['skipped']}"
+        )
+        
+        messagebox.showinfo("Export Results", message)
+        return results["success"] > 0
 
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
         """Update game_data to include the custom control mappings from cfg_controls"""
