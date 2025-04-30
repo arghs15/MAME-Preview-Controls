@@ -4489,6 +4489,15 @@ controller xbox t		= """
         )
         browse_button.pack(side="left", padx=5)
         
+        # Force cache creation option
+        force_cache_var = ctk.BooleanVar(value=True)
+        force_cache_check = ctk.CTkCheckBox(
+            output_options,
+            text="Force Cache Creation (saves game data for uncached ROMs)",
+            variable=force_cache_var
+        )
+        force_cache_check.pack(anchor="w", padx=20, pady=10)
+        
         # ROM selection frame
         rom_selection_frame = ctk.CTkFrame(content_frame)
         rom_selection_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -4624,10 +4633,15 @@ controller xbox t		= """
         )
         status_label.pack(pady=(5, 0))
         
+        # Helper function to update status
+        def update_status(message):
+            status_var.set(message)
+            dialog.update_idletasks()
+        
         # Add flag to track cancellation
         cancel_processing = [False]
         
-        # IMPORTANT: Export function modified to avoid threading issues
+        # IMPORTANT: Export function modified to avoid threading issues and fix caching problems
         def start_export():
             # Determine which ROMs to process
             roms_to_process = []
@@ -4678,7 +4692,8 @@ controller xbox t		= """
                 "show_logo": show_logo_var.get(),
                 "format": format_var.get().lower(),
                 "output_dir": output_dir_var.get(),
-                "show_completion": show_completion_var.get()
+                "show_completion": show_completion_var.get(),
+                "force_cache": force_cache_var.get()
             }
             
             # Create output directory if it doesn't exist
@@ -4699,7 +4714,7 @@ controller xbox t		= """
             cancel_button.configure(text="Cancel Export", fg_color="#dc3545", hover_color="#c82333")
             
             # Update status
-            status_var.set(f"Processing 0/{total_roms} ROMs...")
+            update_status(f"Processing 0/{total_roms} ROMs...")
             progress_bar.set(0)
             dialog.update_idletasks()
                 
@@ -4727,37 +4742,50 @@ controller xbox t		= """
                     return
                     
                 rom_name = roms_to_process[index]
-                status_var.set(f"Processing {index+1}/{total_roms}: {rom_name}")
+                update_status(f"Processing {index+1}/{total_roms}: {rom_name}")
                 progress_bar.set((index + 0.5) / total_roms)
                 dialog.update_idletasks()
                 
                 # Process this ROM
                 success = False
                 try:
-                    # Get the game data
+                    # Step 1: Get the game data and ensure it's cached
                     game_data = self.get_game_data(rom_name)
                     if not game_data:
                         raise ValueError(f"No control data found for {rom_name}")
                     
-                    # Export the image using the bridge if available
-                    if hasattr(self, 'preview_bridge') and self.preview_bridge:
-                        output_path = os.path.join(settings["output_dir"], f"{rom_name}.{settings['format']}")
+                    # Step 2: Ensure the game data is cached for the bridge
+                    cache_dir = os.path.join(self.preview_dir, "cache")
+                    os.makedirs(cache_dir, exist_ok=True)
+                    cache_path = os.path.join(cache_dir, f"{rom_name}_cache.json")
+                    
+                    # Force cache creation if requested or if cache doesn't exist
+                    if settings["force_cache"] or not os.path.exists(cache_path):
+                        with open(cache_path, 'w', encoding='utf-8') as f:
+                            json.dump(game_data, f, indent=2)
+                        print(f"Cached game data for {rom_name}")
+                    
+                    # Step 3: Try direct export first
+                    output_path = os.path.join(settings["output_dir"], f"{rom_name}.{settings['format']}")
+                    
+                    # Direct export using our own method first
+                    success = self.preview_export_image(
+                        rom_name, 
+                        game_data,
+                        settings["output_dir"],
+                        settings["format"],
+                        settings["hide_buttons"],
+                        settings["clean_mode"],
+                        settings["show_bezel"],
+                        settings["show_logo"]
+                    )
+                    
+                    # Fallback to bridge if direct export failed
+                    if not success and hasattr(self, 'preview_bridge') and self.preview_bridge:
                         success = self.preview_bridge.export_preview_image(
                             rom_name, 
                             output_path,
                             settings["format"],
-                            settings["show_bezel"],
-                            settings["show_logo"]
-                        )
-                    else:
-                        # Fallback to legacy approach 
-                        success = self.preview_export_image(
-                            rom_name, 
-                            game_data,
-                            settings["output_dir"],
-                            settings["format"],
-                            settings["hide_buttons"],
-                            settings["clean_mode"],
                             settings["show_bezel"],
                             settings["show_logo"]
                         )
@@ -4768,6 +4796,7 @@ controller xbox t		= """
                     else:
                         nonlocal failed
                         failed += 1
+                        print(f"Failed to export {rom_name}")
                 except Exception as e:
                     print(f"Error processing {rom_name}: {e}")
                     import traceback
@@ -4812,11 +4841,11 @@ controller xbox t		= """
             # Start processing the first ROM
             process_single_rom(0)
 
-        # CRITICAL: Create the buttons AFTER defining the start_export function
+        # Create the buttons AFTER defining the start_export function
         start_button = ctk.CTkButton(
             button_area,
             text="Start Export",
-            command=start_export,  # Now this will properly reference the defined function
+            command=start_export,
             width=150,
             height=40,
             font=("Arial", 14, "bold"),
