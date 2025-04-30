@@ -242,7 +242,7 @@ You can package the application as a standalone executable using PyInstaller:
    python package_with_pyinstaller.py
    ```
 
-This will create a `dist/preview` directory containing the executable and all necessary files. Copy the contents of the preview folder to your MAME directory, and run the executable.
+This will create a `dist/preview` directory containing the executable and all necessary files. Copy the contents of the preview folder to your MAME directory. Then, copy the gamedata.json to the preview\settings folder, and run the executable.
 
 You can edit `python package_with_pyinstaller.py` to create a portable executable, but load times will be increased.
 Edit the line below to use onefile
