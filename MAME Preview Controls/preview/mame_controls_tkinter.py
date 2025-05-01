@@ -4294,7 +4294,7 @@ controller xbox t		= """
             return False
 
     def batch_export_images(self):
-        """Show dialog to export multiple ROM preview images in batch with improved thread safety"""
+        """Show dialog to export multiple ROM preview images in batch"""
         # Create dialog with better size management
         dialog = ctk.CTkToplevel(self)
         dialog.title("Batch Export Preview Images")
@@ -4329,11 +4329,6 @@ controller xbox t		= """
             font=("Arial", 18, "bold")
         )
         title_label.pack(side="left", padx=10, pady=10)
-        
-        # Add the action buttons directly to the title frame - right aligned
-        # *** MOVED THE BUTTONS TO THE TOP RIGHT ***
-        button_area = ctk.CTkFrame(title_frame, fg_color="transparent")
-        button_area.pack(side="right", padx=10, pady=10)
         
         # Description label
         description = """
@@ -4442,7 +4437,6 @@ controller xbox t		= """
             width=100
         ).pack(side="left")
 
-        # Format options
         format_var = ctk.StringVar(value="PNG")
         format_combo = ctk.CTkComboBox(
             format_frame,
@@ -4488,15 +4482,6 @@ controller xbox t		= """
             command=browse_directory
         )
         browse_button.pack(side="left", padx=5)
-        
-        # Force cache creation option
-        force_cache_var = ctk.BooleanVar(value=True)
-        force_cache_check = ctk.CTkCheckBox(
-            output_options,
-            text="Force Cache Creation (saves game data for uncached ROMs)",
-            variable=force_cache_var
-        )
-        force_cache_check.pack(anchor="w", padx=20, pady=10)
         
         # ROM selection frame
         rom_selection_frame = ctk.CTkFrame(content_frame)
@@ -4579,13 +4564,9 @@ controller xbox t		= """
         # Populate the tree with ROMs that have controls
         roms_with_data = []
         for rom in sorted(self.available_roms):
-            try:
-                game_data = self.get_game_data(rom)
-                if game_data:
-                    roms_with_data.append((rom, game_data.get('gamename', rom)))
-            except Exception:
-                # Skip ROMs that throw errors
-                pass
+            game_data = self.get_game_data(rom)
+            if game_data:
+                roms_with_data.append((rom, game_data.get('gamename', rom)))
         
         # Insert ROM data into the tree
         for rom, game_name in roms_with_data:
@@ -4633,15 +4614,14 @@ controller xbox t		= """
         )
         status_label.pack(pady=(5, 0))
         
-        # Helper function to update status
-        def update_status(message):
-            status_var.set(message)
-            dialog.update_idletasks()
+        # Add buttons at the bottom
+        button_layout = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_layout.pack(padx=10, pady=10)
         
         # Add flag to track cancellation
         cancel_processing = [False]
         
-        # IMPORTANT: Export function modified to avoid threading issues and fix caching problems
+        # IMPORTANT: Main export function - Define this BEFORE creating the buttons
         def start_export():
             # Determine which ROMs to process
             roms_to_process = []
@@ -4655,12 +4635,12 @@ controller xbox t		= """
                     if not messagebox.askyesno(
                         "Warning - Batch Processing",
                         f"You are about to process {len(roms_to_process)} ROMs, which may take a long time.\n\n"
-                        f"This operation can be canceled using the Cancel Export button.\n\n"
+                        f"This operation can be cancelled using the Cancel Export button.\n\n"
                         f"Do you want to continue?",
                         icon="warning"
                     ):
                         return
-            
+                
             elif mode == "custom":
                 selected_items = rom_tree.selection()
                 for item in selected_items:
@@ -4692,8 +4672,7 @@ controller xbox t		= """
                 "show_logo": show_logo_var.get(),
                 "format": format_var.get().lower(),
                 "output_dir": output_dir_var.get(),
-                "show_completion": show_completion_var.get(),
-                "force_cache": force_cache_var.get()
+                "show_completion": show_completion_var.get()
             }
             
             # Create output directory if it doesn't exist
@@ -4714,10 +4693,10 @@ controller xbox t		= """
             cancel_button.configure(text="Cancel Export", fg_color="#dc3545", hover_color="#c82333")
             
             # Update status
-            update_status(f"Processing 0/{total_roms} ROMs...")
+            status_var.set(f"Processing 0/{total_roms} ROMs...")
             progress_bar.set(0)
             dialog.update_idletasks()
-                
+            
             # Function to handle cancellation request
             def request_cancel():
                 if messagebox.askyesno(
@@ -4727,90 +4706,112 @@ controller xbox t		= """
                     icon="question"
                 ):
                     cancel_processing[0] = True
-                    update_status("Cancelling... Please wait for current operation to complete.")
+                    status_var.set("Cancelling... Please wait for current operation to complete.")
                     cancel_button.configure(state="disabled", text="Cancelling...")
             
             # Update cancel button command
             cancel_button.configure(command=request_cancel)
             
-            # Process the ROMs, WITH THREAD SAFETY
-            # Use after() to process one ROM at a time and keep the UI responsive
-            def process_single_rom(index):
-                if index >= len(roms_to_process) or cancel_processing[0]:
-                    # All done or canceled
-                    finish_processing()
-                    return
-                    
-                rom_name = roms_to_process[index]
-                update_status(f"Processing {index+1}/{total_roms}: {rom_name}")
-                progress_bar.set((index + 0.5) / total_roms)
-                dialog.update_idletasks()
+            # Use a separate thread to avoid freezing the UI
+            def process_roms_thread():
+                nonlocal processed, failed
                 
-                # Process this ROM
-                success = False
-                try:
-                    # Step 1: Get the game data and ensure it's cached
-                    game_data = self.get_game_data(rom_name)
-                    if not game_data:
-                        raise ValueError(f"No control data found for {rom_name}")
+                for i, rom_name in enumerate(roms_to_process):
+                    # Check for cancellation request
+                    if cancel_processing[0]:
+                        dialog.after(0, lambda s=f"Cancelled after processing {processed}/{total_roms} ROMs": status_var.set(s))
+                        dialog.after(0, lambda: progress_bar.set((i+1)/total_roms))
+                        break
                     
-                    # Step 2: Ensure the game data is cached for the bridge
-                    cache_dir = os.path.join(self.preview_dir, "cache")
-                    os.makedirs(cache_dir, exist_ok=True)
-                    cache_path = os.path.join(cache_dir, f"{rom_name}_cache.json")
+                    # Update status
+                    dialog.after(0, lambda s=f"Processing {i+1}/{total_roms}: {rom_name}": status_var.set(s))
+                    dialog.after(0, lambda v=(i+0.5)/total_roms: progress_bar.set(v))
                     
-                    # Force cache creation if requested or if cache doesn't exist
-                    if settings["force_cache"] or not os.path.exists(cache_path):
-                        with open(cache_path, 'w', encoding='utf-8') as f:
+                    # Generate and save the image
+                    try:
+                        # Get the game data directly rather than relying on cache
+                        game_data = self.get_game_data(rom_name)
+                        if not game_data:
+                            raise ValueError(f"No control data found for {rom_name}")
+                        
+                        # Ensure cache exists (might be needed by export process)
+                        cache_dir = os.path.join(self.preview_dir, "cache")
+                        os.makedirs(cache_dir, exist_ok=True)
+                        cache_file = os.path.join(cache_dir, f"{rom_name}_cache.json")
+                        
+                        # Write to cache file
+                        with open(cache_file, 'w', encoding='utf-8') as f:
                             json.dump(game_data, f, indent=2)
-                        print(f"Cached game data for {rom_name}")
-                    
-                    # Step 3: Try direct export first
-                    output_path = os.path.join(settings["output_dir"], f"{rom_name}.{settings['format']}")
-                    
-                    # Direct export using our own method first
-                    success = self.preview_export_image(
-                        rom_name, 
-                        game_data,
-                        settings["output_dir"],
-                        settings["format"],
-                        settings["hide_buttons"],
-                        settings["clean_mode"],
-                        settings["show_bezel"],
-                        settings["show_logo"]
-                    )
-                    
-                    # Fallback to bridge if direct export failed
-                    if not success and hasattr(self, 'preview_bridge') and self.preview_bridge:
-                        success = self.preview_bridge.export_preview_image(
-                            rom_name, 
-                            output_path,
-                            settings["format"],
-                            settings["show_bezel"],
-                            settings["show_logo"]
-                        )
-                    
-                    if success:
-                        nonlocal processed
-                        processed += 1
-                    else:
-                        nonlocal failed
+                        
+                        # Export using main script with proper bezel/logo parameters
+                        output_path = os.path.join(settings["output_dir"], f"{rom_name}.{settings['format']}")
+                        
+                        # Find main script
+                        main_script = None
+                        main_script_paths = [
+                            os.path.join(self.app_dir, "mame_controls_main.py"),
+                            os.path.join(self.mame_dir, "mame_controls_main.py"),
+                            os.path.join(self.preview_dir, "mame_controls_main.py")
+                        ]
+                        
+                        for path in main_script_paths:
+                            if os.path.exists(path):
+                                main_script = path
+                                break
+                                
+                        if not main_script:
+                            raise ValueError("Could not find mame_controls_main.py")
+                        
+                        # Use main script for export
+                        cmd = [
+                            sys.executable, 
+                            main_script,
+                            "--export-image",
+                            "--game", rom_name,
+                            "--output", output_path,
+                            "--format", settings["format"]
+                        ]
+                        
+                        if not settings["show_bezel"]:
+                            cmd.append("--no-bezel")
+                            
+                        if not settings["show_logo"]:
+                            cmd.append("--no-logo")
+                        
+                        # Run the process
+                        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        try:
+                            stdout, stderr = process.communicate(timeout=30)
+                            exit_code = process.returncode
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            print(f"Export timed out for {rom_name}")
+                            failed += 1
+                            continue
+                        
+                        # Check success
+                        if exit_code == 0 and os.path.exists(output_path):
+                            processed += 1
+                            print(f"Successfully exported {rom_name} to {output_path}")
+                        else:
+                            failed += 1
+                            print(f"Failed to export {rom_name} (exit code: {exit_code})")
+                            if stdout:
+                                print(f"Process output: {stdout.decode('utf-8', errors='replace')}")
+                            if stderr:
+                                print(f"Process errors: {stderr.decode('utf-8', errors='replace')}")
+                    except Exception as e:
+                        print(f"Error processing {rom_name}: {e}")
+                        import traceback
+                        traceback.print_exc()
                         failed += 1
-                        print(f"Failed to export {rom_name}")
-                except Exception as e:
-                    print(f"Error processing {rom_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    failed += 1
+                    
+                    # Update progress
+                    dialog.after(0, lambda v=(i+1)/total_roms: progress_bar.set(v))
+                    
+                    # Small sleep to allow UI updates
+                    time.sleep(0.05)
                 
-                # Update progress
-                progress_bar.set((index + 1) / total_roms)
-                
-                # Queue the next ROM after a short delay
-                dialog.after(100, lambda: process_single_rom(index + 1))
-            
-            # Function to finish processing
-            def finish_processing():
                 # All done - update status
                 final_status = ""
                 if cancel_processing[0]:
@@ -4820,30 +4821,34 @@ controller xbox t		= """
                 else:
                     final_status = f"Completed: {processed} ROM preview images exported"
                 
-                # Update UI elements
-                status_var.set(final_status)
-                start_button.configure(state="normal", text="Start Export")
-                cancel_button.configure(
+                # Update UI elements on the main thread
+                dialog.after(0, lambda s=final_status: status_var.set(s))
+                dialog.after(0, lambda: start_button.configure(state="normal", text="Start Export"))
+                dialog.after(0, lambda: cancel_button.configure(
                     state="normal", 
                     text="Close", 
-                    fg_color="#2B87D1",  # Reset to default color
+                    fg_color="#2B87D1",
                     hover_color="#1A6DAE",
                     command=dialog.destroy
-                )
+                ))
                 
                 # Show completion message - but only ONE at the end
                 # And only if the user wants it
                 if settings["show_completion"] and not cancel_processing[0]:
-                    messagebox.showinfo("Export Complete", 
-                                    f"Exported {processed} ROM preview images to {settings['output_dir']}\n" +
-                                    (f"Failed: {failed}" if failed > 0 else ""))
+                    dialog.after(0, lambda p=processed, f=failed, d=settings["output_dir"]: 
+                                messagebox.showinfo("Export Complete", 
+                                                f"Exported {p} ROM preview images to {d}\n" +
+                                                (f"Failed: {f}" if f > 0 else "")))
             
-            # Start processing the first ROM
-            process_single_rom(0)
-
-        # Create the buttons AFTER defining the start_export function
+            # Start processing in a separate thread
+            import threading
+            process_thread = threading.Thread(target=process_roms_thread)
+            process_thread.daemon = True
+            process_thread.start()
+        
+        # Add the button layout frame to the bottom
         start_button = ctk.CTkButton(
-            button_area,
+            button_layout,
             text="Start Export",
             command=start_export,
             width=150,
@@ -4852,13 +4857,13 @@ controller xbox t		= """
             fg_color="#28a745",  # Green color
             hover_color="#218838"  # Darker green on hover
         )
-        start_button.pack(side="left", padx=(0, 10))
+        start_button.pack(side="left", padx=10)
         
         cancel_button = ctk.CTkButton(
-            button_area,
+            button_layout,
             text="Cancel",
             command=dialog.destroy,
             width=120,
             height=40
         )
-        cancel_button.pack(side="left")
+        cancel_button.pack(side="left", padx=10)
