@@ -867,64 +867,102 @@ class PreviewBridge:
         monitor_thread = threading.Thread(target=check_mame, daemon=True)
         monitor_thread.start()
     
-    def export_preview_image(self, rom_name: str, output_path: str, 
-                            format: str = "png", show_bezel: bool = True, 
-                            show_logo: bool = True) -> bool:
-        """Export a preview image for a ROM to a file"""
-        if not self.app:
-            if not self._initialize_qt():
-                print("Error: PyQt is required for preview functionality")
-                return False
-                
-        # Check for cached game data
-        game_data = self.load_game_data_from_cache(rom_name)
-        
-        if not game_data:
-            print(f"No cached data found for {rom_name}")
-            return False
-        
+    def export_preview_image(self, rom_name, output_path, format="png", show_bezel=True, show_logo=True):
+        """Export a preview image for a ROM to the specified path"""
         try:
-            # Import the preview window class
+            print(f"Exporting preview for {rom_name} to {output_path}")
+            print(f"Settings: show_bezel={show_bezel}, show_logo={show_logo}")
+            
+            # Import required modules
+            from PyQt5.QtWidgets import QApplication
+            import sys
+            
+            # Get game data from cache (or load it if needed)
+            game_data = None
+            cache_dir = os.path.join(self.preview_dir, "cache")
+            cache_file = os.path.join(cache_dir, f"{rom_name}_cache.json")
+            
+            # Try to load from cache first
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        game_data = json.load(f)
+                    print(f"Loaded game data from cache: {cache_file}")
+                except Exception as cache_error:
+                    print(f"Error loading from cache: {cache_error}")
+            
+            # If still no data, try to load directly using MAMEControlConfig
+            if not game_data:
+                # [method to load game data]
+                pass
+            
+            # Ensure we have a QApplication
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication(sys.argv)
+            
+            # Import the preview module
             from mame_controls_preview import PreviewWindow
             
-            # Create the preview window (hidden)
+            # Create preview window
             preview = PreviewWindow(
-                rom_name, 
-                game_data, 
+                rom_name,
+                game_data,
                 self.mame_dir,
-                None,
-                hide_buttons=True,  # Always hide buttons in export mode
-                clean_mode=True     # Always use clean mode in export mode
+                hide_buttons=True,
+                clean_mode=True
             )
             
-            # Configure bezel/logo visibility
-            if not show_bezel and hasattr(preview, 'bezel_visible'):
-                preview.bezel_visible = False
-                
-            if not show_logo and hasattr(preview, 'logo_visible'):
-                preview.logo_visible = False
-                if hasattr(preview, 'logo_label') and preview.logo_label:
-                    preview.logo_label.setVisible(False)
+            # IMPORTANT: Show window and force processing BEFORE bezel setup
+            preview.show()
+            app.processEvents()
             
-            # Make sure the output directory exists
-            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            # Ensure bezel is loaded and visibility is set
+            if hasattr(preview, 'integrate_bezel_support'):
+                preview.integrate_bezel_support()
+                app.processEvents()  # Process events after initial setup
+                
+                # Set visibility after integration
+                if hasattr(preview, 'has_bezel') and preview.has_bezel:
+                    preview.bezel_visible = show_bezel
+                    print(f"Bezel found and visibility set to: {show_bezel}")
+                    
+                    # CRITICAL: Make sure the bezel label is also set visible
+                    if hasattr(preview, 'bezel_label') and preview.bezel_label:
+                        preview.bezel_label.setVisible(show_bezel)
+                        
+                    if show_bezel and hasattr(preview, 'show_bezel_with_background'):
+                        preview.show_bezel_with_background()
+            
+            # Set logo visibility
+            if hasattr(preview, 'logo_visible') and hasattr(preview, 'logo_label'):
+                preview.logo_visible = show_logo
+                if preview.logo_label:
+                    preview.logo_label.setVisible(show_logo)
+            
+            # Process events again after all visibility changes
+            app.processEvents()
+            
+            # Sleep briefly to ensure rendering is complete
+            import time
+            time.sleep(0.5)  # Give time for rendering to complete
+            
+            # Process events one more time before export
+            app.processEvents()
             
             # Export the image
+            success = False
             if hasattr(preview, 'export_image_headless'):
-                result = preview.export_image_headless(output_path, format.lower())
-                
-                # Clean up preview window
-                preview.close()
-                preview.deleteLater()
-                gc.collect()
-                
-                return result
+                success = preview.export_image_headless(output_path, format)
             else:
-                print("Error: Export method not available")
-                return False
-                
+                success = preview.export_image(output_path, format)
+            
+            # Close preview and return result
+            preview.close()
+            return success and os.path.exists(output_path)
+        
         except Exception as e:
-            print(f"Error exporting image: {e}")
+            print(f"Error exporting preview for {rom_name}: {e}")
             import traceback
             traceback.print_exc()
             return False

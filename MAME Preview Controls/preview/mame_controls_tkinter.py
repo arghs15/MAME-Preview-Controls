@@ -4712,7 +4712,6 @@ controller xbox t		= """
             # Update cancel button command
             cancel_button.configure(command=request_cancel)
             
-            # Use a separate thread to avoid freezing the UI
             def process_roms_thread():
                 nonlocal processed, failed
                 
@@ -4772,17 +4771,34 @@ controller xbox t		= """
                             "--format", settings["format"]
                         ]
                         
+                        # IMPORTANT: Only add --no-bezel when bezels should be hidden
+                        # This matches your original approach that worked
                         if not settings["show_bezel"]:
                             cmd.append("--no-bezel")
                             
                         if not settings["show_logo"]:
                             cmd.append("--no-logo")
+                            
+                        # Add clean mode and button visibility parameters
+                        if settings["clean_mode"]:
+                            cmd.append("--clean-preview")
+                            
+                        if settings["hide_buttons"]:
+                            cmd.append("--no-buttons")
                         
-                        # Run the process
-                        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        print(f"Executing command: {' '.join(cmd)}")
+                        
+                        # Run the process with improved output handling
+                        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                         try:
-                            stdout, stderr = process.communicate(timeout=30)
+                            stdout, stderr = process.communicate(timeout=60)  # Increased timeout
                             exit_code = process.returncode
+                            
+                            # Print output for debugging
+                            if stdout:
+                                print(f"Process output: {stdout}")
+                            if stderr:
+                                print(f"Process errors: {stderr}")
                         except subprocess.TimeoutExpired:
                             process.kill()
                             print(f"Export timed out for {rom_name}")
@@ -4796,10 +4812,6 @@ controller xbox t		= """
                         else:
                             failed += 1
                             print(f"Failed to export {rom_name} (exit code: {exit_code})")
-                            if stdout:
-                                print(f"Process output: {stdout.decode('utf-8', errors='replace')}")
-                            if stderr:
-                                print(f"Process errors: {stderr.decode('utf-8', errors='replace')}")
                     except Exception as e:
                         print(f"Error processing {rom_name}: {e}")
                         import traceback

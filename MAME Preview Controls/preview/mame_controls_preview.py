@@ -3603,11 +3603,11 @@ class PreviewWindow(QMainWindow):
             # Save the image as PNG to preserve transparency
             if image.save(output_path, "PNG"):
                 print(f"Image saved successfully to {output_path}")
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Image saved to:\n{output_path}"
-                )
+                #QMessageBox.information(
+                    #self,
+                    #"Success",
+                    #f"Image saved to:\n{output_path}"
+               # )
                 return True
             else:
                 print(f"Failed to save image to {output_path}")
