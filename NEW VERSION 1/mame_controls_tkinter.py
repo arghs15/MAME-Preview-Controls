@@ -4182,11 +4182,146 @@ controller xbox t		= """
         print(f"Font size adjustment: {font_family} - original: {font_size}, adjusted: {adjusted_font_size} (scale: {scale})")
         return adjusted_font_size
     
-    # 1. First, create a special context manager to suppress messageboxes
-    def preview_export_image(self, rom_name, game_data, output_dir, format="png", hide_buttons=True, clean_mode=True, show_bezel=True, show_logo=True):
-        """Export a preview image for a ROM using direct PyQt interaction without showing individual messages"""
+    def export_image_headless(self, output_path, format="png"):
+        """Export preview image in headless mode using existing save_image functionality with bezel settings"""
         try:
-            print(f"Direct export of {rom_name} to {output_dir}")
+            print(f"Exporting preview image to {output_path} with bezel_visible={getattr(self, 'bezel_visible', 'Not set')}")
+            
+            # Force bezel visibility based on the settings again, just to be sure
+            if hasattr(self, 'bezel_visible') and self.bezel_visible and hasattr(self, 'has_bezel') and self.has_bezel:
+                # Ensure bezel is visible for export
+                if hasattr(self, 'show_bezel_with_background'):
+                    print("Forcing bezel visibility for export...")
+                    self.show_bezel_with_background()
+                    
+                    # Force bezel to top of z-order
+                    if hasattr(self, 'bezel_label') and self.bezel_label:
+                        self.bezel_label.raise_()
+                        
+                    # Add a brief delay to ensure bezel is rendered
+                    from PyQt5.QtCore import QTimer
+                    from PyQt5.QtWidgets import QApplication
+                    QTimer.singleShot(200, lambda: None)
+                    QApplication.processEvents()  # Process events to update UI
+            
+            # Ensure controls are above bezel
+            if hasattr(self, 'raise_controls_above_bezel'):
+                self.raise_controls_above_bezel()
+                
+            # If the original save_image function exists, use it
+            if hasattr(self, 'save_image'):
+                # Get the current output path to restore it later
+                original_output_path = getattr(self, '_output_path', None)
+                
+                # Set the output path temporarily
+                self._output_path = output_path
+                
+                # Instead of just calling save_image, we'll duplicate its functionality here
+                # to ensure we have complete control over the process
+                
+                # Create a new image with the same size as the canvas
+                from PyQt5.QtGui import QImage, QPainter, QPixmap, QColor
+                from PyQt5.QtCore import Qt
+                
+                image = QImage(
+                    self.canvas.width(),
+                    self.canvas.height(),
+                    QImage.Format_ARGB32
+                )
+                # Fill with transparent background instead of black
+                image.fill(Qt.transparent)
+                
+                # Create painter for the image
+                painter = QPainter(image)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setRenderHint(QPainter.TextAntialiasing)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                
+                # Draw the background image if it's not the default transparent one
+                if hasattr(self, 'background_pixmap') and self.background_pixmap and not self.background_pixmap.isNull():
+                    bg_pixmap = self.background_pixmap
+                    
+                    # Calculate position to center the pixmap
+                    x = (self.canvas.width() - bg_pixmap.width()) // 2
+                    y = (self.canvas.height() - bg_pixmap.height()) // 2
+                    
+                    # Draw the pixmap
+                    painter.drawPixmap(x, y, bg_pixmap)
+                
+                # Draw the bezel if it's visible
+                if hasattr(self, 'bezel_visible') and self.bezel_visible and hasattr(self, 'bezel_pixmap'):
+                    bezel_pixmap = getattr(self, 'bezel_pixmap', None)
+                    if bezel_pixmap and not bezel_pixmap.isNull():
+                        # Position bezel in center
+                        x = (self.canvas.width() - bezel_pixmap.width()) // 2
+                        y = (self.canvas.height() - bezel_pixmap.height()) // 2
+                        painter.drawPixmap(x, y, bezel_pixmap)
+                        print(f"Drew bezel at {x},{y} with size {bezel_pixmap.width()}x{bezel_pixmap.height()}")
+                
+                # Draw the logo if visible
+                if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
+                    logo_pixmap = self.logo_label.pixmap()
+                    if logo_pixmap and not logo_pixmap.isNull():
+                        painter.drawPixmap(self.logo_label.pos(), logo_pixmap)
+                
+                # Draw control labels
+                if hasattr(self, 'control_labels'):
+                    for control_name, control_data in self.control_labels.items():
+                        label = control_data['label']
+                        
+                        # Skip if not visible
+                        if not label.isVisible():
+                            continue
+                        
+                        # Get label position
+                        pos = label.pos()
+                        
+                        # Get settings and properties from the label
+                        settings = getattr(label, 'settings', {})
+                        prefix = getattr(label, 'prefix', '')
+                        action = getattr(label, 'action', label.text())
+                        
+                        # Draw the text - simplified for export
+                        if hasattr(label, 'paintEvent'):
+                            # Force the label to paint itself to an image
+                            label_image = QPixmap(label.size())
+                            label_image.fill(Qt.transparent)
+                            label_painter = QPainter(label_image)
+                            label.render(label_painter)
+                            label_painter.end()
+                            
+                            # Draw the label image to our canvas
+                            painter.drawPixmap(pos, label_image)
+                        else:
+                            # Fallback - just draw the text
+                            painter.setPen(QColor(settings.get("action_color", "#FFFFFF")))
+                            painter.setFont(label.font())
+                            painter.drawText(pos.x(), pos.y() + label.height()//2, label.text())
+                
+                # End painting
+                painter.end()
+                
+                # Save the image
+                result = image.save(output_path, format.upper())
+                
+                # Restore original path
+                if original_output_path:
+                    self._output_path = original_output_path
+                
+                return result
+            else:
+                print("ERROR: save_image method not available")
+                return False
+        except Exception as e:
+            print(f"Error in export_image_headless: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def preview_export_image(self, rom_name, game_data, output_dir, format="png"):
+        """Export a preview image for a ROM with optimized headless rendering for speed"""
+        try:
+            print(f"Exporting {rom_name} to {output_dir}")
             
             # Make sure output directory exists
             os.makedirs(output_dir, exist_ok=True)
@@ -4194,6 +4329,7 @@ controller xbox t		= """
             
             # Create PreviewWindow directly
             from PyQt5.QtWidgets import QApplication, QMessageBox
+            from PyQt5.QtCore import Qt
             import sys
             
             # Initialize PyQt app if needed
@@ -4204,101 +4340,117 @@ controller xbox t		= """
             # Import the preview module
             from mame_controls_preview import PreviewWindow
             
-            # IMPORTANT: Create a dummy messagebox class to suppress all popups during export
+            # Create dummy messagebox class to suppress all popups
             class DummyMessageBox:
                 @staticmethod
-                def information(*args, **kwargs):
-                    return QMessageBox.Ok
-                    
+                def information(*args, **kwargs): return QMessageBox.Ok
                 @staticmethod
-                def showinfo(*args, **kwargs):
-                    return
-                    
+                def showinfo(*args, **kwargs): return
                 @staticmethod
-                def warning(*args, **kwargs):
-                    return QMessageBox.Ok
-                    
+                def warning(*args, **kwargs): return QMessageBox.Ok
                 @staticmethod
-                def error(*args, **kwargs):
-                    return QMessageBox.Ok
-                    
+                def error(*args, **kwargs): return QMessageBox.Ok
                 @staticmethod
-                def critical(*args, **kwargs):
-                    return QMessageBox.Ok
-                    
+                def critical(*args, **kwargs): return QMessageBox.Ok
                 @staticmethod
-                def question(*args, **kwargs):
-                    return QMessageBox.Yes
+                def question(*args, **kwargs): return QMessageBox.Yes
             
-            # Create preview window
+            # Create preview window but NEVER make it visible
             preview = PreviewWindow(
                 rom_name,
                 game_data,
                 self.mame_dir,
-                hide_buttons=hide_buttons,
-                clean_mode=clean_mode
+                hide_buttons=True,
+                clean_mode=True
             )
             
-            # Make sure the window is prepared properly
-            preview.show()
+            # IMPORTANT: Set window to never be visible
+            preview.setVisible(False)
             
-            # Ensure bezel is loaded and visible if requested
-            if show_bezel and hasattr(preview, 'integrate_bezel_support'):
-                # Force bezel integration if method exists
-                preview.integrate_bezel_support()
+            # Block all window activation and focus events
+            preview.setAttribute(Qt.WA_ShowWithoutActivating, True)
+            preview.setAttribute(Qt.WA_DontShowOnScreen, True)
+            
+            # Load bezel settings from file
+            try:
+                # Get bezel settings path
+                settings_dir = os.path.join(self.preview_dir, "settings")
+                bezel_settings_path = os.path.join(settings_dir, "bezel_settings.json")
                 
-                # Make bezel visible if it exists
-                if hasattr(preview, 'has_bezel') and preview.has_bezel:
-                    preview.bezel_visible = True
-                    if hasattr(preview, 'show_bezel_with_background'):
+                # First check if we have ROM-specific settings
+                rom_bezel_settings_path = os.path.join(settings_dir, f"{rom_name}_bezel_settings.json")
+                
+                # Choose which settings file to use
+                settings_path = rom_bezel_settings_path if os.path.exists(rom_bezel_settings_path) else bezel_settings_path
+                
+                if os.path.exists(settings_path):
+                    with open(settings_path, 'r') as f:
+                        bezel_settings = json.load(f)
+                        
+                    # Explicitly set settings values
+                    preview.bezel_visible = bezel_settings.get("bezel_visible", True)
+                    preview.joystick_visible = bezel_settings.get("joystick_visible", True)
+                    
+                    # Force bezel if it should be visible
+                    if preview.bezel_visible and preview.has_bezel:
                         preview.show_bezel_with_background()
+                        
+                    # Apply joystick visibility
+                    preview.apply_joystick_visibility()
+                else:
+                    print(f"No bezel settings found, using defaults")
+            except Exception as e:
+                print(f"Error loading bezel settings: {e}")
             
-            # Set logo visibility
-            if hasattr(preview, 'logo_visible') and hasattr(preview, 'logo_label'):
-                preview.logo_visible = show_logo
-                if preview.logo_label:
-                    preview.logo_label.setVisible(show_logo)
-            
-            # PATCH: Replace all messagebox functions in the preview instance
-            # Save the original messagebox functions
-            original_messagebox = None
-            if hasattr(preview, 'messagebox'):
-                original_messagebox = preview.messagebox
-                preview.messagebox = DummyMessageBox
-                
-            # Also patch potential direct QMessageBox usage
-            original_qmessagebox = QMessageBox
-            QMessageBox_showinfo = QMessageBox.information
+            # Patch messagebox functions
+            preview.messagebox = DummyMessageBox
+            original_qmessagebox = QMessageBox.information
             QMessageBox.information = lambda *args, **kwargs: QMessageBox.Ok
             
-            # Use the export method
+            # Use direct image generation instead of showing window first
             success = False
             try:
-                if hasattr(preview, 'export_image_headless'):
-                    print(f"Calling export_image_headless to {output_path}")
-                    
-                    result = preview.export_image_headless(output_path, format)
-                    
-                    # Check if file was created without showing a message
-                    if result and os.path.exists(output_path):
-                        print(f"Successfully exported {rom_name} to {output_path}")
-                        success = True
-                    else:
-                        print(f"Failed to export {rom_name} - file not created")
-                        success = False
-                else:
-                    print(f"ERROR: export_image_headless method not available for {rom_name}")
-                    success = False
-            finally:
-                # IMPORTANT: Restore the original messagebox functions
-                if original_messagebox is not None:
-                    preview.messagebox = original_messagebox
-                    
-                # Restore QMessageBox original function
-                QMessageBox.information = QMessageBox_showinfo
+                # Create a direct rendering of the canvas to an image
+                from PyQt5.QtGui import QImage, QPainter, QPixmap, QColor
                 
-                # Clean up the window
+                # Process pending events to ensure components are ready
+                app.processEvents()
+                
+                # Create the image
+                image = QImage(
+                    preview.canvas.width(),
+                    preview.canvas.height(),
+                    QImage.Format_ARGB32
+                )
+                image.fill(Qt.transparent)
+                
+                # Create painter for the image
+                painter = QPainter(image)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setRenderHint(QPainter.TextAntialiasing)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                
+                # Render the canvas and all its children directly to the image
+                preview.canvas.render(painter)
+                
+                # End painting
+                painter.end()
+                
+                # Save the image
+                if image.save(output_path, format.upper()):
+                    print(f"Exported {rom_name} successfully")
+                    success = True
+                else:
+                    print(f"Failed to save image for {rom_name}")
+                    success = False
+                    
+            finally:
+                # Restore QMessageBox
+                QMessageBox.information = original_qmessagebox
+                
+                # Close and destroy the window immediately
                 preview.close()
+                preview.deleteLater()
             
             return success
         except Exception as e:
@@ -4306,10 +4458,9 @@ controller xbox t		= """
             import traceback
             traceback.print_exc()
             return False
-
-    # Modify the batch_export_images method in the MAMEControlConfig class
+    
     def batch_export_images(self):
-        """Show dialog to export multiple ROM preview images in batch with improved button accessibility"""
+        """Show dialog to export multiple ROM preview images in batch using existing settings"""
         # Create dialog with better size management
         dialog = ctk.CTkToplevel(self)
         dialog.title("Batch Export Preview Images")
@@ -4317,14 +4468,14 @@ controller xbox t		= """
         # Make dialog almost full screen
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight() 
-        dialog_width = int(screen_width * 0.9)
-        dialog_height = int(screen_height * 0.9)
+        dialog_width = int(screen_width * 0.7)
+        dialog_height = int(screen_height * 0.7)
         x = int((screen_width - dialog_width) / 2)
         y = int((screen_height - dialog_height) / 2)
         dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
         
         # Set minimum size to ensure buttons are visible
-        dialog.minsize(width=800, height=700)
+        dialog.minsize(width=700, height=600)
         
         dialog.transient(self)
         dialog.grab_set()
@@ -4346,13 +4497,13 @@ controller xbox t		= """
         title_label.pack(side="left", padx=10, pady=10)
         
         # Add the action buttons directly to the title frame - right aligned
-        # *** MOVED THE BUTTONS TO THE TOP RIGHT ***
         button_area = ctk.CTkFrame(title_frame, fg_color="transparent")
         button_area.pack(side="right", padx=10, pady=10)
         
         # Description label
         description = """
-        This tool will generate preview images for multiple ROMs.
+        This tool will generate preview images for multiple ROMs using current global settings
+        (or ROM-specific settings where available).
         Choose which ROMs to process and export settings below.
         Images will be saved to the preview/images directory.
         """
@@ -4368,77 +4519,13 @@ controller xbox t		= """
         content_frame = ctk.CTkScrollableFrame(dialog)
         content_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Settings frame
+        # Output folder and format section
         settings_frame = ctk.CTkFrame(content_frame)
         settings_frame.pack(fill="x", padx=10, pady=10)
         
-        # -- Settings section layout --
-        settings_section = ctk.CTkFrame(settings_frame)
-        settings_section.pack(fill="x", padx=0, pady=0)
-        
-        # Use a grid layout for better organization of settings
-        settings_section.grid_columnconfigure(0, weight=1)  # Display options column
-        settings_section.grid_columnconfigure(1, weight=1)  # Output options column
-        
-        # === DISPLAY OPTIONS - LEFT SIDE ===
-        display_options = ctk.CTkFrame(settings_section)
-        display_options.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        
-        # Title for display settings
-        ctk.CTkLabel(
-            display_options,
-            text="Display Options",
-            font=("Arial", 14, "bold")
-        ).pack(anchor="w", padx=10, pady=(5, 10))
-        
-        # Hide buttons option
-        hide_buttons_var = ctk.BooleanVar(value=True)
-        hide_buttons_check = ctk.CTkCheckBox(
-            display_options,
-            text="Hide Control Buttons",
-            variable=hide_buttons_var
-        )
-        hide_buttons_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Clean mode option (no drag handles, etc)
-        clean_mode_var = ctk.BooleanVar(value=True)
-        clean_mode_check = ctk.CTkCheckBox(
-            display_options,
-            text="Clean Mode (No Drag Handles)",
-            variable=clean_mode_var
-        )
-        clean_mode_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Show bezel option
-        show_bezel_var = ctk.BooleanVar(value=True)
-        show_bezel_check = ctk.CTkCheckBox(
-            display_options,
-            text="Show Bezel (If Available)",
-            variable=show_bezel_var
-        )
-        show_bezel_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Show logo option
-        show_logo_var = ctk.BooleanVar(value=True)
-        show_logo_check = ctk.CTkCheckBox(
-            display_options,
-            text="Show Logo (If Available)",
-            variable=show_logo_var
-        )
-        show_logo_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Add option to suppress final completion message too
-        show_completion_var = ctk.BooleanVar(value=False)
-        show_completion_check = ctk.CTkCheckBox(
-            display_options,
-            text="Show Completion Message",
-            variable=show_completion_var
-        )
-        show_completion_check.pack(anchor="w", padx=20, pady=2)
-        
-        # === OUTPUT OPTIONS - RIGHT SIDE ===
-        output_options = ctk.CTkFrame(settings_section)
-        output_options.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+        # Output settings section
+        output_options = ctk.CTkFrame(settings_frame)
+        output_options.pack(fill="x", padx=5, pady=5, anchor="nw")
 
         # Title and options for output settings
         ctk.CTkLabel(
@@ -4637,7 +4724,7 @@ controller xbox t		= """
         # Add flag to track cancellation
         cancel_processing = [False]
         
-        # IMPORTANT: Main export function - Define this BEFORE creating the buttons
+        # IMPORTANT: Main export function 
         def start_export():
             # Determine which ROMs to process
             roms_to_process = []
@@ -4651,7 +4738,7 @@ controller xbox t		= """
                     if not messagebox.askyesno(
                         "Warning - Batch Processing",
                         f"You are about to process {len(roms_to_process)} ROMs, which may take a long time.\n\n"
-                        f"This operation can be canceld using the Cancel Export button.\n\n"
+                        f"This operation can be canceled using the Cancel Export button.\n\n"
                         f"Do you want to continue?",
                         icon="warning"
                     ):
@@ -4682,13 +4769,8 @@ controller xbox t		= """
             
             # Get settings
             settings = {
-                "hide_buttons": hide_buttons_var.get(),
-                "clean_mode": clean_mode_var.get(),
-                "show_bezel": show_bezel_var.get(),
-                "show_logo": show_logo_var.get(),
                 "format": format_var.get().lower(),
-                "output_dir": output_dir_var.get(),
-                "show_completion": show_completion_var.get()
+                "output_dir": output_dir_var.get()
             }
             
             # Create output directory if it doesn't exist
@@ -4760,17 +4842,18 @@ controller xbox t		= """
                         if not game_data:
                             raise ValueError(f"No control data found for {rom_name}")
                         
-                        # Export the image (using the modified preview_export_image function)
+                        # Export the image using preview_export_image which respects settings
                         file_format = settings["format"].lower()
+                        
+                        # Set output path
+                        output_path = os.path.join(settings["output_dir"], f"{rom_name}.{file_format}")
+                        
+                        # Use preview_export_image which will use existing settings
                         success = self.preview_export_image(
                             rom_name, 
                             game_data,
                             settings["output_dir"],
-                            file_format,
-                            settings["hide_buttons"],
-                            settings["clean_mode"],
-                            settings["show_bezel"],
-                            settings["show_logo"]
+                            file_format
                         )
                         
                         if success:
@@ -4809,9 +4892,8 @@ controller xbox t		= """
                     command=dialog.destroy
                 ))
                 
-                # Show completion message on the main thread - but only ONE at the end
-                # And only if the user wants it
-                if settings["show_completion"] and not cancel_processing[0]:
+                # Show completion message on the main thread
+                if not cancel_processing[0]:
                     dialog.after(0, lambda p=processed, f=failed, d=settings["output_dir"]: 
                                 messagebox.showinfo("Export Complete", 
                                                 f"Exported {p} ROM preview images to {d}\n" +
@@ -4825,11 +4907,11 @@ controller xbox t		= """
             process_thread.daemon = True
             process_thread.start()
 
-        # CRITICAL: Create the buttons AFTER defining the start_export function
+        # Create the buttons AFTER defining the start_export function
         start_button = ctk.CTkButton(
             button_area,
             text="Start Export",
-            command=start_export,  # Now this will properly reference the defined function
+            command=start_export,
             width=150,
             height=40,
             font=("Arial", 14, "bold"),
@@ -4845,4 +4927,4 @@ controller xbox t		= """
             width=120,
             height=40
         )
-        cancel_button.pack(side="left") 
+        cancel_button.pack(side="left")
