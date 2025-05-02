@@ -1722,23 +1722,56 @@ class MAMEControlConfig(ctk.CTk):
             # Highlight the selected line
             self.highlight_selected_game(line_num)
             
-            # Remove prefix indicators
-            if line.startswith("* "):
-                line = line[2:]
-            if line.startswith("+ ") or line.startswith("- "):
-                line = line[2:]
-                        
-            romname = line.split(" - ")[0]
+            # DEBUGGING: Print raw line content with character codes to identify how it's formatted
+            print(f"Raw line: {repr(line)}")
+            
+            # NEW APPROACH: Use regular expressions to extract the ROM name
+            import re
+            match = re.search(r'[^*+\-\s]+', line)  # Match first sequence not containing *, +, -, or whitespace
+            
+            if match:
+                romname = match.group(0)
+                print(f"Extracted ROM name via regex: '{romname}'")
+            else:
+                # Fallback to simple split if regex fails
+                parts = line.strip().split()
+                romname = parts[-1] if parts else line.strip()
+                print(f"Fallback ROM name: '{romname}'")
+            
             self.current_game = romname
 
-            # Get game data
+
+            # Force load of gamedata.json if needed
+            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                self.load_gamedata_json()
+            
+            # DEBUG: Print a sample of gamedata keys to verify
+            if self.gamedata_json:
+                sample_keys = list(self.gamedata_json.keys())[:5]
+                print(f"Sample gamedata keys: {sample_keys}")
+                print(f"sf2 in gamedata keys: {'sf2' in self.gamedata_json}")
+            
+            # DIRECT CHECK - does this ROM exist in gamedata.json?
+            rom_in_gamedata = romname in self.gamedata_json
+            print(f"ROM '{romname}' found in gamedata.json: {rom_in_gamedata}")
+            
+            # Check if ROM-specific CFG exists
+            has_rom_cfg = romname in self.custom_configs
+            print(f"ROM '{romname}' has custom CFG: {has_rom_cfg}")
+            
+            # Check if default.cfg exists
+            has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
+            print(f"Default CFG available: {has_default_cfg}")
+            
+            # Get game data through normal method
             game_data = self.get_game_data(romname)
             
             # Clear existing display
             for widget in self.control_frame.winfo_children():
                 widget.destroy()
 
-            if not game_data:
+            # Only show "No control data" if BOTH game_data is None AND rom is not in gamedata
+            if not game_data and not rom_in_gamedata:
                 # Clear display for ROMs without control data
                 self.game_title.configure(text=f"No control data: {romname}")
                 
@@ -1764,6 +1797,18 @@ class MAMEControlConfig(ctk.CTk):
                     font=("Arial", 13)
                 ).pack(anchor="w", padx=15, pady=(0, 5))
                 
+                # Debug info
+                debug_info = f"ROM-specific CFG: {'Yes' if has_rom_cfg else 'No'}\n"
+                debug_info += f"Default CFG: {'Yes' if has_default_cfg else 'No'}\n" 
+                debug_info += f"Gamedata.json: {'Yes' if rom_in_gamedata else 'No'}"
+                
+                ctk.CTkLabel(
+                    missing_card,
+                    text=debug_info,
+                    font=("Arial", 11),
+                    text_color=self.theme_colors["text_dimmed"]
+                ).pack(anchor="w", padx=15, pady=(5, 5))
+                
                 # Add button to create controls
                 add_button = ctk.CTkButton(
                     missing_card,
@@ -1776,6 +1821,106 @@ class MAMEControlConfig(ctk.CTk):
                 add_button.pack(anchor="w", padx=15, pady=(5, 15))
                 
                 return
+
+            # If we get here, we either have game_data OR the ROM exists in gamedata
+            # If we don't have game_data but the ROM is in gamedata, create it now
+            if not game_data and rom_in_gamedata:
+                print(f"Creating game_data directly from gamedata.json for {romname}")
+                gamedata_entry = self.gamedata_json[romname]
+                
+                # Minimal creation - just enough to not crash
+                game_data = {
+                    'romname': romname,
+                    'gamename': gamedata_entry.get('description', romname),
+                    'numPlayers': int(gamedata_entry.get('playercount', 2)),
+                    'alternating': gamedata_entry.get('alternating', False),
+                    'mirrored': False,
+                    'miscDetails': f"Buttons: {gamedata_entry.get('buttons', '?')}, Sticks: {gamedata_entry.get('sticks', '?')}",
+                    'players': [],
+                    'source': 'gamedata.json (direct)'
+                }
+                
+                # If controls exist in gamedata, add them to game_data
+                if 'controls' in gamedata_entry:
+                    # Process P1 controls
+                    p1_controls = []
+                    for control, info in gamedata_entry['controls'].items():
+                        if control.startswith('P1_'):
+                            # Use either the name from control_data, or a default name based on control
+                            action_name = info.get('name', '')
+                            if not action_name:
+                                # Default names for common controls
+                                if 'BUTTON' in control:
+                                    button_num = control.replace('P1_BUTTON', '')
+                                    action_name = f"Button {button_num}"
+                                elif 'JOYSTICK_UP' in control:
+                                    action_name = "Up"
+                                elif 'JOYSTICK_DOWN' in control:
+                                    action_name = "Down"
+                                elif 'JOYSTICK_LEFT' in control:
+                                    action_name = "Left"
+                                elif 'JOYSTICK_RIGHT' in control:
+                                    action_name = "Right"
+                                else:
+                                    action_name = control.split('_')[-1]
+                                    
+                            p1_controls.append({
+                                'name': control,
+                                'value': action_name
+                            })
+                    
+                    # Process P2 controls
+                    p2_controls = []
+                    for control, info in gamedata_entry['controls'].items():
+                        if control.startswith('P2_'):
+                            # Use either the name from control_data, or a default name based on control
+                            action_name = info.get('name', '')
+                            if not action_name:
+                                # Default names for common controls
+                                if 'BUTTON' in control:
+                                    button_num = control.replace('P2_BUTTON', '')
+                                    action_name = f"Button {button_num}"
+                                elif 'JOYSTICK_UP' in control:
+                                    action_name = "Up"
+                                elif 'JOYSTICK_DOWN' in control:
+                                    action_name = "Down"
+                                elif 'JOYSTICK_LEFT' in control:
+                                    action_name = "Left"
+                                elif 'JOYSTICK_RIGHT' in control:
+                                    action_name = "Right"
+                                else:
+                                    action_name = control.split('_')[-1]
+                                    
+                            p2_controls.append({
+                                'name': control,
+                                'value': action_name
+                            })
+                    
+                    # Sort controls for consistent display
+                    p1_controls.sort(key=lambda x: x['name'])
+                    p2_controls.sort(key=lambda x: x['name'])
+                    
+                    # Add P1 to players if we have controls
+                    if p1_controls:
+                        game_data['players'].append({
+                            'number': 1,
+                            'numButtons': int(gamedata_entry.get('buttons', 6)),
+                            'labels': p1_controls
+                        })
+                        
+                    # Add P2 to players if we have controls
+                    if p2_controls:
+                        game_data['players'].append({
+                            'number': 2,
+                            'numButtons': int(gamedata_entry.get('buttons', 6)),
+                            'labels': p2_controls
+                        })
+                        
+                    # Cache this data for future use
+                    if hasattr(self, 'rom_data_cache'):
+                        self.rom_data_cache[romname] = game_data
+                        
+                    print(f"Created game_data with {len(p1_controls)} P1 controls and {len(p2_controls)} P2 controls")
 
             # Update game title - ensure full title is visible
             source_text = f" ({game_data.get('source', 'unknown')})"
@@ -1809,7 +1954,7 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error displaying game: {str(e)}")
             import traceback
             traceback.print_exc()
-    
+
     #######################################################################
     #CONFIF TO CREATE INFO FILES FOR RETROFE
     #- INFO FOLDER ENEDS TO BE IN PREVIEW\SETTINGS\INFO WITH A DEFAULT TEMPLATE
@@ -4485,6 +4630,9 @@ controller xbox t		= """
         """Display controls with proper hierarchy and fallbacks: ROM CFG > default CFG > gamedata"""
         row = start_row
         
+        # Get romname from game_data
+        romname = game_data.get('romname', '')
+        
         # Game info card
         info_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         info_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
@@ -4549,7 +4697,7 @@ controller xbox t		= """
         indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="w")
         
         # Check which sources are active
-        has_rom_cfg = game_data['romname'] in self.custom_configs
+        has_rom_cfg = romname in self.custom_configs
         has_default_cfg = bool(self.default_controls)
         has_gamedata = bool(game_data.get('players', []))
         
@@ -4612,7 +4760,7 @@ controller xbox t		= """
             
             ctk.CTkLabel(
                 indicator_frame,
-                text=f"{game_data['romname']}.cfg",
+                text=f"{romname}.cfg",
                 font=("Arial", 13, "bold"),
                 text_color=self.theme_colors["success"],
                 anchor="w"
@@ -4790,56 +4938,86 @@ controller xbox t		= """
                 game_action = label['value']
                 control_to_action[mame_control] = game_action
         
+        # Debug output
+        print(f"\nControls found in gamedata for {romname}:")
+        for ctrl, action in control_to_action.items():
+            print(f"  {ctrl}: {action}")
+        
         # Step 2: Build remapped button-to-action mapping
         button_to_action = {}
         button_sources = {}
+        processed_controls = set()  # Track which controls have been processed
         
         # Step 2a: Try ROM-specific CFG first
+        has_rom_cfg = romname in self.custom_configs
         if has_rom_cfg and cfg_controls:
-            # Create a mapping from controller buttons to MAME controls
-            remapped_controls = {}
+            print(f"Applying ROM-specific CFG for {romname}")
+            
+            # Create a mapping from controller codes to standard controls
+            controller_to_standard = {
+                "JOYCODE_1_BUTTON1": "P1_BUTTON1",  # A Button
+                "JOYCODE_1_BUTTON2": "P1_BUTTON2",  # B Button
+                "JOYCODE_1_BUTTON3": "P1_BUTTON3",  # X Button
+                "JOYCODE_1_BUTTON4": "P1_BUTTON4",  # Y Button
+                "JOYCODE_1_BUTTON5": "P1_BUTTON5",  # LB Button
+                "JOYCODE_1_BUTTON6": "P1_BUTTON6",  # RB Button
+                "XINPUT_1_A": "P1_BUTTON1",         # A Button
+                "XINPUT_1_B": "P1_BUTTON2",         # B Button
+                "XINPUT_1_X": "P1_BUTTON3",         # X Button
+                "XINPUT_1_Y": "P1_BUTTON4",         # Y Button
+                "XINPUT_1_SHOULDER_L": "P1_BUTTON5", # LB Button
+                "XINPUT_1_SHOULDER_R": "P1_BUTTON6", # RB Button
+            }
             
             # For each MAME control in the CFG file
             for mame_control, mapping in cfg_controls.items():
                 if not mame_control.startswith("P1_"):
                     continue  # Skip non-player-1 controls
                     
-                # Get the controller code this is mapped to
+                # Get controller code (e.g., JOYCODE_1_BUTTON3)
                 controller_code = extract_base_mapping(mapping)
+                print(f"  Mapping from CFG: {mame_control} -> {controller_code}")
                 
-                # Map this controller code back to a standard control
-                if controller_code in controller_to_mame:
-                    remapped_button = controller_to_mame[controller_code]
+                # Map controller code to standard button
+                if controller_code in controller_to_standard:
+                    standard_control = controller_to_standard[controller_code]
                     
-                    # Check if this control has a game action
+                    # If the MAME control has a game action, map it to the standard button
                     if mame_control in control_to_action:
-                        # Found a mapping!
-                        button_to_action[remapped_button] = control_to_action[mame_control]
-                        button_sources[remapped_button] = f"ROM CFG ({game_data['romname']}.cfg)"
+                        # This maps the game action to the standard control based on controller code
+                        action = control_to_action[mame_control]
+                        
+                        # Find the standard button in our list
+                        for display_control in standard_controls:
+                            if display_control == standard_control:
+                                button_to_action[display_control] = action
+                                button_sources[display_control] = f"ROM CFG ({romname}.cfg)"
+                                processed_controls.add(display_control)
+                                print(f"  Applied ROM CFG mapping: {display_control} -> {action} via {controller_code}")
+                                break
         
         # Step 2b: Apply default CFG for any buttons not mapped yet
+        has_default_cfg = hasattr(self, 'default_controls') and self.default_controls
         if has_default_cfg:
+            print(f"Applying default controls for {romname}")
             for control in standard_controls:
                 # Skip controls already mapped by ROM CFG
-                if control in button_to_action:
+                if control in processed_controls:
                     continue
                     
-                # Check if this control has a default mapping
-                if control in self.default_controls:
-                    controller_code = extract_base_mapping(self.default_controls[control])
-                    
-                    # Map this controller code back to a standard control
-                    if controller_code in controller_to_mame:
-                        remapped_button = controller_to_mame[controller_code]
-                        
-                        # Check if this control has a game action
-                        if remapped_button in control_to_action:
-                            button_to_action[control] = control_to_action[remapped_button]
-                            button_sources[control] = "Default CFG"
+                # For each control in gamedata, map the first available action
+                for mame_control, game_action in control_to_action.items():
+                    if mame_control not in processed_controls:
+                        button_to_action[control] = game_action
+                        button_sources[control] = "Default CFG + Game Data"
+                        processed_controls.add(mame_control)  # Mark this gamedata control as used
+                        print(f"  Applied default mapping: {control} -> {game_action} (from {mame_control})")
+                        break
         
-        # Step 2c: Fall back to gamedata for remaining controls
+        # Step 2c: Fall back to direct gamedata mappings for remaining controls
+        print(f"Falling back to direct gamedata mappings for {romname}")
         for control in standard_controls:
-            # Skip controls already mapped by ROM CFG or default CFG
+            # Skip controls already mapped
             if control in button_to_action:
                 continue
                 
@@ -4847,9 +5025,28 @@ controller xbox t		= """
             if control in control_to_action:
                 button_to_action[control] = control_to_action[control]
                 button_sources[control] = "Game Data"
+                print(f"  Direct gamedata mapping: {control} -> {control_to_action[control]}")
         
+        # IMPORTANT: If no mappings were found, just display controls directly from game_data
+        if not button_to_action and game_data.get('players'):
+            print(f"No button-to-action mappings found, using direct display from game_data")
+            for player in game_data.get('players', []):
+                if player['number'] != 1:  # Only handle player 1 for now
+                    continue
+                    
+                for label in player.get('labels', []):
+                    control_name = label['name']
+                    action = label['value']
+                    
+                    # Map to standard control if possible
+                    for std_control in standard_controls:
+                        if std_control == control_name:
+                            button_to_action[std_control] = action
+                            button_sources[std_control] = "Game Data (direct)"
+                            print(f"  Direct control display: {std_control} -> {action}")
+    
         # Debug output for troubleshooting
-        print(f"\nFinal mapping for {game_data['romname']}:")
+        print(f"\nFinal mapping for {romname}:")
         for control, action in button_to_action.items():
             source = button_sources.get(control, "Unknown")
             print(f"  {standard_display_names.get(control, control)}: {action} ({source})")
@@ -4930,7 +5127,6 @@ controller xbox t		= """
         row += 1
 
         # Display raw custom config if it exists
-        romname = game_data['romname']
         if romname in self.custom_configs:
             config_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
             config_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
@@ -4986,7 +5182,7 @@ controller xbox t		= """
             config_preview.configure(state="disabled")  # Make read-only
         
         return row + 1
-
+                              
     def joycode_to_button(self, joycode):
         """Convert a JOYCODE mapping to a controller button name"""
         if not joycode or "JOYCODE" not in joycode:
