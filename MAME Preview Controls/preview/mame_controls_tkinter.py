@@ -4363,14 +4363,14 @@ controller xbox t		= """
         # === DISPLAY OPTIONS - LEFT SIDE ===
         display_options = ctk.CTkFrame(settings_section)
         display_options.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        
+
         # Title for display settings
         ctk.CTkLabel(
             display_options,
             text="Display Options",
             font=("Arial", 14, "bold")
         ).pack(anchor="w", padx=10, pady=(5, 10))
-        
+
         # Hide buttons option
         hide_buttons_var = ctk.BooleanVar(value=True)
         hide_buttons_check = ctk.CTkCheckBox(
@@ -4379,7 +4379,7 @@ controller xbox t		= """
             variable=hide_buttons_var
         )
         hide_buttons_check.pack(anchor="w", padx=20, pady=2)
-        
+
         # Clean mode option (no drag handles, etc)
         clean_mode_var = ctk.BooleanVar(value=True)
         clean_mode_check = ctk.CTkCheckBox(
@@ -4388,33 +4388,24 @@ controller xbox t		= """
             variable=clean_mode_var
         )
         clean_mode_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Show bezel option
-        show_bezel_var = ctk.BooleanVar(value=True)
-        show_bezel_check = ctk.CTkCheckBox(
+
+        # Add helpful note about bezel and logo settings
+        note_label = ctk.CTkLabel(
             display_options,
-            text="Show Bezel (If Available)",
-            variable=show_bezel_var
+            text="Note: Bezel and logo visibility will use\nsaved settings for each ROM.",
+            font=("Arial", 12, "italic"),
+            justify="left"
         )
-        show_bezel_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Show logo option
-        show_logo_var = ctk.BooleanVar(value=True)
-        show_logo_check = ctk.CTkCheckBox(
-            display_options,
-            text="Show Logo (If Available)",
-            variable=show_logo_var
-        )
-        show_logo_check.pack(anchor="w", padx=20, pady=2)
-        
-        # Add option to suppress final completion message too
+        note_label.pack(anchor="w", padx=20, pady=(10, 2))
+
+        # Add option to suppress final completion message
         show_completion_var = ctk.BooleanVar(value=False)
         show_completion_check = ctk.CTkCheckBox(
             display_options,
             text="Show Completion Message",
             variable=show_completion_var
         )
-        show_completion_check.pack(anchor="w", padx=20, pady=2)
+        show_completion_check.pack(anchor="w", padx=20, pady=(10, 2))
         
         # === OUTPUT OPTIONS - RIGHT SIDE ===
         output_options = ctk.CTkFrame(settings_section)
@@ -4668,8 +4659,6 @@ controller xbox t		= """
             settings = {
                 "hide_buttons": hide_buttons_var.get(),
                 "clean_mode": clean_mode_var.get(),
-                "show_bezel": show_bezel_var.get(),
-                "show_logo": show_logo_var.get(),
                 "format": format_var.get().lower(),
                 "output_dir": output_dir_var.get(),
                 "show_completion": show_completion_var.get()
@@ -4770,24 +4759,19 @@ controller xbox t		= """
                             "--output", output_path,
                             "--format", settings["format"]
                         ]
-                        
-                        # IMPORTANT: Only add --no-bezel when bezels should be hidden
-                        # This matches your original approach that worked
-                        if not settings["show_bezel"]:
-                            cmd.append("--no-bezel")
-                            
-                        if not settings["show_logo"]:
-                            cmd.append("--no-logo")
-                            
+
                         # Add clean mode and button visibility parameters
                         if settings["clean_mode"]:
                             cmd.append("--clean-preview")
                             
                         if settings["hide_buttons"]:
                             cmd.append("--no-buttons")
-                        
+
+                        # REMOVED: No longer adding --no-bezel or --no-logo parameters
+                        # This allows the export to use the saved settings
+
                         print(f"Executing command: {' '.join(cmd)}")
-                        
+                                                
                         # Run the process with improved output handling
                         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                         try:

@@ -149,18 +149,42 @@ def main():
                 bridge = PreviewBridge()
                 
                 # Handle export image mode
+                # In the section that handles export-image mode
                 if args.export_image:
                     if not args.output:
                         print("ERROR: --output parameter is required for export mode")
                         return 1
                         
-                    # Export the image
+                    # Import the preview bridge
+                    from preview_bridge import PreviewBridge
+                    bridge = PreviewBridge()
+                    
+                    # Load saved bezel and logo settings
+                    bezel_settings = bridge.load_bezel_settings()
+                    show_bezel = bezel_settings.get("bezel_visible", True)  # Default to visible
+                    show_logo = bezel_settings.get("logo_visible", True)    # Default to visible
+                    
+                    # Check for ROM-specific settings
+                    rom_specific_settings = bridge.load_rom_settings(args.game)
+                    if rom_specific_settings:
+                        # ROM-specific settings override global settings
+                        show_bezel = rom_specific_settings.get("bezel_visible", show_bezel)
+                        show_logo = rom_specific_settings.get("logo_visible", show_logo)
+                    
+                    # Command-line flags only override settings if explicitly provided
+                    if args.no_bezel:
+                        show_bezel = False
+                    
+                    if args.no_logo:
+                        show_logo = False
+                    
+                    # Export the image with the determined settings
                     success = bridge.export_preview_image(
                         rom_name=args.game,
                         output_path=args.output,
                         format=args.format or "png",
-                        show_bezel=not args.no_bezel,
-                        show_logo=not args.no_logo
+                        show_bezel=show_bezel,
+                        show_logo=show_logo
                     )
                     
                     if success:
