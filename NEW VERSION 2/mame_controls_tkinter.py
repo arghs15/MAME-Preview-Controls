@@ -4780,26 +4780,33 @@ controller xbox t		= """
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
         
-        # Headers with improved styling
-        headers_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
-        headers_frame.pack(fill="x", padx=15, pady=(0, 5))
+        # Table header and content container
+        table_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
+        table_frame.pack(fill="x", padx=15, pady=5)
         
-        # Create a grid for the headers
-        header_cols = ["Controller Button", "Game Action", "Mapping Source"]
-        for i, col in enumerate(header_cols):
-            col_frame = ctk.CTkFrame(headers_frame, fg_color=self.theme_colors["primary"], corner_radius=4)
-            col_frame.pack(side="left", fill="x", expand=True, padx=5)
-            
-            ctk.CTkLabel(
-                col_frame,
-                text=col,
+        # Define column widths for alignment
+        col_widths = [220, 220, 180]  # Controller Button, Game Action, Mapping Source
+        
+        # Create header with fixed-width columns
+        header_frame = ctk.CTkFrame(table_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        # Header columns
+        header_texts = ["Controller Button", "Game Action", "Mapping Source"]
+        
+        # Create headers with fixed widths
+        for i, (text, width) in enumerate(zip(header_texts, col_widths)):
+            header_label = ctk.CTkLabel(
+                header_frame,
+                text=text,
                 font=("Arial", 13, "bold"),
-                text_color="#ffffff"
-            ).pack(padx=10, pady=8)
-        
-        # Create container for the control entries
-        controls_container = ctk.CTkFrame(controls_card, fg_color="transparent")
-        controls_container.pack(fill="x", padx=15, pady=5)
+                fg_color=self.theme_colors["primary"],
+                text_color="#ffffff",
+                corner_radius=4,
+                width=width,
+                height=36
+            )
+            header_label.pack(side="left", padx=5)
         
         # Define standard controller buttons based on mode
         if self.use_xinput:
@@ -5044,47 +5051,48 @@ controller xbox t		= """
                             button_to_action[std_control] = action
                             button_sources[std_control] = "Game Data (direct)"
                             print(f"  Direct control display: {std_control} -> {action}")
-    
+
         # Debug output for troubleshooting
         print(f"\nFinal mapping for {romname}:")
         for control, action in button_to_action.items():
             source = button_sources.get(control, "Unknown")
             print(f"  {standard_display_names.get(control, control)}: {action} ({source})")
         
-        # Now display the controls
+        # Now create a scrollable container for the rows
+        rows_container = ctk.CTkFrame(table_frame, fg_color="transparent")
+        rows_container.pack(fill="x", expand=True)
+        
+        # Row alternating colors
         row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
-        control_row = 0
         
         # For each standard controller button
-        for control in standard_controls:
+        control_row = 0
+        for i, control in enumerate(standard_controls):
             if control in button_to_action:
                 action = button_to_action[control]
                 source = button_sources.get(control, "Unknown")
                 display_name = standard_display_names.get(control, control)
                 
-                # Create row with alternating background
+                # Row container with alternating background
                 row_frame = ctk.CTkFrame(
-                    controls_container, 
-                    fg_color=row_alt_colors[control_row % 2],
+                    rows_container, 
+                    fg_color=row_alt_colors[i % 2],
                     corner_radius=4,
                     height=40
                 )
                 row_frame.pack(fill="x", pady=2)
-                row_frame.pack_propagate(False)  # Keep consistent height
+                row_frame.pack_propagate(False)  # Ensure consistent height
                 
-                # Three-column grid for the row
-                row_frame.grid_columnconfigure(0, weight=1)
-                row_frame.grid_columnconfigure(1, weight=1)
-                row_frame.grid_columnconfigure(2, weight=1)
-                
-                # Controller button name (left column)
+                # Create labels with fixed widths to match headers
+                # Controller button (left column)
                 button_label = ctk.CTkLabel(
                     row_frame,
                     text=display_name,
                     font=("Arial", 12),
+                    width=col_widths[0] - 20,  # Subtract padding
                     anchor="w"
                 )
-                button_label.grid(row=0, column=0, padx=15, pady=5, sticky="w")
+                button_label.pack(side="left", padx=15)
                 
                 # Game action (middle column)
                 action_label = ctk.CTkLabel(
@@ -5092,9 +5100,10 @@ controller xbox t		= """
                     text=action,
                     font=("Arial", 12, "bold"),
                     text_color=self.theme_colors["primary"],
+                    width=col_widths[1] - 20,  # Subtract padding
                     anchor="w"
                 )
-                action_label.grid(row=0, column=1, padx=15, pady=5, sticky="w")
+                action_label.pack(side="left", padx=5)
                 
                 # Source (right column)
                 source_color = self.theme_colors["success"] if "ROM CFG" in source else \
@@ -5106,15 +5115,16 @@ controller xbox t		= """
                     text=source,
                     font=("Arial", 11),
                     text_color=source_color,
+                    width=col_widths[2] - 20,  # Subtract padding
                     anchor="w"
                 )
-                source_label.grid(row=0, column=2, padx=15, pady=5, sticky="w")
+                source_label.pack(side="left", padx=5)
                 
                 control_row += 1
         
         # If there are no controls to display
         if control_row == 0:
-            empty_frame = ctk.CTkFrame(controls_container, fg_color="transparent")
+            empty_frame = ctk.CTkFrame(rows_container, fg_color="transparent")
             empty_frame.pack(fill="x", pady=10)
             
             ctk.CTkLabel(
@@ -5181,8 +5191,8 @@ controller xbox t		= """
             config_preview.insert("1.0", preview_text)
             config_preview.configure(state="disabled")  # Make read-only
         
-        return row + 1
-                              
+        return row + 1                 
+
     def joycode_to_button(self, joycode):
         """Convert a JOYCODE mapping to a controller button name"""
         if not joycode or "JOYCODE" not in joycode:
