@@ -2454,7 +2454,7 @@ controller xbox t		= """
     '''
     
     def analyze_controls(self):
-        """Comprehensive analysis of ROM controls with editing capabilities in modern UI"""
+        """Comprehensive analysis of ROM controls with improved visual styling"""
         try:
             # Get data from both methods
             generic_games, missing_games = self.identify_generic_controls()
@@ -2473,61 +2473,32 @@ controller xbox t		= """
                     if game_data and 'gamename' in game_data:
                         default_games.append((rom_name, game_data.get('gamename', rom_name)))
             
-            # Create dialog with enhanced styling
+            # Create dialog
             dialog = ctk.CTkToplevel(self)
             dialog.title("ROM Control Analysis")
-            dialog.geometry("900x700")
-            dialog.configure(fg_color=self.theme_colors["background"])
             dialog.transient(self)
             dialog.grab_set()
             
-            # Create header section
-            header_frame = ctk.CTkFrame(
-                dialog, 
-                fg_color=self.theme_colors["primary"], 
-                corner_radius=0, 
-                height=60
-            )
-            header_frame.pack(fill="x", padx=0, pady=0)
-            header_frame.pack_propagate(False)  # Maintain fixed height
-            
-            ctk.CTkLabel(
-                header_frame,
-                text="ROM Control Analysis",
-                font=("Arial", 18, "bold"),
-                text_color="#ffffff"
-            ).pack(side=tk.LEFT, padx=20, pady=15)
-            
-            # Create tabview with improved styling
-            tabview = ctk.CTkTabview(
-                dialog,
-                fg_color=self.theme_colors["card_bg"],
-                segmented_button_fg_color=self.theme_colors["background"],
-                segmented_button_selected_color=self.theme_colors["primary"],
-                segmented_button_selected_hover_color=self.theme_colors["secondary"]
-            )
-            tabview.pack(expand=True, fill="both", padx=20, pady=20)
+            # Center the dialog on the screen
+            dialog_width = 800
+            dialog_height = 600
+
+            # Get screen width and height
+            screen_width = dialog.winfo_screenwidth()
+            screen_height = dialog.winfo_screenheight()
+
+            # Calculate position x, y
+            x = int((screen_width / 2) - (dialog_width / 2))
+            y = int((screen_height / 2) - (dialog_height / 2))
+
+            dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+
+            # Create tabs
+            tabview = ctk.CTkTabview(dialog)
+            tabview.pack(expand=True, fill="both", padx=10, pady=10)
             
             # Summary tab
             summary_tab = tabview.add("Summary")
-            summary_tab.configure(fg_color=self.theme_colors["card_bg"])
-            
-            # Create summary card
-            summary_card = ctk.CTkFrame(
-                summary_tab, 
-                fg_color=self.theme_colors["background"], 
-                corner_radius=6
-            )
-            summary_card.pack(expand=True, fill="both", padx=20, pady=20)
-            
-            # Title
-            ctk.CTkLabel(
-                summary_card,
-                text="ROM Control Data Statistics",
-                font=("Arial", 16, "bold")
-            ).pack(anchor="w", padx=20, pady=(20, 15))
-            
-            # Stats text
             stats_text = (
                 f"Total ROMs: {len(self.available_roms)}\n"
                 f"ROMs with control data: {len(matched_roms)}\n"
@@ -2538,76 +2509,23 @@ controller xbox t		= """
                 f"- ROMs with missing controls: {len(missing_games)}\n\n"
                 f"Control data coverage: {(len(matched_roms) / max(len(self.available_roms), 1) * 100):.1f}%"
             )
-            
             stats_label = ctk.CTkLabel(
-                summary_card,
+                summary_tab,
                 text=stats_text,
                 font=("Arial", 14),
                 justify="left"
             )
-            stats_label.pack(padx=20, pady=0, anchor="w")
+            stats_label.pack(padx=20, pady=20, anchor="w")
             
-            # Visual progress bar for coverage
-            progress_frame = ctk.CTkFrame(summary_card, fg_color="transparent")
-            progress_frame.pack(fill="x", padx=20, pady=(20, 0))
+            # Create each tab with the better list UI from unmatched_roms
+            self.create_game_list_with_edit(tabview.add("Generic Controls"), 
+                                        generic_games, "ROMs with Generic Controls")
+            self.create_game_list_with_edit(tabview.add("Missing Controls"), 
+                                        [(rom, rom) for rom in missing_games], "ROMs with Missing Controls")
+            self.create_game_list_with_edit(tabview.add("Custom Controls"), 
+                                        default_games, "ROMs with Custom Controls")
             
-            coverage_pct = len(matched_roms) / max(len(self.available_roms), 1)
-            
-            # Coverage label
-            ctk.CTkLabel(
-                progress_frame,
-                text=f"Coverage: {coverage_pct * 100:.1f}%",
-                font=("Arial", 13, "bold")
-            ).pack(anchor="w", pady=(0, 5))
-            
-            # Progress bar background
-            progress_bg = ctk.CTkFrame(
-                progress_frame, 
-                fg_color="#444444", 
-                height=30, 
-                corner_radius=5
-            )
-            progress_bg.pack(fill="x", pady=(0, 20))
-            
-            # Progress bar fill
-            progress_fill = ctk.CTkFrame(
-                progress_bg, 
-                fg_color=self.theme_colors["primary"], 
-                width=int(400 * coverage_pct), 
-                height=30, 
-                corner_radius=5
-            )
-            progress_fill.place(x=0, y=0)
-            
-            # Create each category tab with enhanced list UI
-            self.create_game_list_with_edit(
-                tabview.add("Generic Controls"), 
-                generic_games, 
-                "ROMs with Generic Controls"
-            )
-            
-            self.create_game_list_with_edit(
-                tabview.add("Missing Controls"), 
-                [(rom, rom) for rom in missing_games], 
-                "ROMs with Missing Controls"
-            )
-            
-            self.create_game_list_with_edit(
-                tabview.add("Custom Controls"), 
-                default_games, 
-                "ROMs with Custom Controls"
-            )
-            
-            # Bottom button area
-            button_area = ctk.CTkFrame(dialog, height=70, fg_color=self.theme_colors["card_bg"], corner_radius=0)
-            button_area.pack(fill="x", side="bottom", padx=0, pady=0)
-            button_area.pack_propagate(False)  # Keep fixed height
-            
-            # Button container
-            button_container = ctk.CTkFrame(button_area, fg_color="transparent")
-            button_container.pack(fill="both", expand=True, padx=20, pady=15)
-            
-            # Export function
+            # Add export button
             def export_analysis():
                 try:
                     file_path = os.path.join(self.mame_dir, "controls_analysis.txt")
@@ -2633,60 +2551,33 @@ controller xbox t		= """
                         for rom, game_name in default_games:
                             f.write(f"{rom} - {game_name}\n")
                             
-                    messagebox.showinfo(
-                        "Export Complete", 
-                        f"Analysis exported to:\n{file_path}",
-                        parent=dialog
-                    )
+                    messagebox.showinfo("Export Complete", 
+                                f"Analysis exported to:\n{file_path}")
                 except Exception as e:
-                    messagebox.showerror(
-                        "Export Error", 
-                        str(e),
-                        parent=dialog
-                    )
+                    messagebox.showerror("Export Error", str(e))
             
             # Export button
             export_button = ctk.CTkButton(
-                button_container,
+                dialog,
                 text="Export Analysis",
-                command=export_analysis,
-                fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"],
-                font=("Arial", 14),
-                height=35,
-                width=150
+                command=export_analysis
             )
-            export_button.pack(side="left", padx=5)
+            export_button.pack(pady=10)
             
             # Close button
             close_button = ctk.CTkButton(
-                button_container,
+                dialog,
                 text="Close",
-                command=dialog.destroy,
-                fg_color=self.theme_colors["card_bg"],
-                hover_color=self.theme_colors["background"],
-                border_width=1,
-                border_color=self.theme_colors["text_dimmed"],
-                text_color=self.theme_colors["text"],
-                font=("Arial", 14),
-                height=35,
-                width=120
+                command=dialog.destroy
             )
-            close_button.pack(side="right", padx=5)
+            close_button.pack(pady=10)
             
             # Select Summary tab by default
             tabview.set("Summary")
             
-            # Center the dialog on the screen
-            dialog.update_idletasks()
-            width = dialog.winfo_width()
-            height = dialog.winfo_height()
-            x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-            y = (dialog.winfo_screenheight() // 2) - (height // 2)
-            dialog.geometry(f'{width}x{height}+{x}+{y}')
-            
         except Exception as e:
             print(f"Error in analyze_controls: {e}")
+            import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
     
@@ -3979,143 +3870,65 @@ controller xbox t		= """
         return settings_path
     
     def create_game_list_with_edit(self, parent_frame, game_list, title_text):
-        """Create enhanced game list with edit functionality"""
-        # Main container
-        container = ctk.CTkFrame(parent_frame, fg_color=self.theme_colors["card_bg"])
-        container.pack(expand=True, fill="both", padx=20, pady=20)
+        """Helper function to create a consistent list with edit button for games"""
+        # Frame for the list
+        list_frame = ctk.CTkFrame(parent_frame)
+        list_frame.pack(expand=True, fill="both", padx=10, pady=10)
         
-        # Title section
-        title_frame = ctk.CTkFrame(container, fg_color="transparent", height=40)
-        title_frame.pack(fill="x", padx=15, pady=(15, 10))
-        
+        # Title
         ctk.CTkLabel(
-            title_frame,
-            text=f"{title_text} ({len(game_list)})",
-            font=("Arial", 16, "bold")
-        ).pack(side="left")
-        
-        # Game list with search
-        list_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["background"], corner_radius=6)
-        list_frame.pack(expand=True, fill="both", padx=15, pady=(0, 15))
-        
-        # Search bar
-        search_frame = ctk.CTkFrame(list_frame, fg_color="transparent", height=40)
-        search_frame.pack(fill="x", padx=10, pady=10)
-        
-        # Search icon
-        search_icon = ctk.CTkLabel(search_frame, text="🔍", font=("Arial", 14))
-        search_icon.pack(side="left", padx=(5, 0))
-        
-        # Create a StringVar for filtering
-        filter_var = StringVar()
-        
-        # Search entry
-        search_entry = ctk.CTkEntry(
-            search_frame,
-            width=250,
-            placeholder_text="Filter...",
-            textvariable=filter_var,
-            border_width=0
-        )
-        search_entry.pack(side="left", padx=5)
-        
-        # Create a scrollable frame for the game list
-        games_scrollable = ctk.CTkScrollableFrame(
             list_frame,
-            fg_color="transparent",
-            scrollbar_button_color=self.theme_colors["primary"],
-            scrollbar_button_hover_color=self.theme_colors["secondary"]
-        )
-        games_scrollable.pack(expand=True, fill="both", padx=10, pady=(0, 10))
+            text=title_text,
+            font=("Arial", 14, "bold")
+        ).pack(pady=(5, 10))
         
-        # Store all game items for filtering
-        game_items = []
+        # Create frame for list and scrollbar
+        list_container = ctk.CTkFrame(list_frame)
+        list_container.pack(expand=True, fill="both", padx=5, pady=5)
         
-        # Create game items with alternating colors
-        colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
+        # Create listbox
+        game_listbox = tk.Listbox(list_container, font=("Arial", 12))
+        game_listbox.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         
-        # Function to show context menu on right-click
-        def show_edit_menu(event, rom_name):
-            menu = tk.Menu(parent_frame, tearoff=0)
-            menu.add_command(
-                label="Edit Controls", 
-                command=lambda: self.show_control_editor(rom_name)
-            )
-            menu.add_command(
-                label="Preview Controls", 
-                command=lambda: self.preview_rom_controls(rom_name)
-            )
-            menu.tk_popup(event.x_root, event.y_root)
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=game_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        game_listbox.config(yscrollcommand=scrollbar.set)
         
-        # Add game items to the list
-        for i, (rom, game_name) in enumerate(game_list):
-            # Item container
-            item_frame = ctk.CTkFrame(
-                games_scrollable, 
-                fg_color=colors[i % 2], 
-                corner_radius=4, 
-                height=40
-            )
-            item_frame.pack(fill="x", padx=5, pady=2)
-            item_frame.pack_propagate(False)  # Keep fixed height
-            
-            # ROM name and game name
+        # Populate listbox
+        for rom, game_name in game_list:
             if rom == game_name:
-                display_text = rom
+                game_listbox.insert(tk.END, rom)
             else:
-                display_text = f"{rom} - {game_name}"
+                game_listbox.insert(tk.END, f"{rom} - {game_name}")
+        
+        # Store the rom names for lookup when editing
+        rom_map = [rom for rom, _ in game_list]
+        
+        # Button frame
+        button_frame = ctk.CTkFrame(list_frame)
+        button_frame.pack(fill="x", padx=10, pady=10)
+        
+        def edit_selected_game():
+            selection = game_listbox.curselection()
+            if not selection:
+                messagebox.showinfo("Selection Required", "Please select a game to edit")
+                return
                 
-            name_label = ctk.CTkLabel(
-                item_frame,
-                text=display_text,
-                font=("Arial", 13),
-                anchor="w"
-            )
-            name_label.pack(side="left", padx=10, fill="y")
-            
-            # Edit button
-            edit_button = ctk.CTkButton(
-                item_frame,
-                text="Edit",
-                command=lambda r=rom: self.show_control_editor(r),
-                width=70,
-                height=26,
-                fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"],
-                font=("Arial", 12)
-            )
-            edit_button.pack(side="right", padx=10)
-            
-            # Bind right-click event
-            item_frame.bind("<Button-3>", lambda e, r=rom: show_edit_menu(e, r))
-            name_label.bind("<Button-3>", lambda e, r=rom: show_edit_menu(e, r))
-            
-            # Save the item for filtering
-            game_items.append((item_frame, display_text.lower()))
+            idx = selection[0]
+            if idx < len(rom_map):
+                rom = rom_map[idx]
+                game_name = game_list[idx][1] if game_list[idx][0] != game_list[idx][1] else None
+                self.show_control_editor(rom, game_name)
         
-        # Filtering function
-        def filter_list(*args):
-            search_text = filter_var.get().lower()
-            visible_count = 0
-            
-            for item_frame, item_text in game_items:
-                if search_text in item_text:
-                    item_frame.pack(fill="x", padx=5, pady=2)
-                    visible_count += 1
-                else:
-                    item_frame.pack_forget()
-            
-            # Update title to show count of visible items
-            ctk.CTkLabel(
-                title_frame,
-                text=f"{title_text} ({visible_count}/{len(game_list)})",
-                font=("Arial", 16, "bold")
-            ).pack(side="left")
+        edit_button = ctk.CTkButton(
+            button_frame,
+            text="Edit Selected Game",
+            command=edit_selected_game
+        )
+        edit_button.pack(side=tk.LEFT, padx=5)
         
-        # Connect filter function to the search entry
-        filter_var.trace("w", filter_list)
-        
-        return container
+        return list_frame
     
     def identify_generic_controls(self):
         """Identify games that only have generic control names"""
