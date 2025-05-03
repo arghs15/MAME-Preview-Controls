@@ -6168,6 +6168,24 @@ controller xbox t		= """
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, f"{rom_name}.{format}")
             
+            # IMPORTANT: Add this section to apply custom mappings from ROM CFG
+            # Check if ROM has a custom CFG file and apply those mappings
+            cfg_controls = {}
+            if rom_name in self.custom_configs:
+                # Parse the custom config
+                cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                
+                # Convert if XInput is enabled
+                if self.use_xinput:
+                    cfg_controls = {
+                        control: self.convert_mapping(mapping, True)
+                        for control, mapping in cfg_controls.items()
+                    }
+                
+                # Update game_data with custom mappings
+                self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                print(f"Applied custom mapping from ROM CFG for {rom_name}")
+            
             # Create PreviewWindow directly
             from PyQt5.QtWidgets import QApplication, QMessageBox
             from PyQt5.QtCore import Qt
@@ -6303,9 +6321,25 @@ controller xbox t		= """
     def batch_export_images(self):
         """Enhanced batch export dialog for ROM preview images"""
         # Create dialog with improved styling
+        # Create dialog with improved styling 
         dialog = ctk.CTkToplevel(self)
         dialog.title("Batch Export Preview Images")
-        dialog.geometry("900x700")
+
+        # Get screen dimensions
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+
+        # Set dialog size as percentage of screen (70% width, 80% height)
+        dialog_width = int(screen_width * 0.7)
+        dialog_height = int(screen_height * 0.8)
+
+        # Position dialog in center of screen
+        x_position = (screen_width - dialog_width) // 2
+        y_position = (screen_height - dialog_height) // 2
+
+        # Set geometry with calculated dimensions and position
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{x_position}+{y_position}")
+
         dialog.configure(fg_color=self.theme_colors["background"])
         dialog.transient(self)
         dialog.grab_set()
@@ -6458,17 +6492,19 @@ controller xbox t		= """
         mode_frame = ctk.CTkFrame(selection_container, fg_color="transparent")
         mode_frame.pack(fill="x", pady=5)
         
-        selection_mode_var = ctk.StringVar(value="all_with_controls")
+        # CHANGED: Default selection is now "current" instead of "all_with_controls"
+        selection_mode_var = ctk.StringVar(value="current")
         
-        mode_all = ctk.CTkRadioButton(
+        # Changed order to put Current ROM first
+        mode_current = ctk.CTkRadioButton(
             mode_frame,
-            text="All ROMs with Controls",
+            text="Current ROM Only",
             variable=selection_mode_var,
-            value="all_with_controls",
+            value="current",
             fg_color=self.theme_colors["primary"],
             hover_color=self.theme_colors["secondary"]
         )
-        mode_all.pack(side="left", padx=(0, 20))
+        mode_current.pack(side="left", padx=(0, 20))
         
         mode_custom = ctk.CTkRadioButton(
             mode_frame,
@@ -6480,15 +6516,15 @@ controller xbox t		= """
         )
         mode_custom.pack(side="left", padx=(0, 20))
         
-        mode_current = ctk.CTkRadioButton(
+        mode_all = ctk.CTkRadioButton(
             mode_frame,
-            text="Current ROM Only",
+            text="All ROMs with Controls",
             variable=selection_mode_var,
-            value="current",
+            value="all_with_controls",
             fg_color=self.theme_colors["primary"],
             hover_color=self.theme_colors["secondary"]
         )
-        mode_current.pack(side="left")
+        mode_all.pack(side="left")
         
         # Custom selection list frame
         list_frame = ctk.CTkFrame(selection_container, fg_color=self.theme_colors["background"], corner_radius=6)
@@ -6747,6 +6783,24 @@ controller xbox t		= """
                         if not game_data:
                             raise ValueError(f"No control data found for {rom_name}")
                         
+                        # IMPORTANT: Add the custom mapping code that was missing
+                        # Check if ROM has a custom CFG file and apply those mappings
+                        cfg_controls = {}
+                        if rom_name in self.custom_configs:
+                            # Parse the custom config
+                            cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                            
+                            # Convert if XInput is enabled
+                            if self.use_xinput:
+                                cfg_controls = {
+                                    control: self.convert_mapping(mapping, True)
+                                    for control, mapping in cfg_controls.items()
+                                }
+                            
+                            # Update game_data with custom mappings
+                            self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                            print(f"Applied custom mapping from ROM CFG for {rom_name}")
+                        
                         # Export the image using preview_export_image which respects settings
                         file_format = settings["format"].lower()
                         
@@ -6818,30 +6872,32 @@ controller xbox t		= """
             process_thread.daemon = True
             process_thread.start()
         
-        # Create the action buttons
+        # IMPROVED: Better styled buttons - Start Export button
         start_button = ctk.CTkButton(
             button_container,
             text="Start Export",
             command=start_export,
             width=150,
             height=40,
+            corner_radius=6,  # Rounded corners
             font=("Arial", 14, "bold"),
-            fg_color=self.theme_colors["success"],
-            hover_color="#218838"
+            fg_color=self.theme_colors["success"],  # Green color
+            hover_color="#218838"  # Darker green on hover
         )
         start_button.pack(side="left", padx=5)
         
+        # IMPROVED: Better styled cancel button - Red theme
         cancel_button = ctk.CTkButton(
             button_container,
             text="Cancel",
             command=dialog.destroy,
             width=120,
             height=40,
-            fg_color=self.theme_colors["card_bg"],
-            hover_color=self.theme_colors["background"],
-            border_width=1,
-            border_color=self.theme_colors["text_dimmed"],
-            text_color=self.theme_colors["text"]
+            corner_radius=6,  # Rounded corners
+            font=("Arial", 14),
+            fg_color=self.theme_colors["danger"],  # Red color
+            hover_color="#c82333",  # Darker red on hover
+            text_color="white"  # White text
         )
         cancel_button.pack(side="right", padx=5)
         
