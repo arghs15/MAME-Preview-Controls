@@ -361,6 +361,38 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
             messagebox.showerror("Initialization Error", f"Failed to initialize: {e}")
     
+    
+    def toggle_game_list(self):
+        """Simple toggle that truly collapses the game list panel"""
+        try:
+            # Check if sidebar is currently visible
+            sidebar_visible = self.sidebar.winfo_ismapped()
+            
+            if sidebar_visible:
+                # Hide the panels
+                self.sidebar.grid_remove()
+                
+                # Adjust column configuration to give all space to right panel
+                self.grid_columnconfigure(0, minsize=0, weight=0)  # Sidebar column - collapse to nothing
+                
+                # Update button text to show expand icon
+                self.collapse_button.configure(text="▶")
+            else:
+                # Show the panels
+                self.sidebar.grid()  # Restore sidebar to grid
+                
+                # Restore column configuration
+                self.grid_columnconfigure(0, minsize=220, weight=0)  # Restore sidebar width
+                
+                # Update button text to show collapse icon
+                self.collapse_button.configure(text="◀")
+            
+            # Force layout update
+            self.update_idletasks()
+            
+        except Exception as e:
+            print(f"Error toggling game list: {e}")
+
     def load_cache_settings(self):
         """Load cache management settings from JSON file"""
         default_settings = {
@@ -1235,6 +1267,22 @@ class MAMEControlConfig(ctk.CTk):
         
         # Prevent the top bar from resizing
         self.top_bar.pack_propagate(False)
+        
+        # Add collapse button - NEW CODE
+        collapse_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        collapse_frame.pack(side="left", padx=(10, 0), pady=10)
+        
+        self.collapse_button = ctk.CTkButton(
+            collapse_frame,
+            text="◀",  # Left arrow
+            width=30,
+            height=30,
+            command=self.toggle_game_list,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"],
+            corner_radius=15  # Make it round
+        )
+        self.collapse_button.pack(side="left")
         
         # Add search bar
         search_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
