@@ -269,6 +269,11 @@ class MAMEControlConfig(ctk.CTk):
         debug_print("Starting MAMEControlConfig initialization")
         debug_path_info()
 
+                    
+        # Add panel proportion configuration here
+        self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
+        self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
+        
         try:
             super().__init__()
             debug_print("Super initialization complete")
@@ -292,7 +297,7 @@ class MAMEControlConfig(ctk.CTk):
             # Logo size settings (as percentages)
             self.logo_width_percentage = 15
             self.logo_height_percentage = 15
-            
+
             # NEW CODE: Replace individual directory setup with the centralized method
             self.initialize_directory_structure()
             
@@ -347,7 +352,9 @@ class MAMEControlConfig(ctk.CTk):
             
             # Set the WM_DELETE_WINDOW protocol
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
-            
+            # Add this line right here, before the final debug print:
+            self.after_init_setup()
+
             debug_print("Initialization complete")
         except Exception as e:
             debug_print(f"CRITICAL ERROR in initialization: {e}")
@@ -1297,35 +1304,124 @@ class MAMEControlConfig(ctk.CTk):
             
         self.hide_buttons_toggle.pack(side="right", padx=10)
 
+    # 2. Replace the create_split_view method with this version:
     def create_split_view(self):
-        """Create split view with game list and control display panels"""
+        """Create split view with game list and control display panels with fixed proportions"""
         # Container frame for split view
         self.split_container = ctk.CTkFrame(self.main_content, fg_color="transparent")
         self.split_container.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         
-        # Configure the split container columns
-        self.split_container.columnconfigure(0, weight=4)  # Game list (40%)
-        self.split_container.columnconfigure(1, weight=6)  # Control display (60%)
-        self.split_container.rowconfigure(0, weight=1)     # Full height
+        # Get initial window width - if window isn't sized yet, use a default
+        window_width = self.winfo_width()
+        if window_width < 100:
+            window_width = 1280  # Default initial width
+            
+        # Calculate left panel width based on ratio with minimum constraint
+        left_width = max(int(window_width * self.LEFT_PANEL_RATIO), self.MIN_LEFT_PANEL_WIDTH)
         
-        # Create the game list panel (left side)
-        self.create_game_list_panel()
+        # Configure grid with fixed proportions
+        self.split_container.columnconfigure(0, minsize=left_width, weight=0)  # Fixed width for left panel
+        self.split_container.columnconfigure(1, weight=1)  # Right panel takes remaining space
+        self.split_container.rowconfigure(0, weight=1)  # Full height
         
-        # Create the control display panel (right side)
+        # Create the left and right panels
+        self.create_game_list_panel(width=left_width)
         self.create_control_display_panel()
+        
+        # Prevent panels from resizing based on content
+        if hasattr(self, 'left_panel'):
+            self.left_panel.grid_propagate(False)
+        if hasattr(self, 'right_panel'):
+            self.right_panel.grid_propagate(False)
+        
+        # Register resize event handler
+        self.bind("<Configure>", self.on_window_resize)
 
-    def create_game_list_panel(self):
-        """Create the game list panel with enhancements"""
-        # Game list container
+
+    # 4. Update on_window_resize method:
+    def on_window_resize(self, event=None):
+        """Handle window resize to maintain fixed panel proportions"""
+        # Only process if this is the main window being resized
+        if event and event.widget == self:
+            window_width = event.width
+            
+            # Only handle significant resize events
+            if window_width > 100:
+                # Calculate the left panel width based on ratio
+                left_width = int(window_width * self.LEFT_PANEL_RATIO)
+                
+                # Enforce minimum width
+                if left_width < self.MIN_LEFT_PANEL_WIDTH:
+                    left_width = self.MIN_LEFT_PANEL_WIDTH
+                
+                # Update container column configuration
+                if hasattr(self, 'split_container'):
+                    self.split_container.columnconfigure(0, minsize=left_width, weight=0)
+                    
+                    # Force immediate update of the layout
+                    self.split_container.update_idletasks()
+                    
+                    # Directly configure panel widths
+                    if hasattr(self, 'left_panel'):
+                        self.left_panel.configure(width=left_width)
+                    
+                    # Ensure width is applied by forcing propagation off
+                    if hasattr(self, 'left_panel'):
+                        self.left_panel.grid_propagate(False)
+                    if hasattr(self, 'right_panel'):
+                        self.right_panel.grid_propagate(False)
+                        
+                    # Adjust game title wraplength
+                    if hasattr(self, 'game_title'):
+                        title_width = max(window_width - left_width - 200, 300)
+                        self.game_title.configure(wraplength=title_width)
+
+    # 5. Handle initial window size in a post-initialization method
+    def after_init_setup(self):
+        """Perform setup tasks after window initialization"""
+        # Use after() to ensure window is fully created
+        self.after(100, self._apply_initial_panel_sizes)
+
+    def _apply_initial_panel_sizes(self):
+        """Apply initial panel sizes after window is fully initialized"""
+        window_width = self.winfo_width()
+        
+        # Calculate initial left panel width
+        left_width = max(int(window_width * self.LEFT_PANEL_RATIO), self.MIN_LEFT_PANEL_WIDTH)
+        
+        # Apply to column config
+        if hasattr(self, 'split_container'):
+            self.split_container.columnconfigure(0, minsize=left_width, weight=0)
+            
+        # Apply to panel directly
+        if hasattr(self, 'left_panel'):
+            self.left_panel.configure(width=left_width)
+            self.left_panel.grid_propagate(False)
+        
+        # Force layout update
+        self.update_idletasks()
+
+    # 3. Update the create_game_list_panel method to accept width parameter:
+    def create_game_list_panel(self, width=None):
+        """Create the game list panel with fixed width"""
+        # Set default width if not provided
+        if width is None:
+            width = self.MIN_LEFT_PANEL_WIDTH
+            
+        # Game list container with fixed width
         self.left_panel = ctk.CTkFrame(
             self.split_container, 
             corner_radius=0,
             fg_color=self.theme_colors["card_bg"],
-            border_width=0
+            border_width=0,
+            width=width  # Set explicit width
         )
-        self.left_panel.grid(row=0, column=0, sticky="nsew", padx=(20, 10), pady=20)
+        self.left_panel.grid(row=0, column=0, sticky="nsew", padx=(10, 10), pady=20)
         
-        # Configure the game list panel
+        # Force fixed size
+        self.left_panel.grid_propagate(False)
+        
+        # Configure layout
         self.left_panel.columnconfigure(0, weight=1)
         self.left_panel.rowconfigure(0, weight=0)  # Header
         self.left_panel.rowconfigure(1, weight=1)  # Game list
@@ -1369,8 +1465,8 @@ class MAMEControlConfig(ctk.CTk):
         self.game_list.bind("<Button-3>", self.show_game_context_menu)  # Right-click context menu
 
     def create_control_display_panel(self):
-        """Create the enhanced control display panel"""
-        # Control display container
+        """Create the control display panel with fixed proportions"""
+        # Control display container with fixed proportions
         self.right_panel = ctk.CTkFrame(
             self.split_container, 
             corner_radius=0,
@@ -1378,6 +1474,9 @@ class MAMEControlConfig(ctk.CTk):
             border_width=0
         )
         self.right_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 20), pady=20)
+        
+        # Prevent resizing based on content
+        self.right_panel.grid_propagate(False)
         
         # Configure the control display panel
         self.right_panel.columnconfigure(0, weight=1)
@@ -1682,26 +1781,6 @@ class MAMEControlConfig(ctk.CTk):
         )
         button.pack(side="left", padx=5, pady=5)
         return button
-
-    def on_window_resize(self, event=None):
-        """Handle window resize to maintain fixed panel proportions"""
-        if event and event.widget == self:
-            window_width = event.width
-            
-            # Only handle meaningful resize events (prevent 1px adjustments)
-            if window_width > 100:
-                # Calculate the appropriate panel widths (40/60 split)
-                left_width = int(window_width * 0.4)  # 40% for left panel
-                right_width = int(window_width * 0.6)  # 60% for right panel
-                
-                # Apply fixed width to the panels
-                self.main_content.columnconfigure(0, minsize=left_width)
-                self.main_content.columnconfigure(1, minsize=right_width)
-                
-                # Adjust game title wraplength to prevent text overflow
-                if hasattr(self, 'game_title'):
-                    title_width = right_width - 200  # Leave room for buttons and padding
-                    self.game_title.configure(wraplength=title_width if title_width > 300 else 300)
 
     def on_game_select(self, event):
         """Handle game selection with enhanced visual feedback"""
@@ -4626,8 +4705,9 @@ controller xbox t		= """
         # Ensure the selected item is visible
         self.game_list.see(f"{line_index}.0")
 
+    # Fix 3: Update display_controls_table method to fix column alignment
     def display_controls_table(self, start_row, game_data, cfg_controls):
-        """Display controls with proper hierarchy and fallbacks: ROM CFG > default CFG > gamedata"""
+        """Display controls with proper hierarchy, fallbacks, and aligned columns"""
         row = start_row
         
         # Get romname from game_data
@@ -4784,18 +4864,26 @@ controller xbox t		= """
         table_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
         table_frame.pack(fill="x", padx=15, pady=5)
         
-        # Define column widths for alignment
-        col_widths = [220, 220, 180]  # Controller Button, Game Action, Mapping Source
+        # *** FIX FOR COLUMN ALIGNMENT ***
+        # Use a grid layout with fixed column widths instead of packing side by side
+        table_frame.columnconfigure(0, minsize=220, weight=0)  # Controller Button
+        table_frame.columnconfigure(1, minsize=220, weight=0)  # Game Action
+        table_frame.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
         
-        # Create header with fixed-width columns
+        # Create header with fixed-width columns in a grid
         header_frame = ctk.CTkFrame(table_frame, fg_color="transparent")
         header_frame.pack(fill="x", pady=(0, 10))
+        
+        # Configure grid for header
+        header_frame.columnconfigure(0, minsize=220, weight=0)
+        header_frame.columnconfigure(1, minsize=220, weight=0)
+        header_frame.columnconfigure(2, minsize=180, weight=0)
         
         # Header columns
         header_texts = ["Controller Button", "Game Action", "Mapping Source"]
         
-        # Create headers with fixed widths
-        for i, (text, width) in enumerate(zip(header_texts, col_widths)):
+        # Create headers with fixed widths using grid
+        for i, text in enumerate(header_texts):
             header_label = ctk.CTkLabel(
                 header_frame,
                 text=text,
@@ -4803,10 +4891,9 @@ controller xbox t		= """
                 fg_color=self.theme_colors["primary"],
                 text_color="#ffffff",
                 corner_radius=4,
-                width=width,
                 height=36
             )
-            header_label.pack(side="left", padx=5)
+            header_label.grid(row=0, column=i, padx=5, sticky="ew")
         
         # Define standard controller buttons based on mode
         if self.use_xinput:
@@ -5058,9 +5145,15 @@ controller xbox t		= """
             source = button_sources.get(control, "Unknown")
             print(f"  {standard_display_names.get(control, control)}: {action} ({source})")
         
-        # Now create a scrollable container for the rows
+        # *** FIX: USE GRID LAYOUT FOR BETTER COLUMN ALIGNMENT ***
+        # Create a container for the rows
         rows_container = ctk.CTkFrame(table_frame, fg_color="transparent")
         rows_container.pack(fill="x", expand=True)
+        
+        # Configure grid to align with headers
+        rows_container.columnconfigure(0, minsize=220, weight=0)  # Controller Button
+        rows_container.columnconfigure(1, minsize=220, weight=0)  # Game Action
+        rows_container.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
         
         # Row alternating colors
         row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
@@ -5083,16 +5176,20 @@ controller xbox t		= """
                 row_frame.pack(fill="x", pady=2)
                 row_frame.pack_propagate(False)  # Ensure consistent height
                 
-                # Create labels with fixed widths to match headers
+                # Configure row frame to use same grid as header and container
+                row_frame.columnconfigure(0, minsize=220, weight=0)
+                row_frame.columnconfigure(1, minsize=220, weight=0)
+                row_frame.columnconfigure(2, minsize=180, weight=0)
+                
+                # Create labels with fixed widths to match headers - use grid instead of pack
                 # Controller button (left column)
                 button_label = ctk.CTkLabel(
                     row_frame,
                     text=display_name,
                     font=("Arial", 12),
-                    width=col_widths[0] - 20,  # Subtract padding
                     anchor="w"
                 )
-                button_label.pack(side="left", padx=15)
+                button_label.grid(row=0, column=0, padx=15, pady=10, sticky="w")
                 
                 # Game action (middle column)
                 action_label = ctk.CTkLabel(
@@ -5100,10 +5197,9 @@ controller xbox t		= """
                     text=action,
                     font=("Arial", 12, "bold"),
                     text_color=self.theme_colors["primary"],
-                    width=col_widths[1] - 20,  # Subtract padding
                     anchor="w"
                 )
-                action_label.pack(side="left", padx=5)
+                action_label.grid(row=0, column=1, padx=5, pady=10, sticky="w")
                 
                 # Source (right column)
                 source_color = self.theme_colors["success"] if "ROM CFG" in source else \
@@ -5115,10 +5211,9 @@ controller xbox t		= """
                     text=source,
                     font=("Arial", 11),
                     text_color=source_color,
-                    width=col_widths[2] - 20,  # Subtract padding
                     anchor="w"
                 )
-                source_label.pack(side="left", padx=5)
+                source_label.grid(row=0, column=2, padx=5, pady=10, sticky="w")
                 
                 control_row += 1
         
@@ -5191,7 +5286,7 @@ controller xbox t		= """
             config_preview.insert("1.0", preview_text)
             config_preview.configure(state="disabled")  # Make read-only
         
-        return row + 1                 
+        return row + 1
 
     def joycode_to_button(self, joycode):
         """Convert a JOYCODE mapping to a controller button name"""
