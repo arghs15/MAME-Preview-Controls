@@ -1,18 +1,20 @@
 import builtins
 import datetime
+import queue
 import sqlite3
 import sys
 import os
 import json
 import re
 import subprocess
+import threading
 import time
 import traceback
 from typing import Dict, Optional, Set, List, Tuple
 import xml.etree.ElementTree as ET
 import customtkinter as ctk
 from tkinter import messagebox, StringVar, scrolledtext, Frame, Label, PhotoImage, TclError
-
+from functools import lru_cache
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -84,8 +86,71 @@ def debug_path_info():
             debug_print(f"{name}: {module.__file__}")
     debug_print("====================")
 
+class AsyncLoader:
+    """Handles asynchronous loading of data to improve UI responsiveness"""
+    def __init__(self, callback=None):
+        self.task_queue = queue.Queue()
+        self.result_queue = queue.Queue()
+        self.worker_thread = None
+        self.callback = callback
+        self.running = False
+    
+    def start_worker(self):
+        """Start the worker thread"""
+        if self.worker_thread is None or not self.worker_thread.is_alive():
+            self.running = True
+            self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+            self.worker_thread.start()
+    
+    def stop_worker(self):
+        """Stop the worker thread"""
+        self.running = False
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.task_queue.put(None)  # Signal to exit
+            self.worker_thread.join(timeout=1.0)
+    
+    def _worker_loop(self):
+        """Worker thread main loop"""
+        while self.running:
+            try:
+                task = self.task_queue.get(timeout=0.5)
+                if task is None:  # Exit signal
+                    break
+                    
+                func, args, kwargs = task
+                try:
+                    result = func(*args, **kwargs)
+                    self.result_queue.put((True, result))
+                except Exception as e:
+                    print(f"Error in worker task: {e}")
+                    traceback.print_exc()
+                    self.result_queue.put((False, str(e)))
+                
+                self.task_queue.task_done()
+                
+            except queue.Empty:
+                pass  # No tasks, continue waiting
+    
+    def add_task(self, func, *args, **kwargs):
+        """Add a task to the queue"""
+        self.task_queue.put((func, args, kwargs))
+        self.start_worker()  # Ensure worker is running
+    
+    def process_results(self):
+        """Process any available results"""
+        try:
+            while not self.result_queue.empty():
+                success, result = self.result_queue.get_nowait()
+                if self.callback:
+                    self.callback(success, result)
+                self.result_queue.task_done()
+            return True
+        except Exception as e:
+            print(f"Error processing results: {e}")
+            return False
+
 class CustomSidebarTab(ctk.CTkFrame):
-    """Custom sidebar tab button with icon support and active state"""
+    """Custom sidebar tab button with icon support and active state - no changes needed"""
     def __init__(self, master, text, icon_path=None, command=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         
@@ -146,7 +211,7 @@ class CustomSidebarTab(ctk.CTkFrame):
                 self.icon_label.configure(text_color=THEME_COLORS["dark"]["text"])
 
 class PositionManager:
-    """Handles storage, normalization, and application of text positions"""
+    """Handles storage, normalization, and application of text positions - no changes needed"""
     
     def __init__(self, parent):
         """Initialize the position manager"""
@@ -269,7 +334,6 @@ class MAMEControlConfig(ctk.CTk):
         debug_print("Starting MAMEControlConfig initialization")
         debug_path_info()
 
-                    
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -291,6 +355,9 @@ class MAMEControlConfig(ctk.CTk):
             self.current_game = None
             self.use_xinput = True
             
+            # Initialize the async loader for better responsiveness
+            self.async_loader = AsyncLoader(callback=self.on_async_task_complete)
+            
             # Current view mode
             self.current_view = "all"  # Default view
             
@@ -301,17 +368,9 @@ class MAMEControlConfig(ctk.CTk):
             # NEW CODE: Replace individual directory setup with the centralized method
             self.initialize_directory_structure()
             
-            self.clean_cache_directory(max_age_days=None, max_files=None)
+            # Add ROM data cache to improve performance
+            self.rom_data_cache = {}
             
-            # The rest of your initialization code...
-            debug_print(f"App directory: {self.app_dir}")
-            debug_print(f"MAME directory: {self.mame_dir}")
-            debug_print(f"Preview directory: {self.preview_dir}")
-            debug_print(f"Settings directory: {self.settings_dir}")
-            
-            # Initialize the position manager
-            self.position_manager = PositionManager(self)
-
             # Configure the window
             self.title("MAME Control Configuration")
             self.geometry("1280x800")
@@ -342,10 +401,14 @@ class MAMEControlConfig(ctk.CTk):
             self.create_layout()
             debug_print("Layout created")
             
-            # Load all data
-            debug_print("Loading data...")
-            self.load_all_data()
-            debug_print("Data loaded")
+            # Load essential data immediately
+            self.load_settings()
+            
+            # Load other data asynchronously 
+            self.after(100, self.load_essential_data)
+            
+            # Defer non-essential data loading
+            self.after(500, self.load_secondary_data)
 
             # Add this near the end of __init__:
             self.preview_processes = []  # Track any preview processes we launch
@@ -353,7 +416,7 @@ class MAMEControlConfig(ctk.CTk):
             # Set the WM_DELETE_WINDOW protocol
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
             # Add this line right here, before the final debug print:
-            self.after_init_setup()
+            self.after(200, self.after_init_setup)  # Slightly increased delay
 
             debug_print("Initialization complete")
         except Exception as e:
@@ -361,7 +424,62 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
             messagebox.showerror("Initialization Error", f"Failed to initialize: {e}")
     
+    def load_essential_data(self):
+        """Load only the essential data needed for initial display"""
+        try:
+            # Load settings first (already done in __init__)
+            # Scan ROMs directory - essential for display
+            self.scan_roms_directory()
+            
+            # Update the game list with minimal data
+            if hasattr(self, 'game_list'):
+                self.update_game_list_by_category()
+                
+            # Update status message
+            self.update_stats_label()
+            
+            # Select first ROM with simple display
+            self.select_first_rom()
+            
+        except Exception as e:
+            print(f"Error loading essential data: {e}")
+            traceback.print_exc()
     
+    def load_secondary_data(self):
+        """Load non-essential data in the background to improve startup speed"""
+        self.async_loader.add_task(self.load_default_config)
+        self.async_loader.add_task(self.load_custom_configs)
+        
+        # Check if database needs to be built/updated - only do this check in the background
+        self.async_loader.add_task(self.check_and_build_db_if_needed)
+        
+        # Start processing results periodically
+        self.after(100, self.process_async_results)
+    
+    def check_and_build_db_if_needed(self):
+        """Check and build the database only if needed"""
+        if self.check_db_update_needed():
+            print("Database needs updating, rebuilding...")
+            self.load_gamedata_json()
+            return self.build_gamedata_db()
+        else:
+            print("Database is up to date, skipping rebuild")
+            return False
+    
+    def process_async_results(self):
+        """Process any results from async tasks"""
+        self.async_loader.process_results()
+        # Schedule the next check
+        self.after(100, self.process_async_results)
+    
+    def on_async_task_complete(self, success, result):
+        """Handle completion of async tasks"""
+        if not success:
+            print(f"Async task failed: {result}")
+        else:
+            # Handle successful task completion if needed
+            pass
+
     def toggle_game_list(self):
         """Simple toggle that truly collapses the game list panel"""
         try:
@@ -444,7 +562,6 @@ class MAMEControlConfig(ctk.CTk):
         except Exception as e:
             print(f"Error saving cache settings: {e}")
     
-    # Update the clean_cache_directory method to use the saved settings
     def clean_cache_directory(self, max_age_days=None, max_files=None):
         """Clean old cache files to prevent unlimited growth"""
         # Load settings if not provided
@@ -464,18 +581,16 @@ class MAMEControlConfig(ctk.CTk):
             return
             
         try:
-            cache_dir = os.path.join(self.preview_dir, "cache")
-            
             # Skip if directory doesn't exist
-            if not os.path.exists(cache_dir):
+            if not os.path.exists(self.cache_dir):
                 print("No cache directory found. Skipping cleanup.")
                 return
                 
             # Get all cache files with their modification times
             cache_files = []
-            for filename in os.listdir(cache_dir):
+            for filename in os.listdir(self.cache_dir):
                 if filename.endswith('_cache.json'):
-                    filepath = os.path.join(cache_dir, filename)
+                    filepath = os.path.join(self.cache_dir, filename)
                     mtime = os.path.getmtime(filepath)
                     cache_files.append((filepath, mtime))
             
@@ -506,7 +621,7 @@ class MAMEControlConfig(ctk.CTk):
                     except Exception as e:
                         print(f"Error removing {os.path.basename(filepath)}: {e}")
                         
-            print(f"Cache cleanup complete. Directory: {cache_dir}")
+            print(f"Cache cleanup complete. Directory: {self.cache_dir}")
         except Exception as e:
             print(f"Error cleaning cache: {e}")
     
@@ -746,11 +861,13 @@ class MAMEControlConfig(ctk.CTk):
         self.preview_dir = os.path.join(self.mame_dir, "preview")
         self.settings_dir = os.path.join(self.preview_dir, "settings")
         self.info_dir = os.path.join(self.settings_dir, "info")
+        self.cache_dir = os.path.join(self.preview_dir, "cache")
 
         # Create these directories if they don't exist
         os.makedirs(self.preview_dir, exist_ok=True)
         os.makedirs(self.settings_dir, exist_ok=True)
         os.makedirs(self.info_dir, exist_ok=True)
+        os.makedirs(self.cache_dir, exist_ok=True)
         
         # Define standard paths for key files
         self.gamedata_path = os.path.join(self.settings_dir, "gamedata.json")
@@ -783,6 +900,10 @@ class MAMEControlConfig(ctk.CTk):
     def on_closing(self):
         """Handle proper cleanup when closing the application"""
         print("Application closing, performing cleanup...")
+        
+        # Stop async loader
+        if hasattr(self, 'async_loader'):
+            self.async_loader.stop_worker()
         
         # Cancel any pending timers
         for attr_name in dir(self):
@@ -3319,11 +3440,10 @@ controller xbox t		= """
             traceback.print_exc()
             messagebox.showerror("Data Loading Error", f"Failed to load application data: {e}")
 
-    # Add or modify these functions in the mame_controls_tkinter.py file
-
+    @lru_cache(maxsize=128)
     def get_game_data(self, romname):
         """Get game data with integrated database prioritization and improved handling of unnamed controls"""
-        # 1. Check cache first
+        # 1. Check cache first (this is redundant with lru_cache but kept for backward compatibility)
         if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
             return self.rom_data_cache[romname]
         
@@ -3396,10 +3516,8 @@ controller xbox t		= """
             controls = None
             if 'controls' in game_data:
                 controls = game_data['controls']
-                #print(f"Found direct controls for {romname}")
             else:
                 needs_parent_controls = True
-                #print(f"No direct controls for {romname}, needs parent controls")
                 
             # If no controls and this is a clone, try to use parent controls
             if needs_parent_controls:
@@ -3408,19 +3526,16 @@ controller xbox t		= """
                 # Check explicit parent field (should be there from load_gamedata_json)
                 if 'parent' in game_data:
                     parent_rom = game_data['parent']
-                    #print(f"Found parent {parent_rom} via direct reference")
                 
                 # Also check parent lookup table for redundancy
                 elif hasattr(self, 'parent_lookup') and romname in self.parent_lookup:
                     parent_rom = self.parent_lookup[romname]
-                    #print(f"Found parent {parent_rom} via lookup table")
                 
                 # If we found a parent, try to get its controls
                 if parent_rom and parent_rom in self.gamedata_json:
                     parent_data = self.gamedata_json[parent_rom]
                     if 'controls' in parent_data:
                         controls = parent_data['controls']
-                        #print(f"Using controls from parent {parent_rom} for clone {romname}")
             
             # Now process the controls (either direct or inherited from parent)
             if controls:
@@ -4141,6 +4256,10 @@ controller xbox t		= """
         if not cfg_controls:
             return
             
+        # Add a flag to the game_data to indicate it uses ROM CFG
+        game_data['has_rom_cfg'] = True
+        game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
+        
         # For each player in the game data
         for player in game_data.get('players', []):
             # For each control in this player
@@ -4151,9 +4270,14 @@ controller xbox t		= """
                 if control_name in cfg_controls:
                     # Add or update a 'mapping' key to store the current mapping
                     label['mapping'] = cfg_controls[control_name]
-                    
-                    # You could also add a flag to indicate this is a custom mapping
                     label['is_custom'] = True
+                    
+                    # Make sure the source format matches exactly what other sources use
+                    label['mapping_source'] = f"ROM CFG ({game_data['romname']}.cfg)"
+                    
+                    # Add these additional fields that might be checked in the preview
+                    label['cfg_mapping'] = True
+                    label['prefix_type'] = "rom_cfg"  # Explicitly set the prefix type
     
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
