@@ -1345,21 +1345,42 @@ class MAMEControlConfig(ctk.CTk):
         )
         tools_label.pack(anchor="w", padx=15, pady=(20, 5))
         
-        # Add Tools buttons
-        tools_buttons = [
+        # Add this list to store references to tool buttons
+        tools_buttons = []
+        
+        # Create function to handle tool button activation
+        def activate_tool_button(button_index):
+            # Deactivate all tool buttons
+            for btn in tools_buttons:
+                btn.set_active(False)
+            
+            # Activate the clicked button
+            tools_buttons[button_index].set_active(True)
+            
+            # Reset after a delay (since tools just perform actions and don't change views)
+            self.after(500, lambda: tools_buttons[button_index].set_active(False))
+        
+        # Add Tools buttons with activation
+        tool_commands = [
             {"text": "Generate Config Files", "command": self.generate_all_configs},
             {"text": "Batch Export Images", "command": self.batch_export_images},
             {"text": "Analyze Controls", "command": self.analyze_controls},
             {"text": "Clear Cache", "command": self.clear_cache},
         ]
         
-        for btn_config in tools_buttons:
+        for i, btn_config in enumerate(tool_commands):
+            # Create a combined command that handles highlighting and the original command
+            original_command = btn_config["command"]
+            combined_command = lambda idx=i, cmd=original_command: (activate_tool_button(idx), cmd())
+            
+            # Create the button with the combined command
             btn = CustomSidebarTab(
                 tabs_frame, 
                 text=btn_config["text"],
-                command=btn_config["command"]
+                command=combined_command
             )
             btn.pack(fill="x", padx=5, pady=2)
+            tools_buttons.append(btn)
         
         # Status section at bottom of sidebar
         self.status_frame = ctk.CTkFrame(self.sidebar, fg_color=self.theme_colors["card_bg"], corner_radius=6, height=80)
