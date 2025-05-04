@@ -213,6 +213,8 @@ class PreviewWindow(QMainWindow):
             
             self.initialize_controller_close()
             
+            self.enforce_layer_order()
+            
             self.setVisible(True)  # Now show the window
 
             print(f"Window size: {self.width()}x{self.height()}")
@@ -1741,7 +1743,7 @@ class PreviewWindow(QMainWindow):
                 
         print("All labels resized")
 
-    # Replace toggle_bezel_improved to always save global settings
+    # Replace your existing toggle_bezel_improved method with this one
     def toggle_bezel_improved(self):
         """Toggle bezel visibility and save the setting globally"""
         if not self.has_bezel:
@@ -1763,8 +1765,8 @@ class PreviewWindow(QMainWindow):
                 self.bezel_label.hide()
                 print("Bezel hidden")
         
-        # Always raise controls to top
-        self.raise_controls_above_bezel()
+        # CRITICAL: Enforce correct layer order
+        self.enforce_layer_order()
         
         # ALWAYS save as global settings
         self.save_bezel_settings(is_global=True)
@@ -2681,7 +2683,7 @@ class PreviewWindow(QMainWindow):
         
         return settings
     
-    # Make sure the toggle_logo method properly handles visibility
+    # Replace your existing toggle_logo method with this one
     def toggle_logo(self):
         """Toggle logo visibility"""
         self.logo_visible = not self.logo_visible
@@ -2696,11 +2698,59 @@ class PreviewWindow(QMainWindow):
             # Create logo if it doesn't exist yet
             self.add_logo()
         
+        # CRITICAL: Enforce correct layer order
+        self.enforce_layer_order()
+        
         # Update settings
         self.logo_settings["logo_visible"] = self.logo_visible
         
         # Save setting immediately 
         self.save_positions(is_global=False)  # Save for current ROM by default
+    
+    # Add this method to your PreviewWindow class
+    def enforce_layer_order(self):
+        """
+        Enforce the correct stacking order for all elements:
+        1. Background (bottom)
+        2. Bezel (above background)
+        3. Logo (above bezel)
+        4. Controls (top)
+        """
+        print("\n--- Enforcing strict layer order ---")
+        
+        # Step 1: Send background to the absolute bottom
+        if hasattr(self, 'bg_label') and self.bg_label:
+            self.bg_label.lower()
+            print("Background placed at bottom layer")
+        
+        # Step 2: Place bezel above background
+        if hasattr(self, 'bezel_label') and self.bezel_label and self.bezel_label.isVisible():
+            # First lower it to bottom, then raise it above background
+            self.bezel_label.lower()
+            if hasattr(self, 'bg_label') and self.bg_label:
+                self.bezel_label.stackUnder(self.bg_label)
+                self.bezel_label.raise_()
+            print("Bezel placed above background")
+        
+        # Step 3: Place logo above bezel but below controls
+        if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
+            self.logo_label.raise_()
+            print("Logo raised above bezel")
+        
+        # Step 4: Raise all controls to the top
+        if hasattr(self, 'control_labels'):
+            controls_raised = 0
+            for control_name, control_data in self.control_labels.items():
+                if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
+                    control_data['label'].raise_()
+                    controls_raised += 1
+            print(f"Raised {controls_raised} visible controls to top layer")
+        
+        # Force a repaint
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+        
+        print("Layer order enforcement complete")
     
     def show_logo_position(self):
         """Show dialog to configure logo position"""
@@ -4186,6 +4236,8 @@ class PreviewWindow(QMainWindow):
             
             # Add at the end - force resize all labels
             QTimer.singleShot(100, self.force_resize_all_labels)
+
+            self.enforce_layer_order()
                 
         except Exception as e:
             print(f"Error in canvas resize: {e}")
@@ -4702,7 +4754,7 @@ class PreviewWindow(QMainWindow):
         # Placeholder for now - requires position management system
         pass
     
-    # 13. Modify the toggle_texts method to not update shadows
+    # Replace your existing toggle_texts method with this one
     def toggle_texts(self):
         """Toggle visibility of control labels except joystick controls"""
         self.texts_visible = not self.texts_visible
@@ -4719,11 +4771,14 @@ class PreviewWindow(QMainWindow):
             # Toggle visibility for non-joystick controls
             control_data['label'].setVisible(self.texts_visible)
         
+        # CRITICAL: Enforce correct layer order 
+        self.enforce_layer_order()
+        
         # Force update to ensure proper rendering
         if hasattr(self, 'canvas'):
             self.canvas.update()
     
-    # 14. Modify toggle_joystick_controls to not update shadows
+    # Replace your existing toggle_joystick_controls method with this one
     def toggle_joystick_controls(self):
         """Toggle visibility of joystick controls and save setting"""
         self.joystick_visible = not self.joystick_visible
@@ -4736,6 +4791,9 @@ class PreviewWindow(QMainWindow):
             if "JOYSTICK" in control_name:
                 is_visible = self.texts_visible and self.joystick_visible
                 control_data['label'].setVisible(is_visible)
+        
+        # CRITICAL: Enforce correct layer order
+        self.enforce_layer_order()
         
         # Save the joystick visibility setting (globally)
         self.save_bezel_settings(is_global=True)
