@@ -1466,6 +1466,22 @@ class MAMEControlConfig(ctk.CTk):
             self.xinput_toggle.deselect()
         
         self.xinput_toggle.pack(side="right", padx=5)
+
+        # Add "XInput Only Mode" toggle
+        self.xinput_only_toggle = ctk.CTkSwitch(
+            toggle_frame,
+            text="XInput Only Mode",
+            command=self.toggle_xinput_only_mode,
+            button_color=self.theme_colors["primary"],
+            button_hover_color=self.theme_colors["secondary"]
+        )
+        # Set default state based on current xinput_only_mode value
+        if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+            self.xinput_only_toggle.select()
+        else:
+            self.xinput_only_toggle.deselect()
+        
+        self.xinput_only_toggle.pack(side="right", padx=10)
         
         # Add "Preview Controls" button
         self.preview_button = ctk.CTkButton(
@@ -1494,6 +1510,86 @@ class MAMEControlConfig(ctk.CTk):
             
         self.hide_buttons_toggle.pack(side="right", padx=10)
 
+    def toggle_xinput_only_mode(self):
+        """Handle toggling between showing all controls or only XInput controls"""
+        if hasattr(self, 'xinput_only_toggle'):
+            # Get the current toggle state
+            self.xinput_only_mode = self.xinput_only_toggle.get()
+            print(f"XInput Only Mode set to: {self.xinput_only_mode}")
+            
+            # Save the setting
+            self.save_settings()
+            
+            # Clear cache to ensure fresh data with the new setting
+            self.clear_xinput_mode_cache()
+            
+            # Refresh the current game display if one is selected
+            if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None and hasattr(self, 'game_list'):
+                # Store the current scroll position if possible
+                scroll_pos = None
+                if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
+                    scroll_pos = self.control_frame._scrollbar.get()
+                
+                # Clear existing controls
+                if hasattr(self, 'control_frame'):
+                    for widget in self.control_frame.winfo_children():
+                        widget.destroy()
+                        
+                # Update the game info
+                try:
+                    # Create a mock event with coordinates for the selected line
+                    class MockEvent:
+                        def __init__(self_mock, line_num):
+                            # Default position
+                            self_mock.x = 10
+                            self_mock.y = 10
+                            
+                            # Try to get better position if possible
+                            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
+                                # Calculate position to hit the middle of the line
+                                bbox = self.game_list._textbox.bbox(f"{line_num}.0")
+                                if bbox:
+                                    self_mock.x = bbox[0] + 5  # A bit to the right of line start
+                                    self_mock.y = bbox[1] + 5  # A bit below line top
+                    
+                    # Create the mock event targeting our current line
+                    mock_event = MockEvent(self.selected_line)
+                    
+                    # Force a full refresh of the display
+                    self.on_game_select(mock_event)
+                    
+                    # Restore scroll position if we saved it
+                    if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
+                        try:
+                            self.control_frame._scrollbar.set(*scroll_pos)
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"Error refreshing display after toggling XInput Only Mode: {e}")
+                    import traceback
+                    traceback.print_exc()
+    
+    def clear_xinput_mode_cache(self):
+        """Clear cache when toggling XInput Only Mode"""
+        try:
+            # Clear the in-memory cache
+            if hasattr(self, 'rom_data_cache'):
+                print("Clearing in-memory ROM data cache due to XInput Mode change")
+                self.rom_data_cache = {}
+            
+            # If current_game exists, clear its specific cache file
+            if hasattr(self, 'current_game') and self.current_game:
+                if hasattr(self, 'cache_dir') and self.cache_dir:
+                    cache_file = os.path.join(self.cache_dir, f"{self.current_game}_cache.json")
+                    if os.path.exists(cache_file):
+                        try:
+                            os.remove(cache_file)
+                            print(f"Cleared cache file for {self.current_game} due to XInput Mode change")
+                        except Exception as e:
+                            print(f"Error clearing cache file: {e}")
+        except Exception as e:
+            print(f"Error clearing cache: {e}")
+    
     # 2. Replace the create_split_view method with this version:
     def create_split_view(self):
         """Create split view with game list and control display panels with fixed proportions"""
@@ -3357,7 +3453,16 @@ controller xbox t		= """
         """Get game data with integrated database prioritization and improved handling of unnamed controls"""
         # 1. Check cache first (this is redundant with lru_cache but kept for backward compatibility)
         if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
-            return self.rom_data_cache[romname]
+            cached_data = self.rom_data_cache[romname]
+            
+            # Check if cached data matches current XInput mode setting
+            cached_xinput_only = cached_data.get('xinput_only_mode', False)
+            current_xinput_only = getattr(self, 'xinput_only_mode', False)
+            
+            # If modes match, return cached data
+            if cached_xinput_only == current_xinput_only:
+                return cached_data
+            # Otherwise, fall through to reload with correct mode
         
         # 2. Try database first if available
         if os.path.exists(self.db_path):
@@ -3988,6 +4093,37 @@ controller xbox t		= """
         
         return generic_control_games, missing_control_games
     
+    def filter_xinput_controls(self, game_data):
+        """Filter game_data to only include XInput-compatible controls"""
+        if not game_data:
+            return game_data
+            
+        # Make a copy to avoid modifying the original
+        import copy
+        filtered_data = copy.deepcopy(game_data)
+        
+        # Define strictly which controls are valid in XInput mode
+        xinput_controls = {
+            'P1_BUTTON1', 'P1_BUTTON2', 'P1_BUTTON3', 'P1_BUTTON4',
+            'P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8',
+            'P1_BUTTON9', 'P1_BUTTON10', 
+            'P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT',
+            'P1_START', 'P1_SELECT'
+        }
+        
+        # For each player, filter labels to only XInput controls
+        for player in filtered_data.get('players', []):
+            original_count = len(player.get('labels', []))
+            filtered_labels = [label for label in player.get('labels', []) 
+                            if label['name'] in xinput_controls]
+            player['labels'] = filtered_labels
+            print(f"Filtered player {player['number']} controls from {original_count} to {len(filtered_labels)}")
+        
+        # Mark data as XInput only
+        filtered_data['xinput_only_mode'] = True
+        
+        return filtered_data
+    
     def show_preview(self):
         """Launch the preview window with caching to ensure default controls are included"""
         if not self.current_game:
@@ -4014,8 +4150,12 @@ controller xbox t		= """
                 }
             
             # Modify game_data to include custom mappings
-            # This is the critical part that's missing
             self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+
+        # NEW CODE: Filter out non-XInput controls if in XInput Only mode
+        if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+            game_data = self.filter_xinput_controls(game_data)
+            print(f"Applied XInput filter for preview")
         
         # Create cache directory if it doesn't exist yet
         cache_dir = os.path.join(self.preview_dir, "cache")
@@ -4026,9 +4166,11 @@ controller xbox t		= """
         try:
             with open(cache_path, 'w', encoding='utf-8') as f:
                 json.dump(game_data, f, indent=2)
-            print(f"Saved processed game data with defaults to cache: {cache_path}")
+            print(f"Saved processed game data with {'XInput-only' if getattr(self, 'xinput_only_mode', False) else 'all'} controls to cache: {cache_path}")
         except Exception as e:
             print(f"Warning: Could not save cache file: {e}")
+        
+        # The rest of the method remains unchanged
         
         # Handle PyInstaller frozen executable
         if getattr(sys, 'frozen', False):
@@ -4086,7 +4228,7 @@ controller xbox t		= """
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
 
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
-        """Update game_data to include the custom control mappings from cfg_controls"""
+        """Update game_data to include the custom control mappings with function-based organization"""
         if not cfg_controls:
             return
             
@@ -4094,11 +4236,72 @@ controller xbox t		= """
         game_data['has_rom_cfg'] = True
         game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
         
-        # For each player in the game data
+        # Define the functional categories for organizing controls
+        functional_categories = {
+            'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL'],
+            'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
+            'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
+            'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
+            'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
+            'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
+            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z'],  # Added AD_STICK_Z explicitly here
+            'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
+            'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
+        }
+        
+        # Process each remaining control
         for player in game_data.get('players', []):
-            # For each control in this player
             for label in player.get('labels', []):
                 control_name = label['name']
+                
+                # Get the functional category for this control
+                func_category = 'other'  # Default to 'other' if no match found
+                for category, controls in functional_categories.items():
+                    if control_name in controls:
+                        func_category = category
+                        break
+                        
+                # Additional catch-all logic for controls not explicitly listed
+                if func_category == 'other' and control_name.startswith('P1_'):
+                    # Generic category assignment based on control name patterns
+                    if 'BUTTON' in control_name:
+                        # Try to determine which button category based on the button number
+                        try:
+                            button_num = int(control_name.replace('P1_BUTTON', ''))
+                            if button_num <= 2:
+                                func_category = 'action_primary'
+                            elif button_num <= 4:
+                                func_category = 'action_secondary'
+                            else:
+                                func_category = 'action_special'
+                        except ValueError:
+                            # If we can't parse a button number, keep as 'other'
+                            pass
+                    elif 'JOYSTICK' in control_name:
+                        if 'LEFT' in control_name or 'RIGHT' in control_name:
+                            func_category = 'move_horizontal'
+                        elif 'UP' in control_name or 'DOWN' in control_name:
+                            func_category = 'move_vertical'
+                    elif 'AD_STICK_X' in control_name:
+                        func_category = 'move_horizontal'
+                    elif 'AD_STICK_Y' in control_name:
+                        func_category = 'move_vertical'
+                    elif 'AD_STICK_Z' in control_name:
+                        func_category = 'analog_input'
+                    elif 'DIAL' in control_name:
+                        if 'V' in control_name or 'Y' in control_name:
+                            func_category = 'move_vertical'
+                        else:
+                            func_category = 'move_horizontal'
+                    elif 'TRACKBALL' in control_name or 'LIGHTGUN' in control_name or 'MOUSE' in control_name:
+                        func_category = 'precision_aim'
+                    elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
+                        func_category = 'system_control'
+                    elif 'PEDAL' in control_name:
+                        func_category = 'analog_input'
+                
+                # Store the functional category
+                label['func_category'] = func_category
                 
                 # If this control has a custom mapping in the cfg file, store it
                 if control_name in cfg_controls:
@@ -4111,7 +4314,64 @@ controller xbox t		= """
                     
                     # Add these additional fields that might be checked in the preview
                     label['cfg_mapping'] = True
-                    label['prefix_type'] = "rom_cfg"  # Explicitly set the prefix type
+                else:
+                    label['is_custom'] = False
+                    
+                # Set appropriate display style based on function
+                if func_category == 'move_horizontal':
+                    label['display_style'] = 'horizontal'
+                elif func_category == 'move_vertical':
+                    label['display_style'] = 'vertical'
+                elif func_category == 'action_primary':
+                    label['display_style'] = 'primary_button'
+                elif func_category == 'action_secondary':
+                    label['display_style'] = 'secondary_button'
+                elif func_category == 'system_control':
+                    label['display_style'] = 'system_button'
+                elif func_category == 'analog_input':
+                    label['display_style'] = 'analog_control'
+                elif func_category == 'precision_aim':
+                    label['display_style'] = 'precision_control'
+                elif func_category == 'special_function':
+                    label['display_style'] = 'special_button'
+                else:
+                    label['display_style'] = 'standard'  # Default style for 'other' controls
+                    
+                # Set display name based on control type for XInput mode
+                if self.use_xinput:
+                    if control_name == 'P1_BUTTON1':
+                        label['display_name'] = 'P1 A Button'
+                    elif control_name == 'P1_BUTTON2':
+                        label['display_name'] = 'P1 B Button'
+                    elif control_name == 'P1_BUTTON3':
+                        label['display_name'] = 'P1 X Button'
+                    elif control_name == 'P1_BUTTON4':
+                        label['display_name'] = 'P1 Y Button'
+                    elif control_name == 'P1_BUTTON5':
+                        label['display_name'] = 'P1 LB Button'
+                    elif control_name == 'P1_BUTTON6':
+                        label['display_name'] = 'P1 RB Button'
+                    elif control_name == 'P1_BUTTON7':
+                        label['display_name'] = 'P1 LT Button'
+                    elif control_name == 'P1_BUTTON8':
+                        label['display_name'] = 'P1 RT Button'
+                    elif control_name == 'P1_BUTTON9':
+                        label['display_name'] = 'P1 Left Stick Button'
+                    elif control_name == 'P1_BUTTON10':
+                        label['display_name'] = 'P1 Right Stick Button'
+                    elif func_category == 'move_horizontal':
+                        label['display_name'] = 'Horizontal Movement'
+                    elif func_category == 'move_vertical':
+                        label['display_name'] = 'Vertical Movement'
+                    elif control_name == 'P1_START':
+                        label['display_name'] = 'P1 Start Button' 
+                    elif control_name == 'P1_SELECT':
+                        label['display_name'] = 'P1 Select Button'
+                    else:
+                        label['display_name'] = self.format_control_name(control_name)
+                else:
+                    # JOYCODE mode - use traditional names
+                    label['display_name'] = self.format_control_name(control_name)
     
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
@@ -4146,6 +4406,7 @@ controller xbox t		= """
         self.hide_preview_buttons = False
         self.show_button_names = True
         self.use_xinput = True
+        self.xinput_only_mode = False  # Default to showing all controls
         
         # Load custom settings if available
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
@@ -4200,6 +4461,20 @@ controller xbox t		= """
                         self.show_button_names = settings['show_button_names']
                     elif isinstance(settings['show_button_names'], int):
                         self.show_button_names = bool(settings['show_button_names'])
+                
+                 # Load XInput Only Mode setting
+                if 'xinput_only_mode' in settings:
+                    if isinstance(settings['xinput_only_mode'], bool):
+                        self.xinput_only_mode = settings['xinput_only_mode']
+                    elif isinstance(settings['xinput_only_mode'], int):
+                        self.xinput_only_mode = bool(settings['xinput_only_mode'])
+                    
+                    # Update toggle if it exists
+                    if hasattr(self, 'xinput_only_toggle'):
+                        if self.xinput_only_mode:
+                            self.xinput_only_toggle.select()
+                        else:
+                            self.xinput_only_toggle.deselect()
                             
             except Exception as e:
                 print(f"Error loading settings: {e}")
@@ -4711,32 +4986,31 @@ controller xbox t		= """
         # Ensure the selected item is visible
         self.game_list.see(f"{line_index}.0")
 
-    # Fix 3: Update display_controls_table method to fix column alignment
     def display_controls_table(self, start_row, game_data, cfg_controls):
-        """Display controls with proper hierarchy, fallbacks, and aligned columns"""
+        """Display controls organized by function rather than just type"""
         row = start_row
         
         # Get romname from game_data
         romname = game_data.get('romname', '')
         
-        # Game info card
+        # Game info card (unchanged)
         info_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         info_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
         info_card.grid_columnconfigure(0, weight=1)
         
-        # Game metadata section
+        # Game metadata section (unchanged)
         metadata_frame = ctk.CTkFrame(info_card, fg_color="transparent")
         metadata_frame.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
         
-        # Two-column layout for metadata
+        # Two-column layout for metadata (unchanged)
         metadata_frame.grid_columnconfigure(0, weight=1)
         metadata_frame.grid_columnconfigure(1, weight=1)
         
-        # Left column - Basic info
+        # Left column - Basic info (unchanged)
         basic_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
         basic_info.grid(row=0, column=0, sticky="nw", padx=(0, 10))
         
-        # ROM info
+        # ROM info (unchanged)
         ctk.CTkLabel(
             basic_info,
             text="ROM Information",
@@ -4757,7 +5031,7 @@ controller xbox t		= """
             anchor="w"
         ).pack(anchor="w")
         
-        # Right column - Additional info
+        # Right column - Additional info (unchanged)
         if game_data.get('miscDetails'):
             additional_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
             additional_info.grid(row=0, column=1, sticky="nw", padx=(10, 0))
@@ -4778,16 +5052,16 @@ controller xbox t		= """
                 wraplength=300
             ).pack(anchor="w")
         
-        # Add indicators for config sources and input mode
+        # Add indicators for config sources and input mode (unchanged)
         indicator_frame = ctk.CTkFrame(info_card, fg_color="transparent")
         indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="w")
         
-        # Check which sources are active
+        # Check which sources are active (unchanged)
         has_rom_cfg = romname in self.custom_configs
         has_default_cfg = bool(self.default_controls)
         has_gamedata = bool(game_data.get('players', []))
         
-        # Determine the primary source
+        # Determine the primary source (unchanged)
         if has_rom_cfg:
             primary_source = "ROM CFG"
         elif has_default_cfg:
@@ -4795,7 +5069,7 @@ controller xbox t		= """
         else:
             primary_source = "Game Data"
         
-        # Display source indicator
+        # Display source indicator (unchanged)
         ctk.CTkLabel(
             indicator_frame,
             text="Control Source: ",
@@ -4803,7 +5077,7 @@ controller xbox t		= """
             anchor="w"
         ).pack(side="left", padx=(0, 5))
         
-        # Color code based on source
+        # Color code based on source (unchanged)
         primary_color = self.theme_colors["success"] if primary_source == "ROM CFG" else \
                     self.theme_colors["primary"] if primary_source == "Default CFG" else \
                     "#888888"  # Game Data
@@ -4816,7 +5090,7 @@ controller xbox t		= """
             anchor="w"
         ).pack(side="left")
         
-        # Add input mode indicator
+        # Add input mode indicator (unchanged)
         mode_text = "XInput Mode" if self.use_xinput else "JOYCODE Mode"
         mode_color = self.theme_colors["primary"] if self.use_xinput else "#888888"
         
@@ -4835,7 +5109,7 @@ controller xbox t		= """
             anchor="w"
         ).pack(side="left")
         
-        # Show ROM CFG filename if applicable
+        # Show ROM CFG filename if applicable (unchanged)
         if has_rom_cfg:
             ctk.CTkLabel(
                 indicator_frame,
@@ -4870,9 +5144,8 @@ controller xbox t		= """
         table_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
         table_frame.pack(fill="x", padx=15, pady=5)
         
-        # *** FIX FOR COLUMN ALIGNMENT ***
-        # Use a grid layout with fixed column widths instead of packing side by side
-        table_frame.columnconfigure(0, minsize=220, weight=0)  # Controller Button
+        # Use a grid layout with fixed column widths
+        table_frame.columnconfigure(0, minsize=220, weight=0)  # Control Function
         table_frame.columnconfigure(1, minsize=220, weight=0)  # Game Action
         table_frame.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
         
@@ -4885,8 +5158,8 @@ controller xbox t		= """
         header_frame.columnconfigure(1, minsize=220, weight=0)
         header_frame.columnconfigure(2, minsize=180, weight=0)
         
-        # Header columns
-        header_texts = ["Controller Button", "Game Action", "Mapping Source"]
+        # Header columns with new first column name
+        header_texts = ["Control Function", "Game Action", "Mapping Source"]
         
         # Create headers with fixed widths using grid
         for i, text in enumerate(header_texts):
@@ -4901,277 +5174,152 @@ controller xbox t		= """
             )
             header_label.grid(row=0, column=i, padx=5, sticky="ew")
         
-        # Define standard controller buttons based on mode
-        if self.use_xinput:
-            # Standard controller buttons for XInput
-            standard_controls = [
-                "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4",
-                "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
-                "P1_BUTTON9", "P1_BUTTON10", 
-                "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT"
-            ]
-            standard_display_names = {
-                "P1_BUTTON1": "P1 A Button",
-                "P1_BUTTON2": "P1 B Button",
-                "P1_BUTTON3": "P1 X Button",
-                "P1_BUTTON4": "P1 Y Button",
-                "P1_BUTTON5": "P1 LB Button",
-                "P1_BUTTON6": "P1 RB Button",
-                "P1_BUTTON7": "P1 LT Button",
-                "P1_BUTTON8": "P1 RT Button",
-                "P1_BUTTON9": "P1 Left Stick Button",
-                "P1_BUTTON10": "P1 Right Stick Button",
-                "P1_JOYSTICK_UP": "P1 Left Stick Up",
-                "P1_JOYSTICK_DOWN": "P1 Left Stick Down",
-                "P1_JOYSTICK_LEFT": "P1 Left Stick Left",
-                "P1_JOYSTICK_RIGHT": "P1 Left Stick Right"
-            }
-            # Mapping between controller codes
-            controller_to_mame = {
-                "XINPUT_1_A": "P1_BUTTON1",
-                "XINPUT_1_B": "P1_BUTTON2",
-                "XINPUT_1_X": "P1_BUTTON3",
-                "XINPUT_1_Y": "P1_BUTTON4",
-                "XINPUT_1_SHOULDER_L": "P1_BUTTON5",
-                "XINPUT_1_SHOULDER_R": "P1_BUTTON6",
-                "XINPUT_1_TRIGGER_L": "P1_BUTTON7",
-                "XINPUT_1_TRIGGER_R": "P1_BUTTON8",
-                "XINPUT_1_THUMB_L": "P1_BUTTON9",
-                "XINPUT_1_THUMB_R": "P1_BUTTON10",
-                "XINPUT_1_DPAD_UP": "P1_JOYSTICK_UP",
-                "XINPUT_1_DPAD_DOWN": "P1_JOYSTICK_DOWN",
-                "XINPUT_1_DPAD_LEFT": "P1_JOYSTICK_LEFT",
-                "XINPUT_1_DPAD_RIGHT": "P1_JOYSTICK_RIGHT",
-            }
-            # Map MAME controls to controller codes
-            mame_to_controller = {
-                "P1_BUTTON1": "XINPUT_1_A",
-                "P1_BUTTON2": "XINPUT_1_B",
-                "P1_BUTTON3": "XINPUT_1_X",
-                "P1_BUTTON4": "XINPUT_1_Y",
-                "P1_BUTTON5": "XINPUT_1_SHOULDER_L",
-                "P1_BUTTON6": "XINPUT_1_SHOULDER_R",
-                "P1_BUTTON7": "XINPUT_1_TRIGGER_L",
-                "P1_BUTTON8": "XINPUT_1_TRIGGER_R",
-                "P1_BUTTON9": "XINPUT_1_THUMB_L",
-                "P1_BUTTON10": "XINPUT_1_THUMB_R",
-                "P1_JOYSTICK_UP": "XINPUT_1_DPAD_UP",
-                "P1_JOYSTICK_DOWN": "XINPUT_1_DPAD_DOWN",
-                "P1_JOYSTICK_LEFT": "XINPUT_1_DPAD_LEFT",
-                "P1_JOYSTICK_RIGHT": "XINPUT_1_DPAD_RIGHT",
-            }
-        else:
-            # Standard controller buttons for JOYCODE
-            standard_controls = [
-                "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4",
-                "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
-                "P1_BUTTON9", "P1_BUTTON10", 
-                "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT"
-            ]
-            standard_display_names = {
-                "P1_BUTTON1": "P1 Button 1",
-                "P1_BUTTON2": "P1 Button 2",
-                "P1_BUTTON3": "P1 Button 3",
-                "P1_BUTTON4": "P1 Button 4",
-                "P1_BUTTON5": "P1 Button 5",
-                "P1_BUTTON6": "P1 Button 6",
-                "P1_BUTTON7": "P1 Button 7",
-                "P1_BUTTON8": "P1 Button 8",
-                "P1_BUTTON9": "P1 Button 9",
-                "P1_BUTTON10": "P1 Button 10",
-                "P1_JOYSTICK_UP": "P1 Joystick Up",
-                "P1_JOYSTICK_DOWN": "P1 Joystick Down",
-                "P1_JOYSTICK_LEFT": "P1 Joystick Left",
-                "P1_JOYSTICK_RIGHT": "P1 Joystick Right"
-            }
-            # Mapping between controller codes
-            controller_to_mame = {
-                "JOYCODE_1_BUTTON1": "P1_BUTTON1",
-                "JOYCODE_1_BUTTON2": "P1_BUTTON2",
-                "JOYCODE_1_BUTTON3": "P1_BUTTON3",
-                "JOYCODE_1_BUTTON4": "P1_BUTTON4",
-                "JOYCODE_1_BUTTON5": "P1_BUTTON5",
-                "JOYCODE_1_BUTTON6": "P1_BUTTON6",
-                "JOYCODE_1_BUTTON7": "P1_BUTTON7",
-                "JOYCODE_1_BUTTON8": "P1_BUTTON8",
-                "JOYCODE_1_BUTTON9": "P1_BUTTON9",
-                "JOYCODE_1_BUTTON10": "P1_BUTTON10",
-                "JOYCODE_1_HATUP": "P1_JOYSTICK_UP",
-                "JOYCODE_1_HATDOWN": "P1_JOYSTICK_DOWN",
-                "JOYCODE_1_HATLEFT": "P1_JOYSTICK_LEFT",
-                "JOYCODE_1_HATRIGHT": "P1_JOYSTICK_RIGHT",
-            }
-            # Map MAME controls to controller codes
-            mame_to_controller = {
-                "P1_BUTTON1": "JOYCODE_1_BUTTON1",
-                "P1_BUTTON2": "JOYCODE_1_BUTTON2",
-                "P1_BUTTON3": "JOYCODE_1_BUTTON3",
-                "P1_BUTTON4": "JOYCODE_1_BUTTON4",
-                "P1_BUTTON5": "JOYCODE_1_BUTTON5",
-                "P1_BUTTON6": "JOYCODE_1_BUTTON6",
-                "P1_BUTTON7": "JOYCODE_1_BUTTON7",
-                "P1_BUTTON8": "JOYCODE_1_BUTTON8",
-                "P1_BUTTON9": "JOYCODE_1_BUTTON9",
-                "P1_BUTTON10": "JOYCODE_1_BUTTON10",
-                "P1_JOYSTICK_UP": "JOYCODE_1_HATUP",
-                "P1_JOYSTICK_DOWN": "JOYCODE_1_HATDOWN",
-                "P1_JOYSTICK_LEFT": "JOYCODE_1_HATLEFT",
-                "P1_JOYSTICK_RIGHT": "JOYCODE_1_HATRIGHT",
-            }
+        # Define functional categories
+        functional_categories = {
+            'move_horizontal': "Left/Right Movement",
+            'move_vertical': "Up/Down Movement",
+            'action_primary': "Primary Actions",
+            'action_secondary': "Secondary Actions",
+            'action_special': "Special Actions",
+            'system_control': "System Controls",
+            'analog_input': "Analog Inputs",
+            'precision_aim': "Precision Aiming",
+            'special_function': "Special Functions",
+            'other': "Other Controls"
+        }
         
-        # Helper function to extract base mapping from config
-        def extract_base_mapping(mapping_text):
-            """Extract the first mapping from a config entry"""
-            if mapping_text and " OR " in mapping_text:
-                parts = mapping_text.split(" OR ")
-                return parts[0].strip()
-            return mapping_text
+        # Collect all controls from the game data and organize by function
+        control_by_function = {category: [] for category in functional_categories}
         
-        # Step 1: Build mapping from MAME controls to game actions from gamedata
-        control_to_action = {}
+        # Add all P1 controls from game_data
         for player in game_data.get('players', []):
             if player['number'] != 1:  # Only handle player 1 for now
                 continue
                 
             for label in player.get('labels', []):
-                mame_control = label['name']
-                game_action = label['value']
-                control_to_action[mame_control] = game_action
-        
-        # Debug output
-        print(f"\nControls found in gamedata for {romname}:")
-        for ctrl, action in control_to_action.items():
-            print(f"  {ctrl}: {action}")
-        
-        # Step 2: Build remapped button-to-action mapping
-        button_to_action = {}
-        button_sources = {}
-        processed_controls = set()  # Track which controls have been processed
-        
-        # Step 2a: Try ROM-specific CFG first
-        has_rom_cfg = romname in self.custom_configs
-        if has_rom_cfg and cfg_controls:
-            print(f"Applying ROM-specific CFG for {romname}")
-            
-            # Create a mapping from controller codes to standard controls
-            controller_to_standard = {
-                "JOYCODE_1_BUTTON1": "P1_BUTTON1",  # A Button
-                "JOYCODE_1_BUTTON2": "P1_BUTTON2",  # B Button
-                "JOYCODE_1_BUTTON3": "P1_BUTTON3",  # X Button
-                "JOYCODE_1_BUTTON4": "P1_BUTTON4",  # Y Button
-                "JOYCODE_1_BUTTON5": "P1_BUTTON5",  # LB Button
-                "JOYCODE_1_BUTTON6": "P1_BUTTON6",  # RB Button
-                "XINPUT_1_A": "P1_BUTTON1",         # A Button
-                "XINPUT_1_B": "P1_BUTTON2",         # B Button
-                "XINPUT_1_X": "P1_BUTTON3",         # X Button
-                "XINPUT_1_Y": "P1_BUTTON4",         # Y Button
-                "XINPUT_1_SHOULDER_L": "P1_BUTTON5", # LB Button
-                "XINPUT_1_SHOULDER_R": "P1_BUTTON6", # RB Button
-            }
-            
-            # For each MAME control in the CFG file
-            for mame_control, mapping in cfg_controls.items():
-                if not mame_control.startswith("P1_"):
-                    continue  # Skip non-player-1 controls
-                    
-                # Get controller code (e.g., JOYCODE_1_BUTTON3)
-                controller_code = extract_base_mapping(mapping)
-                print(f"  Mapping from CFG: {mame_control} -> {controller_code}")
+                control_name = label['name']
                 
-                # Map controller code to standard button
-                if controller_code in controller_to_standard:
-                    standard_control = controller_to_standard[controller_code]
-                    
-                    # If the MAME control has a game action, map it to the standard button
-                    if mame_control in control_to_action:
-                        # This maps the game action to the standard control based on controller code
-                        action = control_to_action[mame_control]
-                        
-                        # Find the standard button in our list
-                        for display_control in standard_controls:
-                            if display_control == standard_control:
-                                button_to_action[display_control] = action
-                                button_sources[display_control] = f"ROM CFG ({romname}.cfg)"
-                                processed_controls.add(display_control)
-                                print(f"  Applied ROM CFG mapping: {display_control} -> {action} via {controller_code}")
-                                break
-        
-        # Step 2b: Apply default CFG for any buttons not mapped yet
-        has_default_cfg = hasattr(self, 'default_controls') and self.default_controls
-        if has_default_cfg:
-            print(f"Applying default controls for {romname}")
-            for control in standard_controls:
-                # Skip controls already mapped by ROM CFG
-                if control in processed_controls:
+                # Skip non-P1 controls
+                if not control_name.startswith('P1_'):
                     continue
                     
-                # For each control in gamedata, map the first available action
-                for mame_control, game_action in control_to_action.items():
-                    if mame_control not in processed_controls:
-                        button_to_action[control] = game_action
-                        button_sources[control] = "Default CFG + Game Data"
-                        processed_controls.add(mame_control)  # Mark this gamedata control as used
-                        print(f"  Applied default mapping: {control} -> {game_action} (from {mame_control})")
-                        break
-        
-        # Step 2c: Fall back to direct gamedata mappings for remaining controls
-        print(f"Falling back to direct gamedata mappings for {romname}")
-        for control in standard_controls:
-            # Skip controls already mapped
-            if control in button_to_action:
-                continue
+                # Determine functional category based on control name
+                func_category = 'other'  # Default to 'other'
                 
-            # Direct mapping from gamedata
-            if control in control_to_action:
-                button_to_action[control] = control_to_action[control]
-                button_sources[control] = "Game Data"
-                print(f"  Direct gamedata mapping: {control} -> {control_to_action[control]}")
-        
-        # IMPORTANT: If no mappings were found, just display controls directly from game_data
-        if not button_to_action and game_data.get('players'):
-            print(f"No button-to-action mappings found, using direct display from game_data")
-            for player in game_data.get('players', []):
-                if player['number'] != 1:  # Only handle player 1 for now
-                    continue
+                if 'JOYSTICK_LEFT' in control_name or 'JOYSTICK_RIGHT' in control_name or 'PADDLE' in control_name or ('DIAL' in control_name and not 'DIAL_V' in control_name):
+                    func_category = 'move_horizontal'
+                elif 'JOYSTICK_UP' in control_name or 'JOYSTICK_DOWN' in control_name or 'DIAL_V' in control_name:
+                    func_category = 'move_vertical'
+                elif 'BUTTON1' in control_name or 'BUTTON2' in control_name:
+                    func_category = 'action_primary'
+                elif 'BUTTON3' in control_name or 'BUTTON4' in control_name:
+                    func_category = 'action_secondary'
+                elif 'BUTTON' in control_name:  # Other buttons
+                    func_category = 'action_special'
+                elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
+                    func_category = 'system_control'
+                elif 'PEDAL' in control_name:
+                    func_category = 'analog_input'
+                elif 'TRACKBALL' in control_name or 'LIGHTGUN' in control_name or 'MOUSE' in control_name:
+                    func_category = 'precision_aim'
+                elif 'GAMBLE' in control_name:
+                    func_category = 'special_function'
                     
-                for label in player.get('labels', []):
-                    control_name = label['name']
-                    action = label['value']
+                # Additional catch-all logic for specialized controls
+                if func_category == 'other' and control_name.startswith('P1_'):
+                    # Try to categorize based on patterns in the control name
+                    if 'AD_STICK_X' in control_name:
+                        func_category = 'move_horizontal'
+                    elif 'AD_STICK_Y' in control_name:
+                        func_category = 'move_vertical'
+                    elif 'AD_STICK_Z' in control_name:
+                        func_category = 'analog_input'
+                    elif 'POSITIONAL' in control_name:
+                        func_category = 'precision_aim'
                     
-                    # Map to standard control if possible
-                    for std_control in standard_controls:
-                        if std_control == control_name:
-                            button_to_action[std_control] = action
-                            button_sources[std_control] = "Game Data (direct)"
-                            print(f"  Direct control display: {std_control} -> {action}")
-
-        # Debug output for troubleshooting
-        print(f"\nFinal mapping for {romname}:")
-        for control, action in button_to_action.items():
-            source = button_sources.get(control, "Unknown")
-            print(f"  {standard_display_names.get(control, control)}: {action} ({source})")
+                # Store the category in the label for future reference (for preview)
+                label['func_category'] = func_category
+                
+                # Check for custom mapping in cfg_controls
+                is_custom = control_name in cfg_controls
+                mapping_source = f"ROM CFG ({romname}.cfg)" if is_custom else "Game Data"
+                
+                # Add to the appropriate category
+                control_by_function[func_category].append({
+                    'name': control_name,
+                    'action': label['value'],
+                    'mapping': cfg_controls.get(control_name, ''),
+                    'is_custom': is_custom,
+                    'source': mapping_source
+                })
         
-        # *** FIX: USE GRID LAYOUT FOR BETTER COLUMN ALIGNMENT ***
+        # If using XInput, add display names that reflect actual function
+        display_name_map = {}
+        if self.use_xinput:
+            for control in control_by_function['move_horizontal']:
+                # Base the display name on the action, not the control type
+                action = control['action'].lower()
+                if 'left' in action or 'right' in action:
+                    display_name_map[control['name']] = "Horizontal Movement"
+                else:
+                    display_name_map[control['name']] = "Left/Right"
+                    
+            for control in control_by_function['move_vertical']:
+                action = control['action'].lower()
+                if 'up' in action or 'down' in action:
+                    display_name_map[control['name']] = "Vertical Movement"
+                else:
+                    display_name_map[control['name']] = "Up/Down"
+        else:
+            # For JOYCODE, use more traditional labels
+            for control in control_by_function['move_horizontal']:
+                display_name_map[control['name']] = "Joystick Left/Right"
+                    
+            for control in control_by_function['move_vertical']:
+                display_name_map[control['name']] = "Joystick Up/Down"
+        
         # Create a container for the rows
         rows_container = ctk.CTkFrame(table_frame, fg_color="transparent")
         rows_container.pack(fill="x", expand=True)
         
         # Configure grid to align with headers
-        rows_container.columnconfigure(0, minsize=220, weight=0)  # Controller Button
+        rows_container.columnconfigure(0, minsize=220, weight=0)  # Control Function
         rows_container.columnconfigure(1, minsize=220, weight=0)  # Game Action
         rows_container.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
         
         # Row alternating colors
         row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
-        # For each standard controller button
+        # Display controls by functional category
         control_row = 0
-        for i, control in enumerate(standard_controls):
-            if control in button_to_action:
-                action = button_to_action[control]
-                source = button_sources.get(control, "Unknown")
-                display_name = standard_display_names.get(control, control)
+        
+        # For each functional category with controls
+        for category, category_name in functional_categories.items():
+            controls = control_by_function[category]
+            
+            # Skip empty categories
+            if not controls:
+                continue
                 
+            # Add a category header
+            category_frame = ctk.CTkFrame(
+                rows_container,
+                fg_color=self.theme_colors["primary"],
+                corner_radius=4,
+                height=30
+            )
+            category_frame.pack(fill="x", pady=(10, 5))
+            category_frame.pack_propagate(False)  # Keep fixed height
+            
+            ctk.CTkLabel(
+                category_frame,
+                text=category_name,
+                font=("Arial", 13, "bold"),
+                text_color="#ffffff"
+            ).pack(side="left", padx=15, pady=5)
+            
+            # Display controls in this category
+            for i, control in enumerate(controls):
                 # Row container with alternating background
                 row_frame = ctk.CTkFrame(
                     rows_container, 
@@ -5182,13 +5330,15 @@ controller xbox t		= """
                 row_frame.pack(fill="x", pady=2)
                 row_frame.pack_propagate(False)  # Ensure consistent height
                 
-                # Configure row frame to use same grid as header and container
+                # Configure row frame to use same grid as header
                 row_frame.columnconfigure(0, minsize=220, weight=0)
                 row_frame.columnconfigure(1, minsize=220, weight=0)
                 row_frame.columnconfigure(2, minsize=180, weight=0)
                 
-                # Create labels with fixed widths to match headers - use grid instead of pack
-                # Controller button (left column)
+                # Control function/display name (left column)
+                # Use mapped display name if available, otherwise format the control name
+                display_name = display_name_map.get(control['name'], self.format_control_name(control['name']))
+                
                 button_label = ctk.CTkLabel(
                     row_frame,
                     text=display_name,
@@ -5200,7 +5350,7 @@ controller xbox t		= """
                 # Game action (middle column)
                 action_label = ctk.CTkLabel(
                     row_frame,
-                    text=action,
+                    text=control['action'],
                     font=("Arial", 12, "bold"),
                     text_color=self.theme_colors["primary"],
                     anchor="w"
@@ -5208,18 +5358,53 @@ controller xbox t		= """
                 action_label.grid(row=0, column=1, padx=5, pady=10, sticky="w")
                 
                 # Source (right column)
-                source_color = self.theme_colors["success"] if "ROM CFG" in source else \
-                            self.theme_colors["primary"] if "Default CFG" in source else \
+                source_color = self.theme_colors["success"] if "ROM CFG" in control['source'] else \
+                            self.theme_colors["primary"] if "Default CFG" in control['source'] else \
                             "#888888"  # For Game Data
                             
                 source_label = ctk.CTkLabel(
                     row_frame,
-                    text=source,
+                    text=control['source'],
                     font=("Arial", 11),
                     text_color=source_color,
                     anchor="w"
                 )
                 source_label.grid(row=0, column=2, padx=5, pady=10, sticky="w")
+                
+                # Make sure this control has the proper display style and metadata
+                # This is critical for proper preview display
+                for player in game_data.get('players', []):
+                    if player['number'] != 1:
+                        continue
+                        
+                    for label in player.get('labels', []):
+                        if label['name'] == control['name']:
+                            # Set functional category
+                            label['func_category'] = category
+                            
+                            # Set appropriate display style based on function
+                            if category == 'move_horizontal':
+                                label['display_style'] = 'horizontal'
+                            elif category == 'move_vertical':
+                                label['display_style'] = 'vertical'
+                            elif category == 'action_primary':
+                                label['display_style'] = 'primary_button'
+                            elif category == 'action_secondary':
+                                label['display_style'] = 'secondary_button'
+                            elif category == 'system_control':
+                                label['display_style'] = 'system_button'
+                            else:
+                                label['display_style'] = 'standard'
+                            
+                            # If using custom mapping, ensure it's properly tagged
+                            if control['is_custom']:
+                                label['mapping'] = control['mapping']
+                                label['mapping_source'] = control['source']
+                                label['is_custom'] = True
+                                label['cfg_mapping'] = True
+                                
+                            # Set the display name to maintain consistency in preview
+                            label['display_name'] = display_name
                 
                 control_row += 1
         
@@ -5237,7 +5422,7 @@ controller xbox t		= """
         
         row += 1
 
-        # Display raw custom config if it exists
+        # Display raw custom config if it exists (unchanged)
         if romname in self.custom_configs:
             config_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
             config_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
@@ -5291,6 +5476,41 @@ controller xbox t		= """
             
             config_preview.insert("1.0", preview_text)
             config_preview.configure(state="disabled")  # Make read-only
+        
+        # Update and save cache for this ROM
+        try:
+            if hasattr(self, 'cache_dir') and self.cache_dir:
+                # Create cache directory if it doesn't exist
+                os.makedirs(self.cache_dir, exist_ok=True)
+                
+                # IMPORTANT: If in XInput Only mode, filter game_data before caching
+                if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+                    # Filter the game data to only include XInput controls
+                    cache_game_data = self.filter_xinput_controls(game_data)
+                    
+                    # Save the filtered data to cache
+                    cache_path = os.path.join(self.cache_dir, f"{romname}_cache.json")
+                    with open(cache_path, 'w', encoding='utf-8') as f:
+                        json.dump(cache_game_data, f, indent=2)
+                        
+                    # Also update in-memory cache
+                    if hasattr(self, 'rom_data_cache'):
+                        self.rom_data_cache[romname] = cache_game_data
+                        
+                    print(f"Updated cache for {romname} with XInput-only controls")
+                else:
+                    # Standard caching for non-XInput-only mode
+                    cache_path = os.path.join(self.cache_dir, f"{romname}_cache.json")
+                    with open(cache_path, 'w', encoding='utf-8') as f:
+                        json.dump(game_data, f, indent=2)
+                        
+                    # Also update in-memory cache
+                    if hasattr(self, 'rom_data_cache'):
+                        self.rom_data_cache[romname] = game_data
+                        
+                    print(f"Updated cache for {romname} with full control set")
+        except Exception as e:
+            print(f"Warning: Could not update cache: {e}")
         
         return row + 1
 
