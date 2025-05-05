@@ -2723,7 +2723,7 @@ controller xbox t		= """
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
     
     def show_control_editor(self, rom_name, game_name=None):
-        """Show enhanced editor for a game's controls"""
+        """Show enhanced editor for a game's controls with support for specialized MAME controls"""
         game_data = self.get_game_data(rom_name) or {}
         game_name = game_name or game_data.get('gamename', rom_name)
         
@@ -2907,6 +2907,15 @@ controller xbox t		= """
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
         
+        # Get existing controls from game data to ensure we show ALL controls
+        existing_controls = []
+        
+        if game_data and 'players' in game_data:
+            for player in game_data.get('players', []):
+                for label in player.get('labels', []):
+                    # Add all controls to our list including specialized ones like P1_DIAL
+                    existing_controls.append((label['name'], label['value']))
+        
         # Define standard controller buttons
         standard_controls = [
             ('P1_BUTTON1', 'A Button'),
@@ -2924,6 +2933,31 @@ controller xbox t		= """
             ('P1_JOYSTICK_LEFT', 'Left Stick Left'),
             ('P1_JOYSTICK_RIGHT', 'Left Stick Right')
         ]
+        
+        # Add specialized MAME controls that aren't part of standard gamepad
+        specialized_controls = [
+            ('P1_DIAL', 'Rotary Dial'),
+            ('P1_PADDLE', 'Paddle Controller'),
+            ('P1_TRACKBALL_X', 'Trackball X-Axis'),
+            ('P1_TRACKBALL_Y', 'Trackball Y-Axis'),
+            ('P1_MOUSE_X', 'Mouse X-Axis'),
+            ('P1_MOUSE_Y', 'Mouse Y-Axis'),
+            ('P1_LIGHTGUN_X', 'Light Gun X-Axis'),
+            ('P1_LIGHTGUN_Y', 'Light Gun Y-Axis'),
+            ('P1_AD_STICK_X', 'Analog Stick X-Axis'),
+            ('P1_AD_STICK_Y', 'Analog Stick Y-Axis'),
+            ('P1_AD_STICK_Z', 'Analog Stick Z-Axis'),
+            ('P1_PEDAL', 'Pedal Input'),
+            ('P1_PEDAL2', 'Second Pedal Input')
+        ]
+        
+        # Merge standard and specialized controls
+        all_controls = standard_controls + specialized_controls
+        
+        # Add any existing controls that aren't in our predefined lists
+        for control_name, action in existing_controls:
+            if not any(control[0] == control_name for control in all_controls):
+                all_controls.append((control_name, action))
         
         # Create a dictionary to store all the entry fields
         control_entries = {}
@@ -2972,6 +3006,17 @@ controller xbox t		= """
         # Row alternating colors
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
+        # Title for standard controls
+        standard_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+        standard_header.pack(fill="x", pady=(0, 10))
+        
+        ctk.CTkLabel(
+            standard_header,
+            text="Standard Controls",
+            font=("Arial", 13, "bold"),
+            text_color="#ffffff"
+        ).pack(padx=10, pady=5)
+        
         # Create entry fields for each standard control
         for i, (control_name, display_name) in enumerate(standard_controls):
             # Create a frame for each control with alternating background
@@ -3009,6 +3054,107 @@ controller xbox t		= """
             
             # Store the entry widget in our dictionary
             control_entries[control_name] = action_entry
+        
+        # Add a header for specialized controls
+        specialized_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+        specialized_header.pack(fill="x", pady=(20, 10))
+        
+        ctk.CTkLabel(
+            specialized_header,
+            text="Specialized MAME Controls",
+            font=("Arial", 13, "bold"),
+            text_color="#ffffff"
+        ).pack(padx=10, pady=5)
+        
+        # Create entry fields for specialized controls
+        for i, (control_name, display_name) in enumerate(specialized_controls):
+            # Create a frame for each control with alternating background
+            control_frame = ctk.CTkFrame(
+                controls_container, 
+                fg_color=alt_colors[i % 2],
+                corner_radius=4
+            )
+            control_frame.pack(fill="x", pady=2)
+            
+            # Configure columns
+            control_frame.columnconfigure(0, weight=1)  # Control name
+            control_frame.columnconfigure(1, weight=1)  # Action entry
+            
+            # Control name label
+            ctk.CTkLabel(
+                control_frame, 
+                text=display_name, 
+                font=("Arial", 13),
+                anchor="w",
+                width=200
+            ).grid(row=0, column=0, padx=10, pady=8, sticky="w")
+            
+            # Get existing action if available
+            existing_action = get_existing_action(control_name)
+            
+            # Create entry for action
+            action_entry = ctk.CTkEntry(
+                control_frame, 
+                width=400,
+                fg_color=self.theme_colors["background"]
+            )
+            action_entry.insert(0, existing_action)
+            action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+            
+            # Store the entry widget in our dictionary
+            control_entries[control_name] = action_entry
+        
+        # Add any additional controls found in game data but not in our predefined lists
+        additional_controls = []
+        for control_name, action in existing_controls:
+            if not any(control[0] == control_name for control in standard_controls + specialized_controls):
+                additional_controls.append((control_name, action))
+        
+        if additional_controls:
+            # Add a header for additional controls
+            additional_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+            additional_header.pack(fill="x", pady=(20, 10))
+            
+            ctk.CTkLabel(
+                additional_header,
+                text="Additional Controls",
+                font=("Arial", 13, "bold"),
+                text_color="#ffffff"
+            ).pack(padx=10, pady=5)
+            
+            # Create entry fields for additional controls
+            for i, (control_name, action) in enumerate(additional_controls):
+                control_frame = ctk.CTkFrame(
+                    controls_container, 
+                    fg_color=alt_colors[i % 2],
+                    corner_radius=4
+                )
+                control_frame.pack(fill="x", pady=2)
+                
+                # Configure columns
+                control_frame.columnconfigure(0, weight=1)  # Control name
+                control_frame.columnconfigure(1, weight=1)  # Action entry
+                
+                # Control name label
+                ctk.CTkLabel(
+                    control_frame, 
+                    text=control_name, 
+                    font=("Arial", 13),
+                    anchor="w",
+                    width=200
+                ).grid(row=0, column=0, padx=10, pady=8, sticky="w")
+                
+                # Create entry for action
+                action_entry = ctk.CTkEntry(
+                    control_frame, 
+                    width=400,
+                    fg_color=self.theme_colors["background"]
+                )
+                action_entry.insert(0, action)
+                action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+                
+                # Store the entry widget in our dictionary
+                control_entries[control_name] = action_entry
         
         # Add a section for custom controls with enhanced styling
         custom_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
