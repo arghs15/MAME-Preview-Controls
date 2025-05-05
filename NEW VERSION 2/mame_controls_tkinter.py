@@ -6214,7 +6214,7 @@ controller xbox t		= """
             return False
     
     def preview_export_image(self, rom_name, game_data, output_dir, format="png"):
-        """Export a preview image for a ROM with optimized headless rendering for speed"""
+        """Export a preview image for a ROM with proper handling of bezel and text layering"""
         try:
             print(f"Exporting {rom_name} to {output_dir}")
             
@@ -6239,6 +6239,11 @@ controller xbox t		= """
                 # Update game_data with custom mappings
                 self.update_game_data_with_custom_mappings(game_data, cfg_controls)
                 print(f"Applied custom mapping from ROM CFG for {rom_name}")
+            
+            # NEW CODE: Filter out non-XInput controls if in XInput Only mode
+            if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+                game_data = self.filter_xinput_controls(game_data)
+                print(f"Applied XInput filter for preview")
             
             # Create PreviewWindow directly
             from PyQt5.QtWidgets import QApplication, QMessageBox
@@ -6278,11 +6283,21 @@ controller xbox t		= """
             )
             
             # IMPORTANT: Set window to never be visible
-            preview.setVisible(False)
+            preview.setAttribute(Qt.WA_ShowWithoutActivating, True)
+            preview.setAttribute(Qt.WA_DontShowOnScreen, True)
+            preview.show()  # Must still call show() for proper rendering
             
             # Block all window activation and focus events
             preview.setAttribute(Qt.WA_ShowWithoutActivating, True)
             preview.setAttribute(Qt.WA_DontShowOnScreen, True)
+            
+            # Patch messagebox functions
+            preview.messagebox = DummyMessageBox
+            original_qmessagebox = QMessageBox.information
+            QMessageBox.information = lambda *args, **kwargs: QMessageBox.Ok
+            
+            # Process events to ensure UI is initialized
+            app.processEvents()
             
             # Load bezel settings from file
             try:
@@ -6302,23 +6317,45 @@ controller xbox t		= """
                         
                     # Explicitly set settings values
                     preview.bezel_visible = bezel_settings.get("bezel_visible", True)
-                    preview.joystick_visible = bezel_settings.get("joystick_visible", True)
+                    preview.logo_visible = bezel_settings.get("logo_visible", True)
                     
-                    # Force bezel if it should be visible
-                    if preview.bezel_visible and preview.has_bezel:
-                        preview.show_bezel_with_background()
-                        
-                    # Apply joystick visibility
-                    preview.apply_joystick_visibility()
+                    # Update UI based on settings
+                    # Force bezel visibility based on settings
+                    if preview.bezel_visible and hasattr(preview, 'has_bezel') and preview.has_bezel:
+                        # First show the bezel
+                        if hasattr(preview, 'show_bezel_with_background'):
+                            preview.show_bezel_with_background()
+                            
+                        # Force bezel to top of z-order
+                        if hasattr(preview, 'bezel_label') and preview.bezel_label:
+                            preview.bezel_label.raise_()
+                    else:
+                        # Explicitly hide bezel
+                        if hasattr(preview, 'hide_bezel'):
+                            preview.hide_bezel()
+                        elif hasattr(preview, 'bezel_label') and preview.bezel_label:
+                            preview.bezel_label.setVisible(False)
+                    
+                    # Handle logo visibility
+                    if hasattr(preview, 'logo_label') and preview.logo_label:
+                        preview.logo_label.setVisible(preview.logo_visible)
                 else:
                     print(f"No bezel settings found, using defaults")
             except Exception as e:
                 print(f"Error loading bezel settings: {e}")
             
-            # Patch messagebox functions
-            preview.messagebox = DummyMessageBox
-            original_qmessagebox = QMessageBox.information
-            QMessageBox.information = lambda *args, **kwargs: QMessageBox.Ok
+            # CRITICAL: Ensure controls are above bezel
+            if hasattr(preview, 'raise_controls_above_bezel'):
+                preview.raise_controls_above_bezel()
+            else:
+                # Manual raising of controls if method doesn't exist
+                if hasattr(preview, 'control_labels'):
+                    for control_name, control_data in preview.control_labels.items():
+                        if 'label' in control_data and control_data['label']:
+                            control_data['label'].raise_()
+            
+            # Process events to ensure UI updates
+            app.processEvents()
             
             # Use direct image generation instead of showing window first
             success = False
@@ -6329,34 +6366,35 @@ controller xbox t		= """
                 # Process pending events to ensure components are ready
                 app.processEvents()
                 
-                # Create the image
-                image = QImage(
-                    preview.canvas.width(),
-                    preview.canvas.height(),
-                    QImage.Format_ARGB32
-                )
-                image.fill(Qt.transparent)
-                
-                # Create painter for the image
-                painter = QPainter(image)
-                painter.setRenderHint(QPainter.Antialiasing)
-                painter.setRenderHint(QPainter.TextAntialiasing)
-                painter.setRenderHint(QPainter.SmoothPixmapTransform)
-                
-                # Render the canvas and all its children directly to the image
-                preview.canvas.render(painter)
-                
-                # End painting
-                painter.end()
-                
-                # Save the image
-                if image.save(output_path, format.upper()):
-                    print(f"Exported {rom_name} successfully")
-                    success = True
+                if hasattr(preview, 'export_image_headless'):
+                    result = preview.export_image_headless(output_path, format)
+                    success = result and os.path.exists(output_path)
                 else:
-                    print(f"Failed to save image for {rom_name}")
-                    success = False
+                    # Fallback to standard rendering method
+                    # Create the image
+                    image = QImage(
+                        preview.canvas.width(),
+                        preview.canvas.height(),
+                        QImage.Format_ARGB32
+                    )
+                    image.fill(Qt.transparent)
                     
+                    # Create painter for the image
+                    painter = QPainter(image)
+                    painter.setRenderHint(QPainter.Antialiasing)
+                    painter.setRenderHint(QPainter.TextAntialiasing)
+                    painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                    
+                    # Render the canvas and all its children directly to the image
+                    preview.canvas.render(painter)
+                    
+                    # End painting
+                    painter.end()
+                    
+                    # Save the image
+                    success = image.save(output_path, format.upper())
+                    
+                print(f"Exported {rom_name} with result: {success}")
             finally:
                 # Restore QMessageBox
                 QMessageBox.information = original_qmessagebox
@@ -6364,7 +6402,7 @@ controller xbox t		= """
                 # Close and destroy the window immediately
                 preview.close()
                 preview.deleteLater()
-            
+                
             return success
         except Exception as e:
             print(f"Error during export of {rom_name}: {e}")
