@@ -6411,8 +6411,7 @@ controller xbox t		= """
             return False
     
     def batch_export_images(self):
-        """Enhanced batch export dialog for ROM preview images"""
-        # Create dialog with improved styling
+        """Enhanced batch export dialog for ROM preview images with fixed directory selection"""
         # Create dialog with improved styling 
         dialog = ctk.CTkToplevel(self)
         dialog.title("Batch Export Preview Images")
@@ -6534,37 +6533,30 @@ controller xbox t		= """
             anchor="w"
         ).pack(side="left", padx=(0, 10))
         
-        # Default to preview/images directory
+        # Default to preview/screenshots directory
         images_dir = os.path.join(self.preview_dir, "screenshots")
         if not os.path.exists(images_dir):
             os.makedirs(images_dir, exist_ok=True)
-        output_dir_var = ctk.StringVar(value=images_dir)
         
+        # Display the fixed output directory
+        output_dir_var = ctk.StringVar(value=images_dir)
         dir_entry = ctk.CTkEntry(
             output_frame,
             textvariable=output_dir_var,
             width=400,
-            fg_color=self.theme_colors["background"]
+            fg_color=self.theme_colors["background"],
+            state="readonly"  # Make it read-only
         )
         dir_entry.pack(side="left", padx=0, fill="x", expand=True)
         
-        def browse_directory():
-            directory = tk.filedialog.askdirectory(
-                initialdir=output_dir_var.get(),
-                title="Select Output Directory"
-            )
-            if directory:
-                output_dir_var.set(directory)
-        
-        browse_button = ctk.CTkButton(
+        # Add a label to inform about the fixed directory
+        dir_info_label = ctk.CTkLabel(
             output_frame,
-            text="Browse...",
-            width=80,
-            command=browse_directory,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"]
+            text="Images will be saved to screenshots folder",
+            font=("Arial", 11),
+            text_color=self.theme_colors["text_dimmed"]
         )
-        browse_button.pack(side="left", padx=(10, 0))
+        dir_info_label.pack(side="right", padx=(10, 0))
         
         # ROM selection card
         selection_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
