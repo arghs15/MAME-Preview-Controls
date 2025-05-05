@@ -1337,21 +1337,18 @@ class MAMEControlConfig(QMainWindow):
         if os.path.exists(cache_file):
             try:
                 print(f"Found cache file: {cache_file}")
-                cache_age = time.time() - os.path.getmtime(cache_file)
-                print(f"Cache age: {cache_age:.1f} seconds")
                 
-                # Only use cache if it's recent (less than 1 hour old)
-                if cache_age < 3600:
-                    game_data = self.load_game_data_from_cache(rom_name)
-                    
-                    if game_data:
-                        print(f"Using cached game data for {rom_name}")
-                        # Store in memory cache as well
-                        self.rom_data_cache[rom_name] = game_data
-                        data_load_time = time.time() - start_time
-                        print(f"Game data loaded from cache in {data_load_time:.3f} seconds")
-                    else:
-                        print("Warning: Cache file exists but contains no valid data")
+                # Load from cache without checking age
+                game_data = self.load_game_data_from_cache(rom_name)
+                
+                if game_data:
+                    print(f"Using cached game data for {rom_name}")
+                    # Store in memory cache as well
+                    self.rom_data_cache[rom_name] = game_data
+                    data_load_time = time.time() - start_time
+                    print(f"Game data loaded from cache in {data_load_time:.3f} seconds")
+                else:
+                    print("Warning: Cache file exists but contains no valid data")
             except Exception as e:
                 print(f"Error loading cache: {e}")
                 game_data = None

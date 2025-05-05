@@ -514,7 +514,7 @@ class MAMEControlConfig(ctk.CTk):
     def load_cache_settings(self):
         """Load cache management settings from JSON file"""
         default_settings = {
-            "max_age_days": 7,
+            "max_age_days": 9999,
             "max_files": 100,
             "auto_cleanup_enabled": True
         }
