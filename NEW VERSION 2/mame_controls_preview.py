@@ -667,14 +667,13 @@ class PreviewWindow(QMainWindow):
         print(f"Snapping {'enabled' if self.snapping_enabled else 'disabled'}")
 
     def save_snapping_settings(self):
-        """Save snapping settings to file"""
+        """Save snapping settings to file in settings directory"""
         try:
             import os
             import json
             
-            # Create preview directory if it doesn't exist
-            preview_dir = os.path.join(self.mame_dir, "preview")
-            os.makedirs(preview_dir, exist_ok=True)
+            # Create settings directory if it doesn't exist
+            os.makedirs(self.settings_dir, exist_ok=True)
             
             # Create settings object with default values for missing attributes
             settings = {
@@ -690,12 +689,12 @@ class PreviewWindow(QMainWindow):
             for attr, value in settings.items():
                 setattr(self, attr, value)
             
-            # Save to global settings file
-            settings_file = os.path.join(preview_dir, "snapping_settings.json")
+            # Save to settings file in settings directory (not preview dir)
+            settings_file = os.path.join(self.settings_dir, "snapping_settings.json")
             with open(settings_file, 'w') as f:
                 json.dump(settings, f)
             
-            print(f"Saved snapping settings: {settings}")
+            print(f"Saved snapping settings to {settings_file}: {settings}")
             return True
         except Exception as e:
             print(f"Error saving snapping settings: {e}")
@@ -703,17 +702,17 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             return False
 
+    # 2. Fix load_snapping_settings method to check settings_dir first, with migration from preview_dir
     def load_snapping_settings(self):
-        """Load snapping settings from file"""
+        """Load snapping settings from file with migration support"""
         try:
             import os
             import json
             
-            # Path to settings file
-            preview_dir = os.path.join(self.mame_dir, "preview")
-            settings_file = os.path.join(preview_dir, "snapping_settings.json")
+            # Path to settings file in settings directory
+            settings_file = os.path.join(self.settings_dir, "snapping_settings.json")
             
-            # Check if file exists
+            # Check if file exists in settings directory
             if os.path.exists(settings_file):
                 with open(settings_file, 'r') as f:
                     settings = json.load(f)
@@ -728,6 +727,27 @@ class PreviewWindow(QMainWindow):
                 
                 print(f"Loaded snapping settings from {settings_file}")
                 return True
+            else:
+                # Check for legacy file in preview directory
+                legacy_file = os.path.join(self.preview_dir, "snapping_settings.json")
+                if os.path.exists(legacy_file):
+                    # Load from legacy location
+                    with open(legacy_file, 'r') as f:
+                        settings = json.load(f)
+                    
+                    # Apply settings
+                    self.snapping_enabled = settings.get("snapping_enabled", True)
+                    self.snap_distance = settings.get("snap_distance", 15)
+                    self.snap_to_grid = settings.get("snap_to_grid", True)
+                    self.snap_to_screen_center = settings.get("snap_to_screen_center", True)
+                    self.snap_to_controls = settings.get("snap_to_controls", True)
+                    self.snap_to_logo = settings.get("snap_to_logo", True)
+                    
+                    # Migrate settings to new location
+                    self.save_snapping_settings()
+                    
+                    print(f"Migrated snapping settings from {legacy_file} to {settings_file}")
+                    return True
         except Exception as e:
             print(f"Error loading snapping settings: {e}")
             import traceback
@@ -1092,6 +1112,7 @@ class PreviewWindow(QMainWindow):
                     pass  # Ignore errors if the guide is already deleted
             self.guide_labels = []
     
+    # 3. Fix toggle_button_prefixes method to save to settings directory
     def toggle_button_prefixes(self):
         """Toggle the visibility of button prefixes for all controls"""
         # Toggle the setting
@@ -1119,13 +1140,16 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'prefix_button'):
             self.prefix_button.setText("Hide Prefixes" if show_prefixes else "Show Prefixes")
         
-        # Save the updated setting to file
+        # Save the updated setting to file in settings directory
         try:
-            preview_dir = os.path.join(self.mame_dir, "preview")
-            os.makedirs(preview_dir, exist_ok=True)
+            import os
+            import json
+            
+            # Create settings directory if it doesn't exist
+            os.makedirs(self.settings_dir, exist_ok=True)
             
             # Try to load existing settings first
-            settings_file = os.path.join(preview_dir, "global_text_settings.json")
+            settings_file = os.path.join(self.settings_dir, "global_text_settings.json")
             current_settings = {}
             
             if os.path.exists(settings_file):
@@ -1142,7 +1166,7 @@ class PreviewWindow(QMainWindow):
             with open(settings_file, 'w') as f:
                 json.dump(current_settings, f)
             
-            print(f"Saved button prefix setting: {show_prefixes}")
+            print(f"Saved button prefix setting to {settings_file}: {show_prefixes}")
         except Exception as e:
             print(f"Error saving button prefix setting: {e}")
             import traceback
@@ -4356,8 +4380,9 @@ class PreviewWindow(QMainWindow):
             self.bg_pos = (x, y)
             self.bg_size = (pixmap.width(), pixmap.height())
     
+    # 4. Fix load_text_settings to check settings_dir first, then migrate from preview_dir
     def load_text_settings(self):
-        """Load text appearance settings from new settings directory"""
+        """Load text appearance settings from settings directory with migration support"""
         settings = {
             "font_family": "Arial",
             "font_size": 28,
@@ -4377,10 +4402,13 @@ class PreviewWindow(QMainWindow):
         }
         
         try:
-            # First try the new settings directory
+            import os
+            import json
+            
+            # First try the settings directory
             settings_file = os.path.join(self.settings_dir, "text_appearance_settings.json")
             
-            # Regular loading from new location
+            # Check if file exists in settings directory
             if os.path.exists(settings_file):
                 with open(settings_file, 'r') as f:
                     loaded_settings = json.load(f)
@@ -4389,7 +4417,23 @@ class PreviewWindow(QMainWindow):
                 # Debug gradient settings
                 prefix_gradient = settings.get("use_prefix_gradient", False)
                 action_gradient = settings.get("use_action_gradient", False)
+                print(f"Loaded text settings from {settings_file}")
                 print(f"Loaded gradient settings: prefix={prefix_gradient}, action={action_gradient}")
+            else:
+                # Check for legacy global_text_settings.json in preview directory
+                legacy_file = os.path.join(self.preview_dir, "global_text_settings.json")
+                if os.path.exists(legacy_file):
+                    # Load from legacy location
+                    with open(legacy_file, 'r') as f:
+                        loaded_settings = json.load(f)
+                        settings.update(loaded_settings)
+                    
+                    # Migrate settings to new location
+                    os.makedirs(self.settings_dir, exist_ok=True)
+                    with open(settings_file, 'w') as f:
+                        json.dump(settings, f)
+                    
+                    print(f"Migrated text settings from {legacy_file} to {settings_file}")
         except Exception as e:
             print(f"Error loading text appearance settings: {e}")
             import traceback

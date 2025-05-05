@@ -897,6 +897,7 @@ class MAMEControlConfig(ctk.CTk):
         # Compare timestamps - only rebuild if gamedata is newer than database
         return gamedata_mtime > db_mtime
 
+    # Add this to the on_closing method in the MAMEControlConfig class
     def on_closing(self):
         """Handle proper cleanup when closing the application"""
         print("Application closing, performing cleanup...")
@@ -912,6 +913,20 @@ class MAMEControlConfig(ctk.CTk):
                 try:
                     attr.cancel()
                     print(f"Canceled timer: {attr_name}")
+                except:
+                    pass
+        
+        # Stop all worker threads - particularly important for Qt applications
+        import threading
+        running_threads = threading.enumerate()
+        main_thread = threading.main_thread()
+        
+        for thread in running_threads:
+            # Don't try to stop the main thread
+            if thread is not main_thread and thread.is_alive():
+                try:
+                    thread.daemon = True  # Make sure thread won't prevent exit
+                    print(f"Setting thread as daemon: {thread.name}")
                 except:
                     pass
         
@@ -1665,6 +1680,15 @@ class MAMEControlConfig(ctk.CTk):
     # 5. Handle initial window size in a post-initialization method
     def after_init_setup(self):
         """Perform setup tasks after window initialization"""
+        # Ensure settings are properly loaded
+        self.load_settings()
+        
+        # Update toggle states based on loaded settings
+        if hasattr(self, 'xinput_only_toggle'):
+            if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+                self.xinput_only_toggle.select()
+            else:
+                self.xinput_only_toggle.deselect()
         # Use after() to ensure window is fully created
         self.after(100, self._apply_initial_panel_sizes)
 
@@ -4386,16 +4410,31 @@ controller xbox t		= """
         """Save current settings to the standard settings file"""
         settings = {
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
-            "visible_control_types": self.visible_control_types,
+            "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
             "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
-            "show_button_names": getattr(self, 'show_button_names', True)
+            "show_button_names": getattr(self, 'show_button_names', True),
+            "use_xinput": getattr(self, 'use_xinput', True),
+            "xinput_only_mode": getattr(self, 'xinput_only_mode', True)  # Change to True
         }
         
+        print(f"Debug - saving settings: {settings}")  # Add this debug line
+        
         try:
-            with open(self.settings_path, 'w') as f:
-                json.dump(settings, f)
+            if hasattr(self, 'settings_path'):
+                # Ensure settings directory exists
+                os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
+                
+                # Save settings
+                with open(self.settings_path, 'w') as f:
+                    json.dump(settings, f, indent=2)
+                print(f"Settings saved to: {self.settings_path}")
+                return True
+            else:
+                print("Error: settings_path not available")
+                return False
         except Exception as e:
             print(f"Error saving settings: {e}")
+            return False
 
     # These helper methods ensure the toggle_xinput and toggle_hide_preview_buttons correctly update UI components
     def load_settings(self):
@@ -4406,7 +4445,7 @@ controller xbox t		= """
         self.hide_preview_buttons = False
         self.show_button_names = True
         self.use_xinput = True
-        self.xinput_only_mode = False  # Default to showing all controls
+        self.xinput_only_mode = True  # Default to showing all controls
         
         # Load custom settings if available
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
@@ -4489,33 +4528,6 @@ controller xbox t		= """
             'show_button_names': self.show_button_names,
             'use_xinput': self.use_xinput
         }
-
-    def save_settings(self):
-        """Save current settings to the standard settings file"""
-        settings = {
-            "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
-            "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
-            "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
-            "show_button_names": getattr(self, 'show_button_names', True),
-            "use_xinput": getattr(self, 'use_xinput', True)  # Save XInput toggle state
-        }
-        
-        try:
-            if hasattr(self, 'settings_path'):
-                # Ensure settings directory exists
-                os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
-                
-                # Save settings
-                with open(self.settings_path, 'w') as f:
-                    json.dump(settings, f, indent=2)
-                print(f"Settings saved to: {self.settings_path}")
-                return True
-            else:
-                print("Error: settings_path not available")
-                return False
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-            return False
 
     def save_controls(self, rom_name, dialog, description_var, playercount_var, buttons_var, sticks_var, alternating_var, control_entries, custom_control_rows):
         """Save controls directly to gamedata.json with support for adding missing games"""
@@ -6954,9 +6966,26 @@ controller xbox t		= """
             import threading
             import time
             
-            process_thread = threading.Thread(target=process_roms)
-            process_thread.daemon = True
+            # Create the thread with a name for better identification
+            process_thread = threading.Thread(
+                target=process_roms,
+                name="BatchExportThread",
+                daemon=True  # Make thread a daemon so it won't prevent application exit
+            )
             process_thread.start()
+            
+            # Add cleanup for when dialog is closed
+            def on_dialog_close():
+                # Signal thread to stop if it's still running
+                cancel_processing[0] = True
+                # Wait briefly for thread to respond to cancel
+                dialog.after(100, dialog.destroy)
+            
+            # Use this instead of direct destroy
+            cancel_button.configure(command=on_dialog_close)
+            
+            # Proper protocol handler for dialog close
+            dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
         
         # IMPROVED: Better styled buttons - Start Export button
         start_button = ctk.CTkButton(
