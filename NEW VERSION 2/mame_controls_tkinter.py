@@ -6535,7 +6535,9 @@ controller xbox t		= """
         ).pack(side="left", padx=(0, 10))
         
         # Default to preview/images directory
-        images_dir = os.path.join(self.preview_dir, "images")
+        images_dir = os.path.join(self.preview_dir, "screenshots")
+        if not os.path.exists(images_dir):
+            os.makedirs(images_dir, exist_ok=True)
         output_dir_var = ctk.StringVar(value=images_dir)
         
         dir_entry = ctk.CTkEntry(

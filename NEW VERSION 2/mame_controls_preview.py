@@ -3444,7 +3444,7 @@ class PreviewWindow(QMainWindow):
         """Enhanced save_image method that preserves transparency"""
         try:
             # Create the images directory if it doesn't exist
-            images_dir = os.path.join(self.preview_dir, "images")
+            images_dir = os.path.join(self.preview_dir, "screenshots")
             os.makedirs(images_dir, exist_ok=True)
             
             # Define the output path
