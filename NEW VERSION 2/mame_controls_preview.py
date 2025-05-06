@@ -1800,10 +1800,17 @@ class PreviewWindow(QMainWindow):
         self.text_settings_button.setStyleSheet(button_style)
         self.top_row.addWidget(self.text_settings_button)
         
-        self.xinput_controls_button = QPushButton("Show All XInput")
+        '''self.xinput_controls_button = QPushButton("Show All XInput")
         self.xinput_controls_button.clicked.connect(self.toggle_xinput_controls)
         self.xinput_controls_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.xinput_controls_button)
+        self.top_row.addWidget(self.xinput_controls_button)'''
+
+        # Create specialized controls button with clearer labeling
+        self.controls_mode_button = QPushButton("XInput Controls")
+        self.controls_mode_button.clicked.connect(self.toggle_controls_view)
+        self.controls_mode_button.setStyleSheet(button_style)
+        self.controls_mode_button.setToolTip("Toggle between Normal, XInput, and Specialized controls")
+        self.top_row.addWidget(self.controls_mode_button)
 
         # Second row buttons
         self.toggle_texts_button = QPushButton("Hide Texts")
@@ -1811,7 +1818,8 @@ class PreviewWindow(QMainWindow):
         self.toggle_texts_button.setStyleSheet(button_style)
         self.bottom_row.addWidget(self.toggle_texts_button)
         
-        self.joystick_button = QPushButton("Joystick")
+        # Create the joystick button with better initial text
+        self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
         self.joystick_button.clicked.connect(self.toggle_joystick_controls)
         self.joystick_button.setStyleSheet(button_style)
         self.bottom_row.addWidget(self.joystick_button)
@@ -2686,7 +2694,6 @@ class PreviewWindow(QMainWindow):
         readable = control_name.replace('P1_', '').replace('_', ' ').title()
         return readable
     
-    # 3. Add toggle method to switch between specialized and normal controls
     def toggle_controls_view(self):
         """Toggle between normal game controls, XInput controls, and specialized controls"""
         # Check what's currently showing
@@ -2698,11 +2705,9 @@ class PreviewWindow(QMainWindow):
             self.showing_all_xinput_controls = False
             self.show_specialized_controls()
             
-            # Update button text on both buttons
-            if hasattr(self, 'xinput_controls_button'):
-                self.xinput_controls_button.setText("Standard XInput")
-            if hasattr(self, 'specialized_controls_button'):
-                self.specialized_controls_button.setText("Normal Controls")
+            # Update button text
+            if hasattr(self, 'controls_mode_button'):
+                self.controls_mode_button.setText("Normal Controls")
                 
         elif showing_specialized:
             # Switch back to normal game controls
@@ -2727,72 +2732,18 @@ class PreviewWindow(QMainWindow):
             QTimer.singleShot(100, self.apply_text_settings)
             QTimer.singleShot(200, self.force_resize_all_labels)
             
-            # Update button texts
-            if hasattr(self, 'xinput_controls_button'):
-                self.xinput_controls_button.setText("Standard XInput")
-            if hasattr(self, 'specialized_controls_button'):
-                self.specialized_controls_button.setText("Specialized Controls")
+            # Update button text
+            if hasattr(self, 'controls_mode_button'):
+                self.controls_mode_button.setText("XInput Controls")
                 
         else:
-            # Switch to XInput controls view
+            # If neither specialized nor xinput is showing, we must be in normal mode
+            # so switch to XInput controls view
             self.show_all_xinput_controls()
             
-            # Update button texts
-            if hasattr(self, 'xinput_controls_button'):
-                self.xinput_controls_button.setText("Normal Controls")
-            if hasattr(self, 'specialized_controls_button'):
-                self.specialized_controls_button.setText("Specialized Controls")
-
-    # 4. Add a method to add the specialized controls button to the button frame
-    def add_specialized_controls_button(self):
-        """Add a button for specialized MAME controls to the floating control panel"""
-        # Only add if we have a bottom row and don't already have the button
-        if hasattr(self, 'bottom_row') and not hasattr(self, 'specialized_controls_button'):
-            from PyQt5.QtWidgets import QPushButton
-            
-            # Use the same button style as other buttons for consistency
-            button_style = """
-                QPushButton {
-                    background-color: #404050;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 6px 10px;
-                    font-weight: bold;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    font-size: 12px;
-                    min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #555565;
-                }
-                QPushButton:pressed {
-                    background-color: #303040;
-                }
-            """
-            
-            # Create the button
-            self.specialized_controls_button = QPushButton("Specialized Controls")
-            
-            # FIX: Connect to toggle_controls_view instead of directly to show_specialized_controls
-            if hasattr(self, 'toggle_controls_view'):
-                self.specialized_controls_button.clicked.connect(self.toggle_controls_view)
-            else:
-                # Fallback to direct method if toggle_controls_view doesn't exist
-                self.specialized_controls_button.clicked.connect(self.show_specialized_controls)
-                
-            self.specialized_controls_button.setStyleSheet(button_style)
-            
-            # Add tooltip
-            self.specialized_controls_button.setToolTip("Show specialized MAME controls (dials, trackballs, etc.)")
-            
-            # Add to the bottom row
-            self.bottom_row.addWidget(self.specialized_controls_button)
-            
-            print("Added specialized controls button to UI")
-            return True
-        
-        return False
+            # Update button text
+            if hasattr(self, 'controls_mode_button'):
+                self.controls_mode_button.setText("Special Controls")
     
     # 2. Update the show_all_xinput_controls method to only show standard XInput controls
     def show_all_xinput_controls(self):
@@ -3096,8 +3047,8 @@ class PreviewWindow(QMainWindow):
                 
                 # Apply visibility based on joystick settings
                 is_visible = True
-                if "JOYSTICK" in control_name and hasattr(self, 'joystick_visible'):
-                    is_visible = self.joystick_visible
+                if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
+                    is_visible = self.texts_visible and self.joystick_visible
                 
                 label.setVisible(is_visible)
             
@@ -3179,12 +3130,14 @@ class PreviewWindow(QMainWindow):
                 self.specialized_controls_button.setText("Specialized Controls")
 
     # 15. Modify apply_joystick_visibility to not update shadows
+    # Enhanced apply_joystick_visibility to handle left joystick, right joystick, and D-pad
     def apply_joystick_visibility(self):
-        """Force apply joystick visibility settings to all controls"""
+        """Force apply joystick visibility settings to all directional controls (joysticks and D-pad)"""
         controls_updated = 0
         
         for control_name, control_data in self.control_labels.items():
-            if "JOYSTICK" in control_name:
+            # Check for all types of directional controls
+            if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
                 is_visible = self.texts_visible and self.joystick_visible
                 
                 # Only update if needed
@@ -3192,7 +3145,7 @@ class PreviewWindow(QMainWindow):
                     control_data['label'].setVisible(is_visible)
                     controls_updated += 1
         
-        print(f"Applied joystick visibility ({self.joystick_visible}) to {controls_updated} controls")
+        print(f"Applied directional controls visibility ({self.joystick_visible}) to {controls_updated} controls")
         return controls_updated
 
     # Call this at the end of PreviewWindow.__init__
@@ -5647,16 +5600,17 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
     
     # Replace your existing toggle_joystick_controls method with this one
+    # Update toggle_joystick_controls to use more appropriate button text
     def toggle_joystick_controls(self):
-        """Toggle visibility of joystick controls and save setting"""
+        """Toggle visibility of all directional controls (joysticks and D-pad) and save setting"""
         self.joystick_visible = not self.joystick_visible
         
-        # Update button text
-        self.joystick_button.setText("Show Joystick" if not self.joystick_visible else "Hide Joystick")
+        # Update button text to better reflect that it controls all directional inputs
+        self.joystick_button.setText("Show Directional" if not self.joystick_visible else "Hide Directional")
         
-        # Toggle visibility for joystick controls
+        # Toggle visibility for all directional controls
         for control_name, control_data in self.control_labels.items():
-            if "JOYSTICK" in control_name:
+            if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
                 is_visible = self.texts_visible and self.joystick_visible
                 control_data['label'].setVisible(is_visible)
         
@@ -5665,7 +5619,7 @@ class PreviewWindow(QMainWindow):
         
         # Save the joystick visibility setting (globally)
         self.save_bezel_settings(is_global=True)
-        print(f"Joystick visibility set to {self.joystick_visible} and saved to settings")
+        print(f"Directional controls visibility set to {self.joystick_visible} and saved to settings")
     
     # Update the reset_positions method to better handle saved positions
     def reset_positions(self):
