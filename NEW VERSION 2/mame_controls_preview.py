@@ -264,6 +264,7 @@ class PreviewWindow(QMainWindow):
             #QTimer.singleShot(200, self.load_and_register_fonts)
             QTimer.singleShot(300, self.force_resize_all_labels)
             QTimer.singleShot(1000, self.detect_screen_after_startup)
+            
             # Add this line at the end of __init__, just before self.setVisible(True)
             self.enhance_preview_window_init()
             
@@ -280,6 +281,46 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    # 1. Improve the maximum text width calculation in show_all_xinput_controls
+    def calculate_max_text_width(self, controls_dict, font, show_button_prefix=True, use_uppercase=False, extra_padding=40):
+        """Calculate the maximum text width needed for all controls with extra padding"""
+        from PyQt5.QtGui import QFontMetrics
+        
+        font_metrics = QFontMetrics(font)
+        max_width = 0
+        
+        # Check each control's text width
+        for control_name, action_text in controls_dict.items():
+            # Apply uppercase if needed
+            if use_uppercase:
+                action_text = action_text.upper()
+            
+            # Get button prefix
+            button_prefix = self.get_button_prefix(control_name)
+            
+            # Add prefix if enabled
+            display_text = action_text
+            if show_button_prefix and button_prefix:
+                display_text = f"{button_prefix}: {action_text}"
+            
+            # Calculate width
+            text_width = font_metrics.horizontalAdvance(display_text)
+            
+            # Keep track of max width
+            max_width = max(max_width, text_width)
+            
+            # Special handling for known problematic controls
+            if control_name == "P1_SELECT" or "Select" in action_text or len(display_text) > 15:
+                # Log the width for debugging
+                print(f"Width for '{display_text}': {text_width}px")
+        
+        # Add extra padding to ensure no truncation
+        # For controls with longer text, more padding is needed
+        result_width = max_width + extra_padding
+        
+        print(f"Max text width calculated: {max_width}px + {extra_padding}px padding = {result_width}px")
+        return result_width
+    
     # Add this method to the PreviewWindow class to map button prefixes to control names
     def get_control_name_from_prefix(self, prefix):
         """Map a button prefix back to a standard control name for position lookup"""
@@ -307,6 +348,302 @@ class PreviewWindow(QMainWindow):
         }
         
         return prefix_to_control.get(prefix, "")
+    
+    # 1. Add this method to PreviewWindow class to show only specialized MAME controls
+    def show_specialized_controls(self):
+        """Show specialized MAME controls like dials, trackballs, etc. for positioning"""
+        
+        # Specialized MAME controls that aren't part of standard XInput
+        specialized_controls = {
+            "P1_DIAL": "Rotary Dial",
+            "P1_DIAL_V": "Vertical Dial",
+            "P1_PADDLE": "Paddle Controller",
+            "P1_TRACKBALL_X": "Trackball X-Axis",
+            "P1_TRACKBALL_Y": "Trackball Y-Axis",
+            "P1_MOUSE_X": "Mouse X-Axis",
+            "P1_MOUSE_Y": "Mouse Y-Axis",
+            "P1_LIGHTGUN_X": "Light Gun X-Axis",
+            "P1_LIGHTGUN_Y": "Light Gun Y-Axis",
+            "P1_AD_STICK_X": "Analog Stick X-Axis",
+            "P1_AD_STICK_Y": "Analog Stick Y-Axis",
+            "P1_AD_STICK_Z": "Analog Stick Z-Axis",
+            "P1_PEDAL": "Pedal Input",
+            "P1_PEDAL2": "Second Pedal Input",
+            "P1_POSITIONAL": "Positional Control",
+            "P1_GAMBLE_HIGH": "Gamble High",
+            "P1_GAMBLE_LOW": "Gamble Low",
+        }
+        
+        try:
+            from PyQt5.QtGui import QFont, QFontInfo, QColor, QFontDatabase, QFontMetrics
+            from PyQt5.QtCore import QPoint, Qt, QTimer
+            from PyQt5.QtWidgets import QLabel, QSizePolicy
+            import os
+            
+            print("\n--- Showing specialized MAME controls ---")
+            
+            # CRITICAL FIX: First ensure fonts are properly loaded/registered
+            if not hasattr(self, 'current_font') or self.current_font is None:
+                print("Font not initialized - forcing font loading before showing controls")
+                self.load_and_register_fonts()
+            
+            # Save existing control positions
+            if not hasattr(self, 'original_controls_backup'):
+                self.original_controls_backup = {}
+                for control_name, control_data in self.control_labels.items():
+                    self.original_controls_backup[control_name] = {
+                        'action': control_data['action'],
+                        'position': control_data['label'].pos(),
+                        'original_pos': control_data.get('original_pos', QPoint(0, 0))
+                    }
+                print(f"Backed up {len(self.original_controls_backup)} original controls")
+            
+            # Clear ALL existing controls first
+            for control_name in list(self.control_labels.keys()):
+                # Remove the control from the canvas
+                if control_name in self.control_labels:
+                    if 'label' in self.control_labels[control_name]:
+                        self.control_labels[control_name]['label'].deleteLater()
+                    del self.control_labels[control_name]
+
+            # Clear collections
+            self.control_labels = {}
+            print("Cleared all existing controls")
+            
+            # Load saved positions
+            saved_positions = self.load_saved_positions()
+            
+            # Extract text settings and style information
+            font_family = self.text_settings.get("font_family", "Arial")
+            font_size = self.text_settings.get("font_size", 28)
+            bold_strength = self.text_settings.get("bold_strength", 2) > 0
+            use_uppercase = self.text_settings.get("use_uppercase", False)
+            show_button_prefix = self.text_settings.get("show_button_prefix", True)
+            y_offset = self.text_settings.get("y_offset", -40)
+            
+            # Get color and gradient settings
+            use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+            use_action_gradient = self.text_settings.get("use_action_gradient", False)
+            prefix_color = self.text_settings.get("prefix_color", "#FFC107")
+            action_color = self.text_settings.get("action_color", "#FFFFFF")
+            prefix_gradient_start = self.text_settings.get("prefix_gradient_start", "#FFC107")
+            prefix_gradient_end = self.text_settings.get("prefix_gradient_end", "#FF5722")
+            action_gradient_start = self.text_settings.get("action_gradient_start", "#2196F3")
+            action_gradient_end = self.text_settings.get("action_gradient_end", "#4CAF50")
+            
+            # Use existing font if available
+            if hasattr(self, 'current_font') and self.current_font:
+                font = QFont(self.current_font)  # Create a copy to avoid modifying the original
+                print(f"Using existing current_font for specialized controls: {font.family()}")
+            elif hasattr(self, 'initialized_font') and self.initialized_font:
+                font = QFont(self.initialized_font)
+                print(f"Using initialized_font for specialized controls: {font.family()}")
+            else:
+                # Create a standard font as a last resort
+                font = QFont(font_family, font_size)
+                font.setBold(bold_strength)
+                font.setStyleStrategy(QFont.PreferMatch)  # Force exact matching
+                print(f"Created new font for specialized controls: {font.family()} (fallback)")
+            
+                max_text_width = self.calculate_max_text_width(
+                specialized_controls,
+                font,
+                show_button_prefix=show_button_prefix,
+                use_uppercase=use_uppercase,
+                extra_padding=40  # Increased padding for safety
+            )
+            
+            # Calculate the maximum text width needed 
+            font_metrics = QFontMetrics(font)
+            max_text_width = 0
+            
+            # First determine the longest text to ensure consistent sizing
+            for control_name, action_text in specialized_controls.items():
+                button_prefix = self.get_button_prefix(control_name)
+                if use_uppercase:
+                    action_text = action_text.upper()
+                
+                display_text = action_text
+                if show_button_prefix and button_prefix:
+                    display_text = f"{button_prefix}: {action_text}"
+                
+                # Calculate width needed for this text
+                text_width = font_metrics.horizontalAdvance(display_text)
+                
+                # Add padding for safety
+                text_width += 20  # 10px padding on each side
+                
+                max_text_width = max(max_text_width, text_width)
+            
+            print(f"Calculated maximum text width: {max_text_width}px")
+            
+            # Default grid layout
+            grid_x, grid_y = 0, 0
+            
+            # Create all specialized controls with nice layout
+            for control_name, action_text in specialized_controls.items():
+                # Apply uppercase if needed
+                if use_uppercase:
+                    action_text = action_text.upper()
+                
+                # Get button prefix
+                button_prefix = self.get_button_prefix(control_name)
+                
+                # Add prefix if enabled
+                display_text = action_text
+                if show_button_prefix and button_prefix:
+                    display_text = f"{button_prefix}: {action_text}"
+                
+                # Choose the correct label class based on gradient settings
+                if use_prefix_gradient or use_action_gradient:
+                    # Use gradient-enabled label
+                    label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                    
+                    # Set gradient properties
+                    label.use_prefix_gradient = use_prefix_gradient
+                    label.use_action_gradient = use_action_gradient
+                    label.prefix_gradient_start = QColor(prefix_gradient_start)
+                    label.prefix_gradient_end = QColor(prefix_gradient_end)
+                    label.action_gradient_start = QColor(action_gradient_start)
+                    label.action_gradient_end = QColor(action_gradient_end)
+                else:
+                    # Use color-enabled label
+                    label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                
+                # Apply font directly
+                label.setFont(font)
+                
+                # Additional precautions to ensure proper font application
+                label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
+                
+                label.prefix = button_prefix
+                label.action = action_text
+                
+                # Remove size constraints and set expanding policy for proper sizing
+                label.setMinimumSize(0, 0)
+                label.setMaximumSize(16777215, 16777215)  # Qt's QWIDGETSIZE_MAX
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                
+                # Make sure we have proper settings in the label
+                label.settings = self.text_settings.copy()
+                
+                # First, let the label auto-size based on content
+                label.adjustSize()
+
+                # Then ensure it's at least as wide as our calculated max width
+                # This creates consistency and prevents long text from being cut off
+                label_width = max(label.width(), max_text_width)
+                label_height = label.height()
+
+                # Add extra width for "Select" button specifically
+                if "SELECT" in control_name or "Select" in action_text:
+                    label_width += 20  # Add extra width for Select button specifically
+                    
+                # Resize with the calculated width
+                label.resize(label_width, label_height)
+                
+                # Determine position
+                x, y = 0, 0
+                
+                # Check for saved position or use grid layout
+                if saved_positions and control_name in saved_positions:
+                    # Use the EXACT coordinates from global positions
+                    pos_x, pos_y = saved_positions[control_name]
+                    x, y = pos_x, pos_y + y_offset
+                    original_pos = QPoint(pos_x, pos_y)
+                    print(f"Using global position for {control_name}: ({pos_x}, {pos_y})")
+                
+                elif control_name in self.original_controls_backup:
+                    # Use backup position exactly as stored
+                    backup_pos = self.original_controls_backup[control_name]['position']
+                    x, y = backup_pos.x(), backup_pos.y()
+                    original_pos = self.original_controls_backup[control_name]['original_pos']
+                    print(f"Using backup position for {control_name}: ({x}, {y})")
+                
+                else:
+                    # Use a specialized grid layout for better organization
+                    row = grid_y
+                    col = grid_x
+                    
+                    # Group similar controls together
+                    if 'DIAL' in control_name or 'PADDLE' in control_name:
+                        # Rotary controls in first row
+                        row = 0
+                    elif 'TRACKBALL' in control_name or 'MOUSE' in control_name:
+                        # Tracking controls in second row
+                        row = 1
+                    elif 'LIGHTGUN' in control_name:
+                        # Light gun in third row
+                        row = 2
+                    elif 'AD_STICK' in control_name:
+                        # Analog stick in fourth row
+                        row = 3
+                    elif 'PEDAL' in control_name or 'POSITIONAL' in control_name:
+                        # Pedals and positional in fifth row
+                        row = 4
+                    elif 'GAMBLE' in control_name:
+                        # Gambling controls in sixth row
+                        row = 5
+                    
+                    # Then determine column - X and Y axes next to each other
+                    if '_X' in control_name:
+                        col = 0
+                    elif '_Y' in control_name:
+                        col = 1
+                    elif '_Z' in control_name:
+                        col = 2
+                    else:
+                        col = grid_x
+                        grid_x = (grid_x + 1) % 3
+                    
+                    # Calculate position based on grid
+                    x = 150 + (col * 300)  # Wide columns for specialized controls
+                    y = 100 + (row * 70) + y_offset  # More spacing between rows
+                    
+                    original_pos = QPoint(x, y - y_offset)
+                    print(f"Using grid position for {control_name}: ({x}, {y})")
+                    
+                    # Update grid counters for non-specific controls
+                    if '_X' not in control_name and '_Y' not in control_name and '_Z' not in control_name:
+                        grid_y = (grid_y + 1 if grid_x == 0 else grid_y)
+                
+                # Apply position
+                label.move(x, y)
+                
+                # Store in control_labels
+                self.control_labels[control_name] = {
+                    'label': label,
+                    'action': action_text,
+                    'prefix': button_prefix,
+                    'original_pos': original_pos
+                }
+                
+                # All specialized controls are visible by default
+                label.setVisible(True)
+            
+            # Update button text
+            if hasattr(self, 'specialized_controls_button'):
+                self.specialized_controls_button.setText("Normal Controls")
+            
+            # Set specialized mode flag
+            self.showing_specialized_controls = True
+            
+            # Force updates with staggered timers
+            QTimer.singleShot(50, lambda: self.force_resize_all_labels())
+            QTimer.singleShot(150, lambda: self.apply_text_settings())
+            QTimer.singleShot(250, lambda: self.force_resize_all_labels())  # Second pass
+            
+            # Force a canvas update
+            self.canvas.update()
+            
+            print(f"Created and displayed {len(specialized_controls)} specialized MAME controls")
+            return True
+            
+        except Exception as e:
+            print(f"Error showing specialized controls: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     # Add this method to the PreviewWindow class
     def resizeEvent(self, event):
@@ -550,6 +887,11 @@ class PreviewWindow(QMainWindow):
     def enhance_preview_window_init(self):
         """Call this in PreviewWindow.__init__ after setting up controls"""
         try:
+            # Add specialized controls button
+            if hasattr(self, 'add_specialized_controls_button'):
+                self.add_specialized_controls_button()
+                
+            # Other initialization code...
             # Load any saved settings
             if hasattr(self, 'load_grid_settings'):
                 self.load_grid_settings()
@@ -1367,6 +1709,8 @@ class PreviewWindow(QMainWindow):
         from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         from PyQt5.QtCore import Qt, QPoint, QTimer
         
+        # The rest of your current create_floating_button_frame implementation...
+        
         # Create a floating button frame
         self.button_frame = QFrame(self)
         
@@ -1550,6 +1894,9 @@ class PreviewWindow(QMainWindow):
         
         # Show button frame
         self.button_frame.show()
+
+        # After creating the button frame and all standard buttons, call the enhance method
+        self.enhance_preview_window_init()
 
     # 2. Now, update the drag handle event handlers
     # Fix the drag handling to prevent jittering
@@ -2097,19 +2444,370 @@ class PreviewWindow(QMainWindow):
         
         return label, width, height
 
-    # 11. Modify the show_all_xinput_controls method to remove shadow creation
+    # 4. Updated function categorization for specialized controls
+    def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
+        """Update game_data to include the custom control mappings with function-based organization"""
+        if not cfg_controls:
+            return
+            
+        # Add a flag to the game_data to indicate it uses ROM CFG
+        game_data['has_rom_cfg'] = True
+        game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
+        
+        # Define the functional categories for organizing controls
+        functional_categories = {
+            'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL', 'P1_TRACKBALL_X', 'P1_MOUSE_X', 'P1_LIGHTGUN_X'],
+            'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V', 'P1_TRACKBALL_Y', 'P1_MOUSE_Y', 'P1_LIGHTGUN_Y'],
+            'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
+            'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
+            'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
+            'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
+            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z', 'P1_POSITIONAL'],  # Added POSITIONAL here
+            'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
+            'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
+        }
+        
+        # Process each control in the game data
+        for player in game_data.get('players', []):
+            for label in player.get('labels', []):
+                control_name = label['name']
+                
+                # Get the functional category for this control
+                func_category = 'other'  # Default to 'other' if no match found
+                for category, controls in functional_categories.items():
+                    if control_name in controls:
+                        func_category = category
+                        break
+                        
+                # Additional catch-all logic for controls not explicitly listed
+                if func_category == 'other' and control_name.startswith('P1_'):
+                    # Generic category assignment based on control name patterns
+                    if 'BUTTON' in control_name:
+                        # Try to determine which button category based on the button number
+                        try:
+                            button_num = int(control_name.replace('P1_BUTTON', ''))
+                            if button_num <= 2:
+                                func_category = 'action_primary'
+                            elif button_num <= 4:
+                                func_category = 'action_secondary'
+                            else:
+                                func_category = 'action_special'
+                        except ValueError:
+                            # If we can't parse a button number, keep as 'other'
+                            pass
+                    elif 'JOYSTICK' in control_name:
+                        if 'LEFT' in control_name or 'RIGHT' in control_name:
+                            func_category = 'move_horizontal'
+                        elif 'UP' in control_name or 'DOWN' in control_name:
+                            func_category = 'move_vertical'
+                    elif any(axis in control_name for axis in ['DIAL', 'TRACKBALL', 'MOUSE', 'LIGHTGUN']):
+                        if '_X' in control_name:
+                            func_category = 'move_horizontal'
+                        elif '_Y' in control_name:
+                            func_category = 'move_vertical'
+                    elif 'AD_STICK_X' in control_name:
+                        func_category = 'move_horizontal'
+                    elif 'AD_STICK_Y' in control_name:
+                        func_category = 'move_vertical'
+                    elif 'AD_STICK_Z' in control_name:
+                        func_category = 'analog_input'
+                    elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
+                        func_category = 'system_control'
+                    elif 'PEDAL' in control_name or 'POSITIONAL' in control_name:
+                        func_category = 'analog_input'
+                    elif 'GAMBLE' in control_name:
+                        func_category = 'special_function'
+                
+                # Store the functional category
+                label['func_category'] = func_category
+                
+                # If this control has a custom mapping in the cfg file, store it
+                if control_name in cfg_controls:
+                    # Add or update a 'mapping' key to store the current mapping
+                    label['mapping'] = cfg_controls[control_name]
+                    label['is_custom'] = True
+                    
+                    # Make sure the source format matches exactly what other sources use
+                    label['mapping_source'] = f"ROM CFG ({game_data['romname']}.cfg)"
+                    
+                    # Add these additional fields that might be checked in the preview
+                    label['cfg_mapping'] = True
+                else:
+                    label['is_custom'] = False
+                    
+                # Set appropriate display style based on function
+                if func_category == 'move_horizontal':
+                    label['display_style'] = 'horizontal'
+                elif func_category == 'move_vertical':
+                    label['display_style'] = 'vertical'
+                elif func_category == 'action_primary':
+                    label['display_style'] = 'primary_button'
+                elif func_category == 'action_secondary':
+                    label['display_style'] = 'secondary_button'
+                elif func_category == 'system_control':
+                    label['display_style'] = 'system_button'
+                elif func_category == 'analog_input':
+                    label['display_style'] = 'analog_control'
+                elif func_category == 'precision_aim':
+                    label['display_style'] = 'precision_control'
+                elif func_category == 'special_function':
+                    label['display_style'] = 'special_button'
+                else:
+                    label['display_style'] = 'standard'  # Default style for 'other' controls
+                    
+                # Set display name based on control type for XInput mode
+                if self.use_xinput:
+                    # Reuse existing standard button mappings
+                    if control_name in ['P1_BUTTON1', 'P1_BUTTON2', 'P1_BUTTON3', 'P1_BUTTON4',
+                                        'P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8',
+                                        'P1_BUTTON9', 'P1_BUTTON10', 'P1_START', 'P1_SELECT']:
+                        # These are already handled well
+                        standard_display_names = {
+                            'P1_BUTTON1': 'P1 A Button',
+                            'P1_BUTTON2': 'P1 B Button',
+                            'P1_BUTTON3': 'P1 X Button',
+                            'P1_BUTTON4': 'P1 Y Button',
+                            'P1_BUTTON5': 'P1 LB Button',
+                            'P1_BUTTON6': 'P1 RB Button',
+                            'P1_BUTTON7': 'P1 LT Button',
+                            'P1_BUTTON8': 'P1 RT Button',
+                            'P1_BUTTON9': 'P1 Left Stick Button',
+                            'P1_BUTTON10': 'P1 Right Stick Button',
+                            'P1_START': 'P1 Start Button',
+                            'P1_SELECT': 'P1 Select Button'
+                        }
+                        label['display_name'] = standard_display_names.get(control_name, control_name)
+                    # Enhanced display names for specialized controls
+                    elif control_name == 'P1_DIAL':
+                        label['display_name'] = 'Rotary Dial (H)'
+                    elif control_name == 'P1_DIAL_V':
+                        label['display_name'] = 'Rotary Dial (V)'
+                    elif control_name == 'P1_PADDLE':
+                        label['display_name'] = 'Paddle Control'
+                    elif control_name == 'P1_TRACKBALL_X':
+                        label['display_name'] = 'Trackball X-Axis'
+                    elif control_name == 'P1_TRACKBALL_Y':
+                        label['display_name'] = 'Trackball Y-Axis'
+                    elif control_name == 'P1_MOUSE_X':
+                        label['display_name'] = 'Mouse X-Axis'
+                    elif control_name == 'P1_MOUSE_Y':
+                        label['display_name'] = 'Mouse Y-Axis'
+                    elif control_name == 'P1_LIGHTGUN_X':
+                        label['display_name'] = 'Lightgun X-Axis'
+                    elif control_name == 'P1_LIGHTGUN_Y':
+                        label['display_name'] = 'Lightgun Y-Axis'
+                    elif control_name == 'P1_AD_STICK_X':
+                        label['display_name'] = 'Analog Stick X'
+                    elif control_name == 'P1_AD_STICK_Y':
+                        label['display_name'] = 'Analog Stick Y'
+                    elif control_name == 'P1_AD_STICK_Z':
+                        label['display_name'] = 'Analog Stick Z'
+                    elif control_name == 'P1_PEDAL':
+                        label['display_name'] = 'Pedal 1'
+                    elif control_name == 'P1_PEDAL2':
+                        label['display_name'] = 'Pedal 2'
+                    elif control_name == 'P1_POSITIONAL':
+                        label['display_name'] = 'Positional Ctrl'
+                    elif control_name == 'P1_GAMBLE_HIGH':
+                        label['display_name'] = 'Gamble High'
+                    elif control_name == 'P1_GAMBLE_LOW':
+                        label['display_name'] = 'Gamble Low'
+                    elif func_category == 'move_horizontal':
+                        label['display_name'] = 'Horizontal Movement'
+                    elif func_category == 'move_vertical':
+                        label['display_name'] = 'Vertical Movement'
+                    else:
+                        label['display_name'] = self.format_control_name(control_name)
+                else:
+                    # JOYCODE mode - use traditional names
+                    label['display_name'] = self.format_control_name(control_name)
+
+    # 5. Updated format_control_name method to produce more readable control names
+    def format_control_name(self, control_name):
+        """Format control names for better display with specialized control handling"""
+        # Check for specialized control formats first
+        specialized_formats = {
+            'P1_DIAL': 'Rotary Dial',
+            'P1_DIAL_V': 'Vertical Dial',
+            'P1_PADDLE': 'Paddle Control',
+            'P1_TRACKBALL_X': 'Trackball X',
+            'P1_TRACKBALL_Y': 'Trackball Y',
+            'P1_MOUSE_X': 'Mouse X',
+            'P1_MOUSE_Y': 'Mouse Y',
+            'P1_LIGHTGUN_X': 'Light Gun X',
+            'P1_LIGHTGUN_Y': 'Light Gun Y',
+            'P1_AD_STICK_X': 'Analog X',
+            'P1_AD_STICK_Y': 'Analog Y',
+            'P1_AD_STICK_Z': 'Analog Z',
+            'P1_PEDAL': 'Pedal 1',
+            'P1_PEDAL2': 'Pedal 2',
+            'P1_POSITIONAL': 'Positional',
+            'P1_GAMBLE_HIGH': 'Gamble High',
+            'P1_GAMBLE_LOW': 'Gamble Low',
+        }
+        
+        if control_name in specialized_formats:
+            return specialized_formats[control_name]
+        
+        # Handle standard button names
+        if 'BUTTON' in control_name:
+            # Extract player number and button number
+            parts = control_name.split('_')
+            if len(parts) >= 3:
+                player = parts[0].replace('P', 'Player ')
+                button = 'Button ' + parts[2].replace('BUTTON', '')
+                return f"{player} {button}"
+        
+        # Joystick directions
+        if '_JOYSTICK_' in control_name:
+            direction = control_name.split('_')[-1]
+            return f"Left Stick {direction.title()}"
+        
+        if '_JOYSTICKRIGHT_' in control_name:
+            direction = control_name.split('_')[-1]
+            return f"Right Stick {direction.title()}"
+        
+        # D-pad directions
+        if '_DPAD_' in control_name:
+            direction = control_name.split('_')[-1]
+            return f"D-Pad {direction.title()}"
+        
+        # Common system buttons
+        if '_START' in control_name:
+            player = control_name.split('_')[0].replace('P', 'Player ')
+            return f"{player} Start"
+        
+        if '_SELECT' in control_name:
+            player = control_name.split('_')[0].replace('P', 'Player ')
+            return f"{player} Select"
+        
+        # If no special formatting applies, make it more readable
+        # Remove P1_ prefix, replace underscores with spaces, and title case
+        readable = control_name.replace('P1_', '').replace('_', ' ').title()
+        return readable
+    
+    # 3. Add toggle method to switch between specialized and normal controls
+    def toggle_controls_view(self):
+        """Toggle between normal game controls, XInput controls, and specialized controls"""
+        # Check what's currently showing
+        showing_xinput = hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls
+        showing_specialized = hasattr(self, 'showing_specialized_controls') and self.showing_specialized_controls
+        
+        if showing_xinput:
+            # Switch to specialized controls
+            self.showing_all_xinput_controls = False
+            self.show_specialized_controls()
+            
+            # Update button text on both buttons
+            if hasattr(self, 'xinput_controls_button'):
+                self.xinput_controls_button.setText("Standard XInput")
+            if hasattr(self, 'specialized_controls_button'):
+                self.specialized_controls_button.setText("Normal Controls")
+                
+        elif showing_specialized:
+            # Switch back to normal game controls
+            self.showing_specialized_controls = False
+            
+            # Clear ALL existing controls first
+            for control_name in list(self.control_labels.keys()):
+                # Remove the control from the canvas
+                if control_name in self.control_labels:
+                    if 'label' in self.control_labels[control_name]:
+                        self.control_labels[control_name]['label'].deleteLater()
+                    del self.control_labels[control_name]
+
+            # Clear collections
+            self.control_labels = {}
+            
+            # Reload the current game controls from scratch
+            self.create_control_labels()
+            
+            # CRITICAL FIX: Force apply the font after recreating controls
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, self.apply_text_settings)
+            QTimer.singleShot(200, self.force_resize_all_labels)
+            
+            # Update button texts
+            if hasattr(self, 'xinput_controls_button'):
+                self.xinput_controls_button.setText("Standard XInput")
+            if hasattr(self, 'specialized_controls_button'):
+                self.specialized_controls_button.setText("Specialized Controls")
+                
+        else:
+            # Switch to XInput controls view
+            self.show_all_xinput_controls()
+            
+            # Update button texts
+            if hasattr(self, 'xinput_controls_button'):
+                self.xinput_controls_button.setText("Normal Controls")
+            if hasattr(self, 'specialized_controls_button'):
+                self.specialized_controls_button.setText("Specialized Controls")
+
+    # 4. Add a method to add the specialized controls button to the button frame
+    def add_specialized_controls_button(self):
+        """Add a button for specialized MAME controls to the floating control panel"""
+        # Only add if we have a bottom row and don't already have the button
+        if hasattr(self, 'bottom_row') and not hasattr(self, 'specialized_controls_button'):
+            from PyQt5.QtWidgets import QPushButton
+            
+            # Use the same button style as other buttons for consistency
+            button_style = """
+                QPushButton {
+                    background-color: #404050;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 10px;
+                    font-weight: bold;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-size: 12px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #555565;
+                }
+                QPushButton:pressed {
+                    background-color: #303040;
+                }
+            """
+            
+            # Create the button
+            self.specialized_controls_button = QPushButton("Specialized Controls")
+            
+            # FIX: Connect to toggle_controls_view instead of directly to show_specialized_controls
+            if hasattr(self, 'toggle_controls_view'):
+                self.specialized_controls_button.clicked.connect(self.toggle_controls_view)
+            else:
+                # Fallback to direct method if toggle_controls_view doesn't exist
+                self.specialized_controls_button.clicked.connect(self.show_specialized_controls)
+                
+            self.specialized_controls_button.setStyleSheet(button_style)
+            
+            # Add tooltip
+            self.specialized_controls_button.setToolTip("Show specialized MAME controls (dials, trackballs, etc.)")
+            
+            # Add to the bottom row
+            self.bottom_row.addWidget(self.specialized_controls_button)
+            
+            print("Added specialized controls button to UI")
+            return True
+        
+        return False
+    
+    # 2. Update the show_all_xinput_controls method to only show standard XInput controls
     def show_all_xinput_controls(self):
-        """Show all possible P1 XInput controls for global positioning without shadows"""
+        """Show all standard XInput controls for global positioning"""
+        
         # Standard XInput controls for positioning - P1 ONLY
-        xinput_controls = {
-            "P1_JOYSTICK_UP": "LS Up",
-            "P1_JOYSTICK_DOWN": "LS Down",
-            "P1_JOYSTICK_LEFT": "LS Left",
-            "P1_JOYSTICK_RIGHT": "LS Right",
-            "P1_JOYSTICK2_UP": "RS Up",
-            "P1_JOYSTICK2_DOWN": "RS Down",
-            "P1_JOYSTICK2_LEFT": "RS Left",
-            "P1_JOYSTICK2_RIGHT": "RS Right",
+        standard_controls = {
+            "P1_JOYSTICK_UP": "Left Stick Up",
+            "P1_JOYSTICK_DOWN": "Left Stick Down",
+            "P1_JOYSTICK_LEFT": "Left Stick Left",
+            "P1_JOYSTICK_RIGHT": "Left Stick Right",
+            "P1_JOYSTICKRIGHT_UP": "Right Stick Up",
+            "P1_JOYSTICKRIGHT_DOWN": "Right Stick Down",
+            "P1_JOYSTICKRIGHT_LEFT": "Right Stick Left",
+            "P1_JOYSTICKRIGHT_RIGHT": "Right Stick Right",
             "P1_BUTTON1": "A Button",
             "P1_BUTTON2": "B Button",
             "P1_BUTTON3": "X Button",
@@ -2118,10 +2816,14 @@ class PreviewWindow(QMainWindow):
             "P1_BUTTON6": "Right Bumper",
             "P1_BUTTON7": "Left Trigger",
             "P1_BUTTON8": "Right Trigger",
-            "P1_BUTTON9": "LS Button",
-            "P1_BUTTON10": "RS Button",
+            "P1_BUTTON9": "Left Stick Button",
+            "P1_BUTTON10": "Right Stick Button",
             "P1_START": "Start Button",
-            "P1_SELECT": "Back Button",
+            "P1_SELECT": "Back/Select Button",
+            "P1_DPAD_UP": "D-Pad Up",
+            "P1_DPAD_DOWN": "D-Pad Down",
+            "P1_DPAD_LEFT": "D-Pad Left",
+            "P1_DPAD_RIGHT": "D-Pad Right",
         }
         
         try:
@@ -2130,11 +2832,11 @@ class PreviewWindow(QMainWindow):
             from PyQt5.QtWidgets import QLabel, QSizePolicy
             import os
             
-            print("\n--- Showing all P1 XInput controls without shadows ---")
+            print("\n--- Showing standard XInput controls ---")
             
             # CRITICAL FIX: First ensure fonts are properly loaded/registered
             if not hasattr(self, 'current_font') or self.current_font is None:
-                print("Font not initialized - forcing font loading before showing XInput controls")
+                print("Font not initialized - forcing font loading before showing controls")
                 self.load_and_register_fonts()
             
             # Save existing control positions
@@ -2195,6 +2897,15 @@ class PreviewWindow(QMainWindow):
                 font.setStyleStrategy(QFont.PreferMatch)  # Force exact matching
                 print(f"Created new font for XInput controls: {font.family()} (fallback)")
             
+            # NOW call calculate_max_text_width AFTER defining standard_controls and font
+            max_text_width = self.calculate_max_text_width(
+                standard_controls,
+                font,
+                show_button_prefix=show_button_prefix,
+                use_uppercase=use_uppercase,
+                extra_padding=40  # Increased padding for safety
+            )
+            
             # Print actual font info for debugging
             font_info = QFontInfo(font)
             print(f"Actual font being used: {font_info.family()}, size: {font_info.pointSize()}")
@@ -2204,7 +2915,7 @@ class PreviewWindow(QMainWindow):
             max_text_width = 0
             
             # First determine the longest text to ensure consistent sizing
-            for control_name, action_text in xinput_controls.items():
+            for control_name, action_text in standard_controls.items():
                 button_prefix = self.get_button_prefix(control_name)
                 if use_uppercase:
                     action_text = action_text.upper()
@@ -2226,8 +2937,8 @@ class PreviewWindow(QMainWindow):
             # Default grid layout
             grid_x, grid_y = 0, 0
             
-            # Create all P1 XInput controls
-            for control_name, action_text in xinput_controls.items():
+            # Create all controls
+            for control_name, action_text in standard_controls.items():
                 # Apply uppercase if needed
                 if use_uppercase:
                     action_text = action_text.upper()
@@ -2273,16 +2984,22 @@ class PreviewWindow(QMainWindow):
                 # Make sure we have proper settings in the label
                 label.settings = self.text_settings.copy()
                 
-                # CRITICAL FIX FOR TEXT TRUNCATION:
                 # First, let the label auto-size based on content
                 label.adjustSize()
-                # Then, ensure it's at least as wide as our calculated max width
+
+                # Then ensure it's at least as wide as our calculated max width
                 # This creates consistency and prevents long text from being cut off
                 label_width = max(label.width(), max_text_width)
                 label_height = label.height()
+
+                # Add extra width for "Select" button specifically
+                if "SELECT" in control_name or "Select" in action_text:
+                    label_width += 20  # Add extra width for Select button specifically
+                    
+                # Resize with the calculated width
                 label.resize(label_width, label_height)
                 
-                # Determine position - now completely separated from creation
+                # Determine position
                 x, y = 0, 0
                 
                 # Check for saved position in the following order:
@@ -2304,15 +3021,66 @@ class PreviewWindow(QMainWindow):
                     print(f"Using backup position for {control_name}: ({x}, {y})")
                 
                 else:
-                    # Use grid position with fixed spacing
-                    x = 100 + (grid_x * 220)  # Wider spacing for longer labels
-                    y = 100 + (grid_y * 60) + y_offset
-                    original_pos = QPoint(x, y - y_offset)
+                    # Use a more organized grid layout for standard controls
+                    # Group similar controls together
+                    if 'BUTTON' in control_name:
+                        if int(control_name.replace('P1_BUTTON', '')) <= 4:
+                            # Face buttons (1-4) in a 2x2 grid
+                            button_num = int(control_name.replace('P1_BUTTON', ''))
+                            col = (button_num - 1) % 2
+                            row = (button_num - 1) // 2
+                            x = 100 + (col * 200)
+                            y = 100 + (row * 60) + y_offset
+                        else:
+                            # Shoulder/trigger buttons (5-10) in rows
+                            button_num = int(control_name.replace('P1_BUTTON', ''))
+                            row = 2 + (button_num - 5) // 2
+                            col = (button_num - 5) % 2
+                            x = 100 + (col * 200)
+                            y = 100 + (row * 60) + y_offset
+                    elif 'JOYSTICK' in control_name:
+                        # Left stick controls
+                        if 'UP' in control_name:
+                            x, y = 450, 100 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 450, 160 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 350, 130 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 550, 130 + y_offset
+                    elif 'JOYSTICKRIGHT' in control_name:
+                        # Right stick controls
+                        if 'UP' in control_name:
+                            x, y = 450, 220 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 450, 280 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 350, 250 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 550, 250 + y_offset
+                    elif 'DPAD' in control_name:
+                        # D-pad controls
+                        if 'UP' in control_name:
+                            x, y = 750, 100 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 750, 160 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 650, 130 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 850, 130 + y_offset
+                    elif 'START' in control_name:
+                        x, y = 700, 220 + y_offset
+                    elif 'SELECT' in control_name:
+                        x, y = 700, 280 + y_offset
+                    else:
+                        # Default fallback grid
+                        x = 100 + (grid_x * 220)
+                        y = 350 + (grid_y * 60) + y_offset
+                        grid_x = (grid_x + 1) % 4
+                        if grid_x == 0:
+                            grid_y += 1
                     
-                    # Update grid
-                    grid_x = (grid_x + 1) % 4
-                    if grid_x == 0:
-                        grid_y += 1
+                    original_pos = QPoint(x, y - y_offset)
                     print(f"Using grid position for {control_name}: ({x}, {y})")
                 
                 # Apply position
@@ -2339,6 +3107,7 @@ class PreviewWindow(QMainWindow):
             
             # Set XInput mode flag
             self.showing_all_xinput_controls = True
+            self.showing_specialized_controls = False
             
             # CRITICAL FIX: Force updates with staggered timers for reliable application
             QTimer.singleShot(50, lambda: self.force_resize_all_labels())
@@ -2348,7 +3117,7 @@ class PreviewWindow(QMainWindow):
             # Force a canvas update
             self.canvas.update()
             
-            print(f"Created and displayed {len(xinput_controls)} P1 XInput controls without shadows")
+            print(f"Created and displayed {len(standard_controls)} standard XInput controls")
             return True
             
         except Exception as e:
@@ -2356,10 +3125,10 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             return False
-
-    # Fix 1: Modify the toggle_xinput_controls method to explicitly force font reloading
+    
+    # 5. Update the toggle_xinput_controls method to handle the interaction with specialized controls
     def toggle_xinput_controls(self):
-        """Toggle between normal game controls and all XInput controls with improved font handling"""
+        """Toggle between normal game controls and standard XInput controls"""
         # Check if already showing all XInput controls
         if hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls:
             # Switch back to normal game controls
@@ -2388,7 +3157,7 @@ class PreviewWindow(QMainWindow):
             
             # Update button text
             if hasattr(self, 'xinput_controls_button'):
-                self.xinput_controls_button.setText("Show All XInput")
+                self.xinput_controls_button.setText("Standard XInput")
             
             # Reload the current game controls from scratch
             self.create_control_labels()
@@ -2399,8 +3168,15 @@ class PreviewWindow(QMainWindow):
             
             print("Switched back to normal game controls with font restoration")
         else:
+            # Make sure we're not showing specialized controls
+            self.showing_specialized_controls = False
+            
             # Switch to showing all XInput controls
             self.show_all_xinput_controls()
+            
+            # Update specialized controls button if it exists
+            if hasattr(self, 'specialized_controls_button'):
+                self.specialized_controls_button.setText("Specialized Controls")
 
     # 15. Modify apply_joystick_visibility to not update shadows
     def apply_joystick_visibility(self):
@@ -4671,9 +5447,11 @@ class PreviewWindow(QMainWindow):
                 
             event.accept()
     
+    # 1. Enhanced get_button_prefix method for PreviewWindow class
     def get_button_prefix(self, control_name):
-        """Generate button prefix based on control name"""
-        prefixes = {
+        """Generate button prefix based on control name with support for specialized controls"""
+        # Standard XInput control prefixes
+        standard_prefixes = {
             'P1_BUTTON1': 'A',
             'P1_BUTTON2': 'B',
             'P1_BUTTON3': 'X',
@@ -4690,13 +5468,59 @@ class PreviewWindow(QMainWindow):
             'P1_JOYSTICK_DOWN': 'LS↓',
             'P1_JOYSTICK_LEFT': 'LS←',
             'P1_JOYSTICK_RIGHT': 'LS→',
-            'P1_JOYSTICK2_UP': 'RS↑',
-            'P1_JOYSTICK2_DOWN': 'RS↓',
-            'P1_JOYSTICK2_LEFT': 'RS←',
-            'P1_JOYSTICK2_RIGHT': 'RS→',
+            'P1_JOYSTICKRIGHT_UP': 'RS↑',
+            'P1_JOYSTICKRIGHT_DOWN': 'RS↓',
+            'P1_JOYSTICKRIGHT_LEFT': 'RS←',
+            'P1_JOYSTICKRIGHT_RIGHT': 'RS→',
         }
         
-        return prefixes.get(control_name, "")
+        # Add specialized MAME control prefixes
+        specialized_prefixes = {
+            # Rotary controls
+            'P1_DIAL': 'DIAL',
+            'P1_DIAL_V': 'DIAL↕',
+            'P1_PADDLE': 'PDL',
+            
+            # Trackball controls
+            'P1_TRACKBALL_X': 'TRK←→',
+            'P1_TRACKBALL_Y': 'TRK↑↓',
+            
+            # Mouse controls
+            'P1_MOUSE_X': 'MSE←→',
+            'P1_MOUSE_Y': 'MSE↑↓',
+            
+            # Light gun controls
+            'P1_LIGHTGUN_X': 'GUN←→',
+            'P1_LIGHTGUN_Y': 'GUN↑↓',
+            
+            # Analog stick controls
+            'P1_AD_STICK_X': 'ASX',
+            'P1_AD_STICK_Y': 'ASY',
+            'P1_AD_STICK_Z': 'ASZ',
+            
+            # Pedal inputs
+            'P1_PEDAL': 'PED1',
+            'P1_PEDAL2': 'PED2',
+            
+            # Positional control
+            'P1_POSITIONAL': 'POS',
+            
+            # Gambling controls
+            'P1_GAMBLE_HIGH': 'HIGH',
+            'P1_GAMBLE_LOW': 'LOW',
+            
+            # D-pad controls
+            'P1_DPAD_UP': 'D↑',
+            'P1_DPAD_DOWN': 'D↓',
+            'P1_DPAD_LEFT': 'D←',
+            'P1_DPAD_RIGHT': 'D→',
+        }
+        
+        # Combine standard and specialized prefixes
+        all_prefixes = {**standard_prefixes, **specialized_prefixes}
+        
+        # Return the prefix if found, otherwise empty string
+        return all_prefixes.get(control_name, "")
     
     def ensure_clean_layout(self):
         """Ensure all controls are properly laid out in clean mode"""
@@ -4878,24 +5702,8 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
         
-    # Now let's add a new method to handle saving both control positions and logo position
-    # Update the save_positions method to include saving both text and logo settings
-    # Enhanced save_positions method to properly save logo size
     def save_positions(self, is_global=False):
-        """Save current control positions, text settings and logo settings to settings directory"""
-        # Create positions dictionary
-        positions = {}
-        
-        # Save control positions
-        y_offset = self.text_settings.get("y_offset", -40)
-        
-        for control_name, control_data in self.control_labels.items():
-            label_pos = control_data['label'].pos()
-            
-            # Store normalized position (without y-offset)
-            positions[control_name] = [label_pos.x(), label_pos.y() - y_offset]
-        
-        # Save to file
+        """Save current control positions to file while preserving existing positions"""
         try:
             # Create settings directory if it doesn't exist
             os.makedirs(self.settings_dir, exist_ok=True)
@@ -4904,10 +5712,34 @@ class PreviewWindow(QMainWindow):
             positions_filepath = os.path.join(self.settings_dir, 
                                             "global_positions.json" if is_global else f"{self.rom_name}_positions.json")
             
-            # Save positions to file
+            # Load existing positions to preserve them
+            existing_positions = {}
+            if os.path.exists(positions_filepath):
+                try:
+                    with open(positions_filepath, 'r') as f:
+                        existing_positions = json.load(f)
+                    print(f"Loaded {len(existing_positions)} existing positions to preserve")
+                except Exception as e:
+                    print(f"Error loading existing positions: {e}")
+            
+            # Get positions for current controls
+            y_offset = self.text_settings.get("y_offset", -40)
+            new_positions = {}
+            
+            for control_name, control_data in self.control_labels.items():
+                label_pos = control_data['label'].pos()
+                
+                # Store normalized position (without y-offset)
+                new_positions[control_name] = [label_pos.x(), label_pos.y() - y_offset]
+            
+            # Merge existing and new positions (new ones override existing ones)
+            merged_positions = {**existing_positions, **new_positions}
+            
+            # Save merged positions to file
             with open(positions_filepath, 'w') as f:
-                json.dump(positions, f)
-            print(f"Saved {len(positions)} positions to: {positions_filepath}")
+                json.dump(merged_positions, f)
+            
+            print(f"Saved {len(new_positions)} new positions and preserved {len(existing_positions) - len(set(existing_positions.keys()) & set(new_positions.keys()))} existing positions to: {positions_filepath}")
             
             # Also save text settings
             self.save_text_settings(self.text_settings)
@@ -5221,8 +6053,10 @@ class PreviewWindow(QMainWindow):
         self.canvas.update()
         print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
 
+    # 2. Enhanced button prefix from mapping method
     def get_button_prefix_from_mapping(self, mapping):
-        """Get the button prefix based on XINPUT mapping"""
+        """Get the button prefix based on mapping string, including specialized controls"""
+        # Standard XINPUT mappings
         xinput_to_prefix = {
             "XINPUT_1_A": "A",
             "XINPUT_1_B": "B",
@@ -5237,10 +6071,77 @@ class PreviewWindow(QMainWindow):
             "XINPUT_1_DPAD_UP": "D↑",
             "XINPUT_1_DPAD_DOWN": "D↓",
             "XINPUT_1_DPAD_LEFT": "D←",
-            "XINPUT_1_DPAD_RIGHT": "D→"
+            "XINPUT_1_DPAD_RIGHT": "D→",
+            "XINPUT_1_START": "START",
+            "XINPUT_1_SELECT": "BACK"
         }
         
-        return xinput_to_prefix.get(mapping, "")
+        # MAME specialized control mappings
+        mame_to_prefix = {
+            # Analog mappings
+            "JOYCODE_1_XAXIS": "ASX",
+            "JOYCODE_1_YAXIS": "ASY",
+            "JOYCODE_1_ZAXIS": "ASZ",
+            
+            # Mouse mappings
+            "MOUSECODE_1_XAXIS": "MSE←→",
+            "MOUSECODE_1_YAXIS": "MSE↑↓",
+            
+            # Trackball mappings
+            "TRACKCODE_1_XAXIS": "TRK←→",
+            "TRACKCODE_1_YAXIS": "TRK↑↓",
+            
+            # Lightgun mappings  
+            "GUNCODE_1_XAXIS": "GUN←→",
+            "GUNCODE_1_YAXIS": "GUN↑↓",
+            
+            # Dial/Paddle mappings
+            "DIALCODE_1_XAXIS": "DIAL",
+            "DIALCODE_1_YAXIS": "DIAL↕",
+            "PADDLE_1_X": "PDL",
+            
+            # Pedal mappings
+            "PEDALCODE_1": "PED1",
+            "PEDALCODE_2": "PED2",
+            
+            # Positional
+            "POSITIONAL_1": "POS",
+            
+            # Additional dial-type control codes
+            "MOUSECODE_1_XAXIS_POS_FAST": "MSE→+",
+            "MOUSECODE_1_XAXIS_NEG_FAST": "MSE←+",
+            "MOUSECODE_1_YAXIS_POS_FAST": "MSE↓+",
+            "MOUSECODE_1_YAXIS_NEG_FAST": "MSE↑+",
+            "TRACKCODE_1_XAXIS_POS_FAST": "TRK→+",
+            "TRACKCODE_1_XAXIS_NEG_FAST": "TRK←+",
+            "TRACKCODE_1_YAXIS_POS_FAST": "TRK↓+",
+            "TRACKCODE_1_YAXIS_NEG_FAST": "TRK↑+"
+        }
+        
+        # Combine mapping dictionaries
+        all_mappings = {**xinput_to_prefix, **mame_to_prefix}
+        
+        # Check for direct match
+        if mapping in all_mappings:
+            return all_mappings[mapping]
+        
+        # If no direct match, try partial matching for JOYCODE buttons
+        if "JOYCODE_1_BUTTON" in mapping:
+            try:
+                # Extract button number
+                button_num = int(mapping.replace("JOYCODE_1_BUTTON", ""))
+                if button_num <= 10:
+                    # Use standard button mapping (1=A, 2=B, etc.)
+                    standard_buttons = ["", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS"]
+                    if button_num < len(standard_buttons):
+                        return standard_buttons[button_num]
+                    else:
+                        return f"B{button_num}"
+            except:
+                pass
+                
+        # Return empty string for unknown mappings
+        return ""
 
     def apply_text_settings(self, uppercase_changed=False):
         """Apply current text settings to all controls with both font and gradient support"""
@@ -5978,8 +6879,9 @@ class DraggableLabel(QLabel):
         else:
             self.setText(text)
             
+    # 1. Update the mousePressEvent method to store position more reliably
     def mousePressEvent(self, event):
-        """Handle mouse press events for dragging with respect for draggable flag"""
+        """Handle mouse press events for dragging with improved position tracking"""
         from PyQt5.QtCore import Qt
         
         # CRITICAL FIX: Only handle dragging if explicitly allowed
@@ -5991,96 +6893,95 @@ class DraggableLabel(QLabel):
             # Make sure dragging flag is set
             self.dragging = True
             
-            # CRITICAL FIX: Store both the mouse position and the label's current position
+            # Store BOTH the mouse position relative to the label AND the absolute label position
             self.drag_start_pos = event.pos()
             self.original_label_pos = self.pos()
+            
+            # Store absolute cursor position for more stable dragging
+            self.global_start_pos = event.globalPos()
             
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
 
+    # 2. Completely rewritten mouseMoveEvent for smoother dragging
     def mouseMoveEvent(self, event):
-        """Handle mouse move with proper offset preservation and respect for draggable flag"""
-        # CRITICAL FIX: Only handle dragging if explicitly allowed
+        """Handle mouse move with improved position calculation"""
+        from PyQt5.QtCore import Qt, QPoint
+        from PyQt5.QtWidgets import QApplication
+        
+        # Only handle dragging if explicitly allowed
         if not getattr(self, 'draggable', True):
             event.ignore()  # Pass event to parent
             return
-        from PyQt5.QtCore import Qt
-        from PyQt5.QtWidgets import QApplication
         
-        if hasattr(self, 'dragging') and self.dragging and hasattr(self, 'drag_start_pos'):
-            # Calculate the delta from the initial click position
-            delta = event.pos() - self.drag_start_pos
+        # Only process if we're in dragging mode
+        if not hasattr(self, 'dragging') or not self.dragging or not hasattr(self, 'global_start_pos'):
+            return
+        
+        # Calculate the global movement delta - this is more reliable
+        delta = event.globalPos() - self.global_start_pos
+        
+        # Apply delta to original position
+        new_pos = self.original_label_pos + delta
+        
+        # Variables for snapping and guides
+        parent = self.parent()
+        snapped = False
+        guide_lines = []
+        
+        # Only apply snapping if parent exists and we have a preview window
+        if parent:
+            # Find reference to preview window
+            preview_window = self.find_preview_window_parent()
             
-            # FIXED: Apply the delta to the original label position to preserve offset
-            # This ensures that wherever you click on the label, it maintains that relative position
-            if hasattr(self, 'original_label_pos'):
-                new_pos = self.original_label_pos + delta
-            else:
-                # Fallback for compatibility (shouldn't happen with the fixed mousePressEvent)
-                new_pos = self.mapToParent(event.pos() - self.drag_start_pos)
+            if preview_window:
+                # Check if snapping is enabled and not overridden by Shift key
+                modifiers = QApplication.keyboardModifiers()
+                disable_snap = bool(modifiers & Qt.ShiftModifier)  # Shift key disables snapping temporarily
                 
-            # Rest of the snapping and guidance code remains the same
-            original_pos = new_pos  # Store original position before any snapping
-            
-            # Initialize guide lines list and snapping variables
-            guide_lines = []
-            snapped = False
-            parent = self.parent()
-            
-            if parent:
-                # Get canvas dimensions
-                canvas_width = parent.width()
-                canvas_height = parent.height()
+                apply_snapping = (
+                    not disable_snap and
+                    hasattr(preview_window, 'snapping_enabled') and
+                    preview_window.snapping_enabled
+                )
                 
-                # Find reference to preview window
-                preview_window = self.find_preview_window_parent()
-                
-                if preview_window:
-                    # Check if snapping is enabled and not overridden
-                    modifiers = QApplication.keyboardModifiers()
-                    disable_snap = bool(modifiers & Qt.ShiftModifier)  # Shift key disables snapping temporarily
-                    
-                    apply_snapping = (
-                        not disable_snap and
-                        hasattr(preview_window, 'snapping_enabled') and
-                        preview_window.snapping_enabled
-                    )
-                    
-                    # Get snap distance if available
+                if apply_snapping:
+                    # Apply snapping logic
+                    canvas_width = parent.width()
+                    canvas_height = parent.height()
                     snap_distance = getattr(preview_window, 'snap_distance', 15)
                     
-                    if apply_snapping:
-                        # Get label center coordinates
-                        label_center_x = new_pos.x() + self.width() // 2
-                        label_center_y = new_pos.y() + self.height() // 2
+                    # Get label center coordinates
+                    label_center_x = new_pos.x() + self.width() // 2
+                    label_center_y = new_pos.y() + self.height() // 2
+                    
+                    # Apply grid snapping if enabled
+                    if (hasattr(preview_window, 'snap_to_grid') and preview_window.snap_to_grid and
+                        hasattr(preview_window, 'grid_x_start') and hasattr(preview_window, 'grid_y_start')):
                         
-                        # 1. Absolute grid position snapping (if enabled)
-                        if (hasattr(preview_window, 'snap_to_grid') and preview_window.snap_to_grid and
-                            hasattr(preview_window, 'grid_x_start') and hasattr(preview_window, 'grid_y_start')):
-                            
-                            grid_x_start = preview_window.grid_x_start
-                            grid_x_step = preview_window.grid_x_step
-                            
-                            # Snap to column X positions
-                            for col in range(preview_window.grid_columns):
-                                grid_x = grid_x_start + (col * grid_x_step)
-                                if abs(new_pos.x() - grid_x) < snap_distance:
-                                    new_pos.setX(grid_x)
-                                    guide_lines.append((grid_x, 0, grid_x, canvas_height))
-                                    snapped = True
-                                    break
-                            
-                            # Snap to row Y positions
-                            grid_y_start = preview_window.grid_y_start
-                            grid_y_step = preview_window.grid_y_step
-                            
-                            for row in range(preview_window.grid_rows):
-                                grid_y = grid_y_start + (row * grid_y_step)
-                                if abs(new_pos.y() - grid_y) < snap_distance:
-                                    new_pos.setY(grid_y)
-                                    guide_lines.append((0, grid_y, canvas_width, grid_y))
-                                    snapped = True
-                                    break
+                        grid_x_start = preview_window.grid_x_start
+                        grid_x_step = preview_window.grid_x_step
+                        
+                        # Snap to column X positions
+                        for col in range(preview_window.grid_columns):
+                            grid_x = grid_x_start + (col * grid_x_step)
+                            if abs(new_pos.x() - grid_x) < snap_distance:
+                                new_pos.setX(grid_x)
+                                guide_lines.append((grid_x, 0, grid_x, canvas_height))
+                                snapped = True
+                                break
+                        
+                        # Snap to row Y positions
+                        grid_y_start = preview_window.grid_y_start
+                        grid_y_step = preview_window.grid_y_step
+                        
+                        for row in range(preview_window.grid_rows):
+                            grid_y = grid_y_start + (row * grid_y_step)
+                            if abs(new_pos.y() - grid_y) < snap_distance:
+                                new_pos.setY(grid_y)
+                                guide_lines.append((0, grid_y, canvas_width, grid_y))
+                                snapped = True
+                                break
                         
                         # Apply the move
                         self.move(new_pos)
@@ -6146,8 +7047,7 @@ class DraggableLabel(QLabel):
                                 guide_lines.append((0, logo_top, canvas_width, logo_top))
                                 snapped = True
                     
-                    # 5. Calculate distance indicators for display
-                    # Show dynamic measurement guides
+                    # Show measurement guides if enabled
                     if hasattr(preview_window, 'show_measurement_guides'):
                         try:
                             preview_window.show_measurement_guides(
@@ -6156,18 +7056,8 @@ class DraggableLabel(QLabel):
                             )
                         except Exception as e:
                             print(f"Error showing measurement guides: {e}")
-
-                    # Add snapping status info if needed
-                    if disable_snap and hasattr(preview_window, 'show_position_indicator'):
-                        try:
-                            preview_window.show_position_indicator(
-                                new_pos.x(), new_pos.y(), 
-                                "Snapping temporarily disabled (Shift)"
-                            )
-                        except Exception as e:
-                            print(f"Error showing position indicator with status: {e}")
                     
-                    # Show alignment guides if snapped
+                    # Show snapping guides if snapped
                     if snapped and guide_lines and hasattr(preview_window, 'show_alignment_guides'):
                         try:
                             preview_window.show_alignment_guides(guide_lines)
@@ -6178,14 +7068,12 @@ class DraggableLabel(QLabel):
                             preview_window.hide_alignment_guides()
                         except Exception as e:
                             print(f"Error hiding alignment guides: {e}")
-                
-                # Apply the final position (if not already applied in snapping code)
-                self.move(new_pos)
-            
-            # Apply the move
-            self.move(new_pos)
-                
-            event.accept()
+        
+        # Move the label to the final position
+        self.move(new_pos)
+        
+        # Accept the event
+        event.accept()
         
     def mouseReleaseEvent(self, event):
         """Handle mouse release with respect for draggable flag"""
@@ -7508,7 +8396,7 @@ class ColoredDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Override paint event to draw text with different colors without shadows"""
+        """Override paint event to draw text with better width handling"""
         if not self.text():
             return
 
@@ -7529,13 +8417,17 @@ class ColoredDraggableLabel(DraggableLabel):
         if self.prefix and ": " in self.text():
             prefix_text = f"{self.prefix}: "
 
-            # Accurate widths
+            # Accurate widths - using horizontalAdvance for better precision
             prefix_width = metrics.horizontalAdvance(prefix_text)
             action_width = metrics.horizontalAdvance(self.action)
             total_width = prefix_width + action_width
 
             # Horizontally center the combined text block
+            # Use a smaller value than width/2 to shift text left slightly for better visibility
             x = int((self.width() - total_width) / 2)
+            
+            # Ensure x is never negative (text is always visible)
+            x = max(5, x)
 
             # Draw prefix
             painter.setPen(prefix_color)
@@ -7551,6 +8443,9 @@ class ColoredDraggableLabel(DraggableLabel):
 
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
+            
+            # Ensure x is never negative
+            x = max(5, x)
 
             painter.setPen(action_color)
             painter.drawText(x, y, text)
@@ -7594,7 +8489,7 @@ class GradientDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Paint event with gradient rendering without shadows"""
+        """Paint event with gradient rendering and better width handling"""
         if not self.text():
             return
             
@@ -7611,13 +8506,17 @@ class GradientDraggableLabel(DraggableLabel):
         if self.prefix and ": " in self.text():
             prefix_text = f"{self.prefix}: "
             
-            # Accurate widths for centering
+            # Accurate widths for centering - use horizontalAdvance for better precision
             prefix_width = metrics.horizontalAdvance(prefix_text)
             action_width = metrics.horizontalAdvance(self.action)
             total_width = prefix_width + action_width
             
             # Horizontally center the combined text block
+            # Use a smaller value than width/2 to shift text left slightly for better visibility
             x = int((self.width() - total_width) / 2)
+            
+            # Ensure x is never negative (text is always visible)
+            x = max(5, x)
             
             # Calculate prefix rectangle for gradient
             prefix_rect = metrics.boundingRect(prefix_text)
@@ -7675,6 +8574,9 @@ class GradientDraggableLabel(DraggableLabel):
             text = self.text()
             text_width = metrics.horizontalAdvance(text)
             x = int((self.width() - text_width) / 2)
+            
+            # Ensure x is never negative
+            x = max(5, x)
             
             # Create text rectangle for gradient
             text_rect = metrics.boundingRect(text)

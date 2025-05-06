@@ -2928,15 +2928,30 @@ controller xbox t		= """
             ('P1_BUTTON8', 'Right Trigger (RT)'),
             ('P1_BUTTON9', 'Left Stick Button (L3)'),
             ('P1_BUTTON10', 'Right Stick Button (R3)'),
+            # Analog stick
             ('P1_JOYSTICK_UP', 'Left Stick Up'),
             ('P1_JOYSTICK_DOWN', 'Left Stick Down'),
             ('P1_JOYSTICK_LEFT', 'Left Stick Left'),
-            ('P1_JOYSTICK_RIGHT', 'Left Stick Right')
+            ('P1_JOYSTICK_RIGHT', 'Left Stick Right'),
+            # Right analog stick
+            ('P1_JOYSTICKRIGHT_UP', 'Right Stick Up'),
+            ('P1_JOYSTICKRIGHT_DOWN', 'Right Stick Down'),
+            ('P1_JOYSTICKRIGHT_LEFT', 'Right Stick Left'),
+            ('P1_JOYSTICKRIGHT_RIGHT', 'Right Stick Right'),
+            # D-pad
+            ('P1_DPAD_UP', 'D-Pad Up'),
+            ('P1_DPAD_DOWN', 'D-Pad Down'),
+            ('P1_DPAD_LEFT', 'D-Pad Left'),
+            ('P1_DPAD_RIGHT', 'D-Pad Right'),
+            # System buttons
+            ('P1_START', 'Start Button'),
+            ('P1_SELECT', 'Select/Coin Button'),
         ]
         
         # Add specialized MAME controls that aren't part of standard gamepad
         specialized_controls = [
             ('P1_DIAL', 'Rotary Dial'),
+            ('P1_DIAL_V', 'Vertical Dial'),
             ('P1_PADDLE', 'Paddle Controller'),
             ('P1_TRACKBALL_X', 'Trackball X-Axis'),
             ('P1_TRACKBALL_Y', 'Trackball Y-Axis'),
@@ -2948,7 +2963,12 @@ controller xbox t		= """
             ('P1_AD_STICK_Y', 'Analog Stick Y-Axis'),
             ('P1_AD_STICK_Z', 'Analog Stick Z-Axis'),
             ('P1_PEDAL', 'Pedal Input'),
-            ('P1_PEDAL2', 'Second Pedal Input')
+            ('P1_PEDAL2', 'Second Pedal Input'),
+            ('P1_POSITIONAL', 'Positional Control'),
+            
+            # System controls
+            ('P1_GAMBLE_HIGH', 'Gamble High'),
+            ('P1_GAMBLE_LOW', 'Gamble Low'),
         ]
         
         # Merge standard and specialized controls
@@ -4278,6 +4298,8 @@ controller xbox t		= """
             'P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8',
             'P1_BUTTON9', 'P1_BUTTON10', 
             'P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT',
+            'P1_JOYSTICKRIGHT_UP', 'P1_JOYSTICKRIGHT_DOWN', 'P1_JOYSTICKRIGHT_LEFT', 'P1_JOYSTICKRIGHT_RIGHT',
+            'P1_DPAD_UP', 'P1_DPAD_DOWN', 'P1_DPAD_LEFT', 'P1_DPAD_RIGHT',
             'P1_START', 'P1_SELECT'
         }
         
@@ -5065,70 +5087,29 @@ controller xbox t		= """
         return mapping
         
     def select_first_rom(self):
-        """Select and display the first available ROM with improved performance"""
-        # Get the first available ROM that has game data (using cache when possible)
-        available_games = []
-        
-        # First check cache to avoid database hits
-        if hasattr(self, 'rom_data_cache'):
-            available_games = sorted([rom for rom in self.available_roms if rom in self.rom_data_cache])
+        # Get the first available ROM (no filtering)
+        if not self.available_roms:
+            return
             
-        # If no cached games, do a minimal lookup
-        if not available_games:
-            if hasattr(self, 'db_path') and os.path.exists(self.db_path):
-                # Use database for faster lookup
-                try:
-                    conn = sqlite3.connect(self.db_path)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT rom_name FROM games ORDER BY rom_name LIMIT 5")
-                    db_roms = [row[0] for row in cursor.fetchall()]
-                    conn.close()
-                    
-                    # Filter to only those that are in available_roms
-                    available_games = [rom for rom in db_roms if rom in self.available_roms]
-                except:
-                    pass
-                    
-        # If still no games found, do a full scan
-        if not available_games:
-            available_games = sorted([rom for rom in self.available_roms if self.get_game_data(rom)])
+        first_rom = sorted(list(self.available_roms))[0]
+        self.current_game = first_rom
         
-        if not available_games:
-            print("No ROMs with game data found")
-            return
-                
-        first_rom = available_games[0]
-        
-        # Check if the game list has content
+        # Find it in the display list
         list_content = self.game_list.get("1.0", "end-1c")
-        if not list_content.strip():
-            print("Game list appears to be empty")
-            return
-        
-        # Find the line with our ROM
         lines = list_content.split('\n')
-        target_line = None
         
         for i, line in enumerate(lines):
             if first_rom in line:
-                target_line = i + 1  # Lines are 1-indexed in Tkinter
+                # Highlight the first line (1-indexed)
+                self.highlight_selected_game(i + 1)
                 break
-                    
-        if target_line is None:
-            return
-        
-        # Highlight the selected line
-        self.highlight_selected_game(target_line)
-        self.current_game = first_rom
-        
-        # Create a mock event targeting the line
+                
+        # Create mock event and display ROM info
         class MockEvent:
             def __init__(self):
                 self.x = 10
-                self.y = target_line * 20
+                self.y = 10
         
-        # IMPORTANT: Add a delay to allow the UI to fully initialize before selecting a game
-        # This ensures the layout calculations are complete before showing game information
         self.after(200, lambda: self.on_game_select(MockEvent()))
             
     def highlight_selected_game(self, line_index):
