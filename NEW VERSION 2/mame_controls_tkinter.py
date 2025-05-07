@@ -1016,11 +1016,32 @@ class MAMEControlConfig(ctk.CTk):
                         newseq = port.find('.//newseq')
                         if newseq is not None and newseq.text:
                             mapping = newseq.text.strip()
+                            
+                            # NEW CODE: Extract JOYCODE part if multiple assignments exist
+                            if " OR " in mapping:
+                                # Look for JOYCODE part first
+                                parts = mapping.split(" OR ")
+                                joycode_part = None
+                                
+                                # First priority: Find any JOYCODE entry
+                                for part in parts:
+                                    part = part.strip()
+                                    if "JOYCODE" in part:
+                                        joycode_part = part
+                                        break
+                                
+                                # Second priority: Use the first entry if no JOYCODE found
+                                if joycode_part is None and parts:
+                                    joycode_part = parts[0].strip()
+                                    
+                                # Use the extracted part or the full mapping as fallback
+                                mapping = joycode_part if joycode_part else mapping
+                            
                             controls[control_type] = mapping
                             print(f"Found mapping: {control_type} -> {mapping}")
-            else:
-                print("No input element found in XML")
-                
+                else:
+                    print("No input element found in XML")
+                    
         except ET.ParseError as e:
             print(f"XML parsing failed with error: {str(e)}")
             print("First 100 chars of content:", repr(cfg_content[:100]))
@@ -1179,6 +1200,11 @@ class MAMEControlConfig(ctk.CTk):
             # Save the setting
             self.save_settings()
             
+            # Clear cache to ensure fresh data with new mapping type
+            if hasattr(self, 'rom_data_cache'):
+                print("Clearing ROM data cache due to XInput mode change")
+                self.rom_data_cache = {}
+            
             # Refresh the current game display if one is selected
             if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None and hasattr(self, 'game_list'):
                 # Store the current scroll position if possible
@@ -1191,39 +1217,33 @@ class MAMEControlConfig(ctk.CTk):
                     for widget in self.control_frame.winfo_children():
                         widget.destroy()
                         
-                # Update the game info
-                try:
-                    # Create a mock event with coordinates for the selected line
-                    class MockEvent:
-                        def __init__(self_mock, line_num):
-                            # Default position
-                            self_mock.x = 10
-                            self_mock.y = 10
-                            
-                            # Try to get better position if possible
-                            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
-                                # Calculate position to hit the middle of the line
-                                bbox = self.game_list._textbox.bbox(f"{line_num}.0")
-                                if bbox:
-                                    self_mock.x = bbox[0] + 5  # A bit to the right of line start
-                                    self_mock.y = bbox[1] + 5  # A bit below line top
-                    
-                    # Create the mock event targeting our current line
-                    mock_event = MockEvent(self.selected_line)
-                    
-                    # Force a full refresh of the display
-                    self.on_game_select(mock_event)
-                    
-                    # Restore scroll position if we saved it
-                    if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                        try:
-                            self.control_frame._scrollbar.set(*scroll_pos)
-                        except:
-                            pass
-                except Exception as e:
-                    print(f"Error refreshing display after toggling XInput: {e}")
-                    import traceback
-                    traceback.print_exc()
+                # Create a mock event with coordinates for the selected line
+                class MockEvent:
+                    def __init__(self_mock, line_num):
+                        # Default position
+                        self_mock.x = 10
+                        self_mock.y = 10
+                        
+                        # Try to get better position if possible
+                        if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
+                            # Calculate position to hit the middle of the line
+                            bbox = self.game_list._textbox.bbox(f"{line_num}.0")
+                            if bbox:
+                                self_mock.x = bbox[0] + 5  # A bit to the right of line start
+                                self_mock.y = bbox[1] + 5  # A bit below line top
+                
+                # Create the mock event targeting our current line
+                mock_event = MockEvent(self.selected_line)
+                
+                # Force a full refresh of the display
+                self.on_game_select(mock_event)
+                
+                # Restore scroll position if we saved it
+                if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
+                    try:
+                        self.control_frame._scrollbar.set(*scroll_pos)
+                    except:
+                        pass
 
     def create_layout(self):
         """Create the modern application layout with sidebar and content panels"""
@@ -2092,6 +2112,39 @@ class MAMEControlConfig(ctk.CTk):
         button.pack(side="left", padx=5, pady=5)
         return button
 
+    def debug_parse_cfg(self, rom_name):
+        """Debug helper to parse a custom cfg file and print the results"""
+        if rom_name not in self.custom_configs:
+            print(f"No custom config found for {rom_name}")
+            return {}
+        
+        cfg_content = self.custom_configs[rom_name]
+        print(f"Parsing cfg for {rom_name}:")
+        print(f"First 100 chars: {cfg_content[:100]}")
+        
+        try:
+            # Parse the controls
+            controls = self.parse_cfg_controls(cfg_content)
+            
+            # Print the results
+            print(f"Found {len(controls)} mappings:")
+            for control, mapping in controls.items():
+                print(f"  {control}: {mapping}")
+                
+            # Convert to XInput if needed
+            if self.use_xinput:
+                print("Converting to XInput:")
+                for control, mapping in controls.items():
+                    xinput = self.convert_mapping(mapping, True)
+                    print(f"  {control}: {mapping} -> {xinput}")
+            
+            return controls
+        except Exception as e:
+            print(f"Error parsing cfg: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+    
     def on_game_select(self, event):
         """Handle game selection with enhanced visual feedback"""
         try:
@@ -2114,7 +2167,7 @@ class MAMEControlConfig(ctk.CTk):
             # DEBUGGING: Print raw line content with character codes to identify how it's formatted
             print(f"Raw line: {repr(line)}")
             
-            # NEW APPROACH: Use regular expressions to extract the ROM name
+            # Use regular expressions to extract the ROM name
             import re
             match = re.search(r'[^*+\-\s]+', line)  # Match first sequence not containing *, +, -, or whitespace
             
@@ -2129,7 +2182,6 @@ class MAMEControlConfig(ctk.CTk):
             
             self.current_game = romname
 
-
             # Force load of gamedata.json if needed
             if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
                 self.load_gamedata_json()
@@ -2138,7 +2190,7 @@ class MAMEControlConfig(ctk.CTk):
             if self.gamedata_json:
                 sample_keys = list(self.gamedata_json.keys())[:5]
                 print(f"Sample gamedata keys: {sample_keys}")
-                print(f"sf2 in gamedata keys: {'sf2' in self.gamedata_json}")
+                print(f"Current ROM ('{romname}') in gamedata keys: '{romname}' in self.gamedata_json")
             
             # DIRECT CHECK - does this ROM exist in gamedata.json?
             rom_in_gamedata = romname in self.gamedata_json
@@ -2329,12 +2381,19 @@ class MAMEControlConfig(ctk.CTk):
                 # Only parse the custom configs if we need them
                 cfg_controls = self.parse_cfg_controls(self.custom_configs[romname])
                 
+                # NEW CODE: Debug output for cfg_controls
+                print(f"Parsed custom controls for {romname}:")
+                for control_name, mapping in list(cfg_controls.items())[:5]:
+                    print(f"  {control_name}: {mapping}")
+                    
                 # Convert mappings if XInput is enabled
                 if hasattr(self, 'use_xinput') and self.use_xinput:
-                    cfg_controls = {
-                        control: self.convert_mapping(mapping, True)
-                        for control, mapping in cfg_controls.items()
-                    }
+                    converted_cfg_controls = {}
+                    for control, mapping in cfg_controls.items():
+                        converted_mapping = self.convert_mapping(mapping, True)
+                        converted_cfg_controls[control] = converted_mapping
+                        print(f"  Converted {control}: {mapping} -> {converted_mapping}")
+                    cfg_controls = converted_cfg_controls
 
             # Display controls with enhanced styling
             self.display_controls_table(row, game_data, cfg_controls)
@@ -4436,18 +4495,18 @@ controller xbox t		= """
             'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
             'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
             'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
-            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z'],  # Added AD_STICK_Z explicitly here
+            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z'],
             'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
             'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
         }
         
-        # Process each remaining control
+        # Process each control in the game data
         for player in game_data.get('players', []):
             for label in player.get('labels', []):
                 control_name = label['name']
                 
                 # Get the functional category for this control
-                func_category = 'other'  # Default to 'other' if no match found
+                func_category = 'other'  # Default to 'other'
                 for category, controls in functional_categories.items():
                     if control_name in controls:
                         func_category = category
@@ -4506,6 +4565,43 @@ controller xbox t		= """
                     
                     # Add these additional fields that might be checked in the preview
                     label['cfg_mapping'] = True
+                    
+                    # NEW CODE: Add actual_mapping to store the target mapping (JOYCODE or XINPUT)
+                    # This will help correctly display the mapping in the UI
+                    label['actual_mapping'] = cfg_controls[control_name]
+                    
+                    # NEW CODE: Extract target button from mapping for better display
+                    if self.use_xinput and 'XINPUT' in cfg_controls[control_name]:
+                        # Extract the button part (e.g., XINPUT_1_X -> X Button)
+                        parts = cfg_controls[control_name].split('_')
+                        if len(parts) >= 3:
+                            button_part = parts[2]
+                            if button_part == 'A':
+                                label['target_button'] = 'A Button'
+                            elif button_part == 'B':
+                                label['target_button'] = 'B Button'
+                            elif button_part == 'X':
+                                label['target_button'] = 'X Button'
+                            elif button_part == 'Y':
+                                label['target_button'] = 'Y Button'
+                            elif button_part == 'SHOULDER_L':
+                                label['target_button'] = 'LB Button'
+                            elif button_part == 'SHOULDER_R':
+                                label['target_button'] = 'RB Button'
+                            elif button_part == 'TRIGGER_L':
+                                label['target_button'] = 'LT Button'
+                            elif button_part == 'TRIGGER_R':
+                                label['target_button'] = 'RT Button'
+                            else:
+                                label['target_button'] = button_part
+                    elif 'JOYCODE' in cfg_controls[control_name]:
+                        # Extract the button part for JOYCODE (e.g., JOYCODE_1_BUTTON3 -> Button 3)
+                        parts = cfg_controls[control_name].split('_')
+                        if len(parts) >= 3 and 'BUTTON' in parts[2]:
+                            button_num = parts[2].replace('BUTTON', '')
+                            label['target_button'] = f'Button {button_num}'
+                        else:
+                            label['target_button'] = cfg_controls[control_name]
                 else:
                     label['is_custom'] = False
                     
@@ -4531,7 +4627,10 @@ controller xbox t		= """
                     
                 # Set display name based on control type for XInput mode
                 if self.use_xinput:
-                    if control_name == 'P1_BUTTON1':
+                    # NEW CODE: Use target_button if available from custom mapping
+                    if 'target_button' in label:
+                        label['display_name'] = f'P1 {label["target_button"]}'
+                    elif control_name == 'P1_BUTTON1':
                         label['display_name'] = 'P1 A Button'
                     elif control_name == 'P1_BUTTON2':
                         label['display_name'] = 'P1 B Button'
@@ -4562,9 +4661,12 @@ controller xbox t		= """
                     else:
                         label['display_name'] = self.format_control_name(control_name)
                 else:
-                    # JOYCODE mode - use traditional names
-                    label['display_name'] = self.format_control_name(control_name)
-    
+                    # JOYCODE mode - use traditional names or custom target
+                    if 'target_button' in label:
+                        label['display_name'] = f'P1 {label["target_button"]}'
+                    else:
+                        label['display_name'] = self.format_control_name(control_name)
+
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
         if hasattr(self, 'hide_buttons_toggle'):
@@ -4923,7 +5025,25 @@ controller xbox t		= """
         """Convert between JOYCODE and XInput mappings with better handling"""
         if not mapping:
             return mapping
+        
+        # NEW CODE: If we still have OR in the mapping (should be rare now), extract JOYCODE part
+        if " OR " in mapping:
+            parts = mapping.split(" OR ")
+            joycode_part = None
             
+            # Look for a JOYCODE part first
+            for part in parts:
+                part = part.strip()
+                if "JOYCODE" in part:
+                    joycode_part = part
+                    break
+                    
+            # If found, use that for conversion instead
+            if joycode_part:
+                mapping = joycode_part
+                print(f"Extracted JOYCODE part from OR statement: {mapping}")
+            
+        # Create more complete mapping tables
         xinput_mappings = {
             'JOYCODE_1_BUTTON1': 'XINPUT_1_A',           # A Button
             'JOYCODE_1_BUTTON2': 'XINPUT_1_B',           # B Button
@@ -4954,26 +5074,33 @@ controller xbox t		= """
             'JOYCODE_2_HATLEFT': 'XINPUT_2_DPAD_LEFT',   # D-Pad Left
             'JOYCODE_2_HATRIGHT': 'XINPUT_2_DPAD_RIGHT', # D-Pad Right
         }
+        # Create reverse mapping for XINPUT to JOYCODE
         joycode_mappings = {v: k for k, v in xinput_mappings.items()}
         
-        # If mapping contains multiple options (separated by OR)
-        if " OR " in mapping:
-            parts = mapping.split(" OR ")
-            # Try to convert each part and return the first successful conversion
-            for part in parts:
-                part = part.strip()
-                if to_xinput and part in xinput_mappings:
-                    return xinput_mappings[part]
-                elif not to_xinput and part in joycode_mappings:
-                    return joycode_mappings[part]
-            # If no parts could be converted, return the mapping as-is
-            return mapping
+        # Debug information
+        print(f"Converting mapping: {mapping} to_xinput={to_xinput}")
         
         # Simple conversion for a single mapping
         if to_xinput:
-            return xinput_mappings.get(mapping, mapping)
+            if mapping in xinput_mappings:
+                print(f"Direct xinput mapping: {mapping} -> {xinput_mappings[mapping]}")
+                return xinput_mappings[mapping]
+            else:
+                # Check if this is already in XInput format
+                if mapping.startswith('XINPUT_'):
+                    return mapping
+                print(f"No xinput mapping found for: {mapping}")
+                return mapping
         else:
-            return joycode_mappings.get(mapping, mapping)
+            if mapping in joycode_mappings:
+                print(f"Direct joycode mapping: {mapping} -> {joycode_mappings[mapping]}")
+                return joycode_mappings[mapping]
+            else:
+                # Check if this is already in JOYCODE format
+                if mapping.startswith('JOYCODE_'):
+                    return mapping
+                print(f"No joycode mapping found for: {mapping}")
+                return mapping
 
     def format_control_name(self, control_name: str) -> str:
         """Convert MAME control names to friendly names based on input type"""
@@ -5345,37 +5472,30 @@ controller xbox t		= """
                 # Determine functional category based on control name
                 func_category = 'other'  # Default to 'other'
                 
-                if 'JOYSTICK_LEFT' in control_name or 'JOYSTICK_RIGHT' in control_name or 'PADDLE' in control_name or ('DIAL' in control_name and not 'DIAL_V' in control_name):
-                    func_category = 'move_horizontal'
-                elif 'JOYSTICK_UP' in control_name or 'JOYSTICK_DOWN' in control_name or 'DIAL_V' in control_name:
-                    func_category = 'move_vertical'
-                elif 'BUTTON1' in control_name or 'BUTTON2' in control_name:
-                    func_category = 'action_primary'
-                elif 'BUTTON3' in control_name or 'BUTTON4' in control_name:
-                    func_category = 'action_secondary'
-                elif 'BUTTON' in control_name:  # Other buttons
-                    func_category = 'action_special'
-                elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
-                    func_category = 'system_control'
-                elif 'PEDAL' in control_name:
-                    func_category = 'analog_input'
-                elif 'TRACKBALL' in control_name or 'LIGHTGUN' in control_name or 'MOUSE' in control_name:
-                    func_category = 'precision_aim'
-                elif 'GAMBLE' in control_name:
-                    func_category = 'special_function'
-                    
-                # Additional catch-all logic for specialized controls
-                if func_category == 'other' and control_name.startswith('P1_'):
-                    # Try to categorize based on patterns in the control name
-                    if 'AD_STICK_X' in control_name:
+                if 'func_category' in label:
+                    # Use the category from the label if available
+                    func_category = label['func_category']
+                else:
+                    # Determine category based on control name
+                    if 'JOYSTICK_LEFT' in control_name or 'JOYSTICK_RIGHT' in control_name or 'PADDLE' in control_name or ('DIAL' in control_name and not 'DIAL_V' in control_name):
                         func_category = 'move_horizontal'
-                    elif 'AD_STICK_Y' in control_name:
+                    elif 'JOYSTICK_UP' in control_name or 'JOYSTICK_DOWN' in control_name or 'DIAL_V' in control_name:
                         func_category = 'move_vertical'
-                    elif 'AD_STICK_Z' in control_name:
+                    elif 'BUTTON1' in control_name or 'BUTTON2' in control_name:
+                        func_category = 'action_primary'
+                    elif 'BUTTON3' in control_name or 'BUTTON4' in control_name:
+                        func_category = 'action_secondary'
+                    elif 'BUTTON' in control_name:  # Other buttons
+                        func_category = 'action_special'
+                    elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
+                        func_category = 'system_control'
+                    elif 'PEDAL' in control_name:
                         func_category = 'analog_input'
-                    elif 'POSITIONAL' in control_name:
+                    elif 'TRACKBALL' in control_name or 'LIGHTGUN' in control_name or 'MOUSE' in control_name:
                         func_category = 'precision_aim'
-                    
+                    elif 'GAMBLE' in control_name:
+                        func_category = 'special_function'
+                        
                 # Store the category in the label for future reference (for preview)
                 label['func_category'] = func_category
                 
@@ -5383,14 +5503,60 @@ controller xbox t		= """
                 is_custom = control_name in cfg_controls
                 mapping_source = f"ROM CFG ({romname}.cfg)" if is_custom else "Game Data"
                 
+                # Determine the correct display mapping
+                mapping_value = ''
+                if is_custom:
+                    mapping_value = cfg_controls[control_name]
+                    
+                    # NEW CODE: Get target button information from custom mapping
+                    if self.use_xinput and 'XINPUT' in mapping_value:
+                        # Extract the button part (e.g., XINPUT_1_X -> X Button)
+                        parts = mapping_value.split('_')
+                        if len(parts) >= 3:
+                            button_part = parts[2]
+                            if button_part == 'A':
+                                target_button = 'A Button'
+                            elif button_part == 'B':
+                                target_button = 'B Button'
+                            elif button_part == 'X':
+                                target_button = 'X Button'
+                            elif button_part == 'Y':
+                                target_button = 'Y Button'
+                            elif button_part == 'SHOULDER_L':
+                                target_button = 'LB Button'
+                            elif button_part == 'SHOULDER_R':
+                                target_button = 'RB Button'
+                            elif button_part == 'TRIGGER_L':
+                                target_button = 'LT Button'
+                            elif button_part == 'TRIGGER_R':
+                                target_button = 'RT Button'
+                            else:
+                                target_button = button_part
+                    elif not self.use_xinput and 'JOYCODE' in mapping_value:
+                        # Extract the button part for JOYCODE
+                        parts = mapping_value.split('_')
+                        if len(parts) >= 3 and 'BUTTON' in parts[2]:
+                            button_num = parts[2].replace('BUTTON', '')
+                            target_button = f'Button {button_num}'
+                        else:
+                            target_button = mapping_value
+                    else:
+                        target_button = mapping_value
+                
                 # Add to the appropriate category
-                control_by_function[func_category].append({
+                control_item = {
                     'name': control_name,
                     'action': label['value'],
                     'mapping': cfg_controls.get(control_name, ''),
                     'is_custom': is_custom,
                     'source': mapping_source
-                })
+                }
+                
+                # NEW CODE: Add target button information if available
+                if is_custom and 'target_button' in locals():
+                    control_item['target_button'] = target_button
+                    
+                control_by_function[func_category].append(control_item)
         
         # If using XInput, add display names that reflect actual function
         display_name_map = {}
@@ -5475,8 +5641,17 @@ controller xbox t		= """
                 row_frame.columnconfigure(2, minsize=180, weight=0)
                 
                 # Control function/display name (left column)
-                # Use mapped display name if available, otherwise format the control name
-                display_name = display_name_map.get(control['name'], self.format_control_name(control['name']))
+                # Use the appropriate display name based on custom mapping or default mapping
+                if control['is_custom'] and 'target_button' in control:
+                    # NEW CODE: Use the target button from custom mapping
+                    if self.use_xinput:
+                        display_name = f"P1 {control['target_button']}"
+                    else:
+                        # For JOYCODE mode, use the JOYCODE button
+                        display_name = f"P1 {control['target_button']}"
+                else:
+                    # Use mapped display name if available, otherwise format the control name
+                    display_name = display_name_map.get(control['name'], self.format_control_name(control['name']))
                 
                 button_label = ctk.CTkLabel(
                     row_frame,
@@ -5520,30 +5695,68 @@ controller xbox t		= """
                         if label['name'] == control['name']:
                             # Set functional category
                             label['func_category'] = category
-                            
-                            # Set appropriate display style based on function
-                            if category == 'move_horizontal':
-                                label['display_style'] = 'horizontal'
-                            elif category == 'move_vertical':
-                                label['display_style'] = 'vertical'
-                            elif category == 'action_primary':
-                                label['display_style'] = 'primary_button'
-                            elif category == 'action_secondary':
-                                label['display_style'] = 'secondary_button'
-                            elif category == 'system_control':
-                                label['display_style'] = 'system_button'
+                        
+                        # Set appropriate display style based on function
+                        if category == 'move_horizontal':
+                            label['display_style'] = 'horizontal'
+                        elif category == 'move_vertical':
+                            label['display_style'] = 'vertical'
+                        elif category == 'action_primary':
+                            label['display_style'] = 'primary_button'
+                        elif category == 'action_secondary':
+                            label['display_style'] = 'secondary_button'
+                        elif category == 'system_control':
+                            label['display_style'] = 'system_button'
+                        elif category == 'analog_input':
+                            label['display_style'] = 'analog_control'
+                        elif category == 'precision_aim':
+                            label['display_style'] = 'precision_control'
+                        elif category == 'special_function':
+                            label['display_style'] = 'special_button'
+                        else:
+                            label['display_style'] = 'standard'  # Default style for 'other' controls
+                        
+                        # NEW CODE: Update display name based on custom mapping if available
+                        if control['is_custom'] and 'target_button' in control:
+                            # Use target button from custom mapping
+                            if self.use_xinput:
+                                label['display_name'] = f"P1 {control['target_button']}"
                             else:
-                                label['display_style'] = 'standard'
-                            
-                            # If using custom mapping, ensure it's properly tagged
-                            if control['is_custom']:
-                                label['mapping'] = control['mapping']
-                                label['mapping_source'] = control['source']
-                                label['is_custom'] = True
-                                label['cfg_mapping'] = True
-                                
-                            # Set the display name to maintain consistency in preview
+                                label['display_name'] = f"P1 {control['target_button']}"
+                        elif self.use_xinput:
+                            # Standard XInput names
+                            if control['name'] == 'P1_BUTTON1':
+                                label['display_name'] = 'P1 A Button'
+                            elif control['name'] == 'P1_BUTTON2':
+                                label['display_name'] = 'P1 B Button'
+                            elif control['name'] == 'P1_BUTTON3':
+                                label['display_name'] = 'P1 X Button'
+                            elif control['name'] == 'P1_BUTTON4':
+                                label['display_name'] = 'P1 Y Button'
+                            elif control['name'] == 'P1_BUTTON5':
+                                label['display_name'] = 'P1 LB Button'
+                            elif control['name'] == 'P1_BUTTON6':
+                                label['display_name'] = 'P1 RB Button'
+                            elif control['name'] == 'P1_BUTTON7':
+                                label['display_name'] = 'P1 LT Button'
+                            elif control['name'] == 'P1_BUTTON8':
+                                label['display_name'] = 'P1 RT Button'
+                            elif control['name'] == 'P1_BUTTON9':
+                                label['display_name'] = 'P1 Left Stick Button'
+                            elif control['name'] == 'P1_BUTTON10':
+                                label['display_name'] = 'P1 Right Stick Button'
+                            else:
+                                label['display_name'] = display_name
+                        else:
+                            # JOYCODE mode - use traditional names
                             label['display_name'] = display_name
+                            
+                        # If this control has a custom mapping, ensure it's properly tagged
+                        if control['is_custom']:
+                            label['mapping'] = control['mapping']
+                            label['mapping_source'] = control['source']
+                            label['is_custom'] = True
+                            label['cfg_mapping'] = True
                 
                 control_row += 1
         
@@ -5652,35 +5865,7 @@ controller xbox t		= """
             print(f"Warning: Could not update cache: {e}")
         
         return row + 1
-
-    def joycode_to_button(self, joycode):
-        """Convert a JOYCODE mapping to a controller button name"""
-        if not joycode or "JOYCODE" not in joycode:
-            return None
-            
-        joycode_mapping = {
-            "JOYCODE_1_BUTTON1": "P1 A Button",
-            "JOYCODE_1_BUTTON2": "P1 B Button",
-            "JOYCODE_1_BUTTON3": "P1 X Button",
-            "JOYCODE_1_BUTTON4": "P1 Y Button",
-            "JOYCODE_1_BUTTON5": "P1 LB Button",
-            "JOYCODE_1_BUTTON6": "P1 RB Button",
-            "JOYCODE_1_BUTTON7": "P1 LT Button",
-            "JOYCODE_1_BUTTON8": "P1 RT Button",
-            "JOYCODE_1_BUTTON9": "P1 Left Stick Button",
-            "JOYCODE_1_BUTTON10": "P1 Right Stick Button",
-            "JOYCODE_1_DPADUP": "P1 D-Pad Up",
-            "JOYCODE_1_DPADDOWN": "P1 D-Pad Down",
-            "JOYCODE_1_DPADLEFT": "P1 D-Pad Left",
-            "JOYCODE_1_DPADRIGHT": "P1 D-Pad Right",
-            "JOYCODE_1_YAXIS_UP_SWITCH": "P1 Left Stick Up",
-            "JOYCODE_1_YAXIS_DOWN_SWITCH": "P1 Left Stick Down",
-            "JOYCODE_1_XAXIS_LEFT_SWITCH": "P1 Left Stick Left",
-            "JOYCODE_1_XAXIS_RIGHT_SWITCH": "P1 Left Stick Right"
-        }
         
-        return joycode_mapping.get(joycode)
-    
     def compare_controls(self, game_data: Dict, cfg_controls: Dict) -> List[Tuple[str, str, str, bool]]:
         """Compare controls with game-specific and default mappings"""
         comparisons = []
