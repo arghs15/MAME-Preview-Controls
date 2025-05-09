@@ -966,8 +966,8 @@ class PreviewWindow(QMainWindow):
             if hasattr(self, 'load_snapping_settings'):
                 self.load_snapping_settings()
             
-            # ONLY add the shortcut text if NOT in clean mode
-            if not hasattr(self, 'clean_mode') or not self.clean_mode:
+            # ONLY add the shortcut text if NOT in clean mode AND we don't already have it
+            if (not hasattr(self, 'clean_mode') or not self.clean_mode) and not hasattr(self, 'shortcuts_label'):
                 from PyQt5.QtWidgets import QLabel
                 
                 try:
@@ -990,7 +990,6 @@ class PreviewWindow(QMainWindow):
         except Exception as e:
             print(f"Error in enhance_preview_window_init: {e}")
     
-    # 1. Add these properties to PreviewWindow's initialization or setup_alignment_features method
     def setup_snapping_controls(self):
         """Initialize snapping control settings with robust error handling"""
         try:
