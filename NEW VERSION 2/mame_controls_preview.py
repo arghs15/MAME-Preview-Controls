@@ -676,8 +676,8 @@ class PreviewWindow(QMainWindow):
             return False
     
     def recreate_control_labels_with_case(self):
-        """Recreate control labels to properly handle case changes"""
-        print("Recreating control labels to apply case change...")
+        """Recreate control labels to properly handle case changes and gradient settings"""
+        print("Recreating control labels to apply case and gradient changes...")
         
         # Store current positions and visibility
         label_info = {}
@@ -686,7 +686,9 @@ class PreviewWindow(QMainWindow):
                 label = control_data['label']
                 label_info[control_name] = {
                     'position': label.pos(),
-                    'visible': label.isVisible()
+                    'visible': label.isVisible(),
+                    'action': control_data['action'],
+                    'prefix': control_data.get('prefix', '')
                 }
         
         # Clear all current controls
@@ -696,22 +698,28 @@ class PreviewWindow(QMainWindow):
                     self.control_labels[control_name]['label'].deleteLater()
                 del self.control_labels[control_name]
         
-        # Recreate controls with proper case
+        # Recreate controls with proper case and gradient settings
         self.create_control_labels()
         
         # Restore positions and visibility
-        for control_name, control_data in self.control_labels.items():
-            if control_name in label_info and 'label' in control_data:
-                info = label_info[control_name]
+        for control_name, info in label_info.items():
+            if control_name in self.control_labels and 'label' in self.control_labels[control_name]:
+                control_data = self.control_labels[control_name]
+                
+                # Restore position and visibility
                 control_data['label'].move(info['position'])
                 control_data['label'].setVisible(info['visible'])
+                
+                # Make sure action and prefix are preserved
+                control_data['action'] = info['action']
+                control_data['prefix'] = info['prefix']
         
         # Force apply font and update
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self.apply_text_settings)
         QTimer.singleShot(200, self.force_resize_all_labels)
         
-        print("Control labels recreated with case changes applied")
+        print("Control labels recreated with case and gradient changes applied")
     
     # Add this method to the PreviewWindow class
     def resizeEvent(self, event):
@@ -5892,9 +5900,20 @@ class PreviewWindow(QMainWindow):
         new_uppercase = settings.get("use_uppercase", old_uppercase)
         uppercase_changed = old_uppercase != new_uppercase
         
-        if uppercase_changed:
-            print(f"Uppercase setting changing from {old_uppercase} to {new_uppercase}")
-            
+        # NEW: Also check if gradient settings changed
+        old_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+        new_prefix_gradient = settings.get("use_prefix_gradient", False)
+        old_action_gradient = self.text_settings.get("use_action_gradient", False)
+        new_action_gradient = settings.get("use_action_gradient", False)
+        gradient_changed = (old_prefix_gradient != new_prefix_gradient or 
+                            old_action_gradient != new_action_gradient)
+        
+        # Debug output for gradient changes
+        print(f"Gradient settings check - Old prefix: {old_prefix_gradient}, New prefix: {new_prefix_gradient}")
+        print(f"Gradient settings check - Old action: {old_action_gradient}, New action: {new_action_gradient}")
+        print(f"Gradient changed: {gradient_changed}")
+        
+        if uppercase_changed and new_uppercase == False:
             # Special handling for first run - ensure we have original case data
             if not hasattr(self, '_original_case_data'):
                 self._original_case_data = {}
@@ -5916,13 +5935,14 @@ class PreviewWindow(QMainWindow):
         # Reload and register the font
         self.load_and_register_fonts()
         
-        # Force immediate recreation of control labels to handle case change correctly
-        if uppercase_changed:
-            # This approach ensures case changes apply immediately, even on first run
+        # Force immediate recreation of control labels when uppercase or gradient settings change
+        if uppercase_changed or gradient_changed:
+            print(f"Need to recreate labels - Uppercase changed: {uppercase_changed}, Gradient changed: {gradient_changed}")
+            # This approach ensures both case and gradient changes apply immediately
             self.recreate_control_labels_with_case()
         else:
             # Normal update for other changes
-            self.apply_text_settings(uppercase_changed=uppercase_changed)
+            self.apply_text_settings()
         
         # Save to file
         try:
