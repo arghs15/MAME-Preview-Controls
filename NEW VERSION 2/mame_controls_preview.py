@@ -281,9 +281,8 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
-    # 1. Improve the maximum text width calculation in show_all_xinput_controls
     def calculate_max_text_width(self, controls_dict, font, show_button_prefix=True, use_uppercase=False, extra_padding=40):
-        """Calculate the maximum text width needed for all controls with extra padding"""
+        """Calculate the maximum text width needed for all controls with improved padding for long text"""
         from PyQt5.QtGui import QFontMetrics
         
         font_metrics = QFontMetrics(font)
@@ -303,19 +302,28 @@ class PreviewWindow(QMainWindow):
             if show_button_prefix and button_prefix:
                 display_text = f"{button_prefix}: {action_text}"
             
-            # Calculate width
+            # Calculate width with more precision using horizontalAdvance
             text_width = font_metrics.horizontalAdvance(display_text)
             
             # Keep track of max width
             max_width = max(max_width, text_width)
             
-            # Special handling for known problematic controls
-            if control_name == "P1_SELECT" or "Select" in action_text or len(display_text) > 15:
+            # Special handling for known problematic controls and longer texts
+            if (control_name == "P1_SELECT" or 
+                "Select" in action_text or 
+                len(display_text) > 15 or
+                len(action_text) > 12):  # Added check for longer action text
                 # Log the width for debugging
                 print(f"Width for '{display_text}': {text_width}px")
+                # Add extra padding for these special cases
+                text_width += 20  # Additional padding for problematic controls
         
-        # Add extra padding to ensure no truncation
-        # For controls with longer text, more padding is needed
+        # Add variable extra padding based on text length
+        if max_width > 200:
+            extra_padding = 60  # Use more padding for very long text
+        elif max_width > 150:
+            extra_padding = 50  # More padding for longer text
+        
         result_width = max_width + extra_padding
         
         print(f"Max text width calculated: {max_width}px + {extra_padding}px padding = {result_width}px")
@@ -530,15 +538,37 @@ class PreviewWindow(QMainWindow):
                 # First, let the label auto-size based on content
                 label.adjustSize()
 
-                # Then ensure it's at least as wide as our calculated max width
-                # This creates consistency and prevents long text from being cut off
-                label_width = max(label.width(), max_text_width)
+                # More aggressive approach to prevent text truncation
+                font_metrics = QFontMetrics(label.font())
+                text_width = font_metrics.horizontalAdvance(display_text)
+
+                # Get font family to check if it's a custom font
+                font_family = label.font().family()
+                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                    "Impact", "System"]
+
+                # Determine base padding based on font type
+                base_padding = 50 if is_custom_font else 30
+
+                # Add additional padding for longer text
+                if len(display_text) > 15:
+                    base_padding += 20
+                if len(display_text) > 20:
+                    base_padding += 30
+                    
+                # Special case for Select button or text containing Select
+                if "SELECT" in control_name or "Select" in action_text:
+                    base_padding += 25
+                    
+                # Calculate final width with generous padding
+                label_width = text_width + base_padding
                 label_height = label.height()
 
-                # Add extra width for "Select" button specifically
-                if "SELECT" in control_name or "Select" in action_text:
-                    label_width += 20  # Add extra width for Select button specifically
-                    
+                # Debug output for problematic labels
+                if "SELECT" in control_name or len(display_text) > 15:
+                    print(f"Setting width for {control_name}: text={text_width}px, padding={base_padding}px, final={label_width}px")
+
                 # Resize with the calculated width
                 label.resize(label_width, label_height)
                 
@@ -644,6 +674,44 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             return False
+    
+    def recreate_control_labels_with_case(self):
+        """Recreate control labels to properly handle case changes"""
+        print("Recreating control labels to apply case change...")
+        
+        # Store current positions and visibility
+        label_info = {}
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data and control_data['label']:
+                label = control_data['label']
+                label_info[control_name] = {
+                    'position': label.pos(),
+                    'visible': label.isVisible()
+                }
+        
+        # Clear all current controls
+        for control_name in list(self.control_labels.keys()):
+            if control_name in self.control_labels:
+                if 'label' in self.control_labels[control_name]:
+                    self.control_labels[control_name]['label'].deleteLater()
+                del self.control_labels[control_name]
+        
+        # Recreate controls with proper case
+        self.create_control_labels()
+        
+        # Restore positions and visibility
+        for control_name, control_data in self.control_labels.items():
+            if control_name in label_info and 'label' in control_data:
+                info = label_info[control_name]
+                control_data['label'].move(info['position'])
+                control_data['label'].setVisible(info['visible'])
+        
+        # Force apply font and update
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self.apply_text_settings)
+        QTimer.singleShot(200, self.force_resize_all_labels)
+        
+        print("Control labels recreated with case changes applied")
     
     # Add this method to the PreviewWindow class
     def resizeEvent(self, event):
@@ -2095,32 +2163,69 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'bezel_button'):
             self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
     
-    # 12. Modify the force_resize_all_labels method to not update shadows
     def force_resize_all_labels(self):
-        """Force all control labels to resize according to their content"""
+        """Force all control labels to resize according to their content with extra padding for different fonts"""
         if not hasattr(self, 'control_labels'):
             return
-                
+                    
         print("Force resizing all control labels")
         for control_name, control_data in self.control_labels.items():
             if 'label' in control_data and control_data['label']:
                 label = control_data['label']
-                    
+                
+                # Get the displayed text
+                display_text = label.text()
+                action_text = control_data['action']
+                        
                 # Make sure we don't have size restrictions
                 label.setMinimumSize(0, 0)
                 label.setMaximumSize(16777215, 16777215)
-                    
+                        
                 # Reset size policy
                 label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                    
-                # Adjust size to content
+                        
+                # First get the natural size through adjustSize
                 label.adjustSize()
+                
+                # Now calculate a better width based on text metrics
+                font_metrics = QFontMetrics(label.font())
+                text_width = font_metrics.horizontalAdvance(display_text)
+                
+                # Get font family to check if it's a custom font
+                font_family = label.font().family()
+                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                "Impact", "System"]
+                
+                # Use a moderate padding - less extreme than before since we're not centering
+                padding = 20  # Basic padding 
+                
+                if is_custom_font:
+                    # Add extra padding for custom fonts
+                    padding += 10
+                
+                # Add extra padding for problematic controls and longer texts
+                if "SELECT" in control_name or "Select" in action_text or len(display_text) > 15:
+                    padding += 15
+                
+                # For very long text, add a bit more
+                if len(display_text) > 20:
+                    padding += 15
+                
+                # Calculate final width and ensure it's not too narrow
+                final_width = text_width + padding
+                
+                # Ensure label is wide enough for the text plus padding
+                label.resize(final_width, label.height())
+                
+                if "SELECT" in control_name or len(display_text) > 15:
+                    print(f"Resized {control_name}: text_width={text_width}, final_width={final_width}, text='{display_text}'")
         
         # Force a repaint
         if hasattr(self, 'canvas'):
             self.canvas.update()
-                
-        print("All labels resized")
+                    
+        print("All labels resized with improved width calculation")
 
     # Replace your existing toggle_bezel_improved method with this one
     def toggle_bezel_improved(self):
@@ -2938,15 +3043,37 @@ class PreviewWindow(QMainWindow):
                 # First, let the label auto-size based on content
                 label.adjustSize()
 
-                # Then ensure it's at least as wide as our calculated max width
-                # This creates consistency and prevents long text from being cut off
-                label_width = max(label.width(), max_text_width)
+                # More aggressive approach to prevent text truncation
+                font_metrics = QFontMetrics(label.font())
+                text_width = font_metrics.horizontalAdvance(display_text)
+
+                # Get font family to check if it's a custom font
+                font_family = label.font().family()
+                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                    "Impact", "System"]
+
+                # Determine base padding based on font type
+                base_padding = 50 if is_custom_font else 30
+
+                # Add additional padding for longer text
+                if len(display_text) > 15:
+                    base_padding += 20
+                if len(display_text) > 20:
+                    base_padding += 30
+                    
+                # Special case for Select button or text containing Select
+                if "SELECT" in control_name or "Select" in action_text:
+                    base_padding += 25
+                    
+                # Calculate final width with generous padding
+                label_width = text_width + base_padding
                 label_height = label.height()
 
-                # Add extra width for "Select" button specifically
-                if "SELECT" in control_name or "Select" in action_text:
-                    label_width += 20  # Add extra width for Select button specifically
-                    
+                # Debug output for problematic labels
+                if "SELECT" in control_name or len(display_text) > 15:
+                    print(f"Setting width for {control_name}: text={text_width}px, padding={base_padding}px, final={label_width}px")
+
                 # Resize with the calculated width
                 label.resize(label_width, label_height)
                 
@@ -5824,7 +5951,7 @@ class PreviewWindow(QMainWindow):
         """Create control labels without shadows and respect clean_mode"""
         if not self.game_data or 'players' not in self.game_data:
             return
-            
+                
         # CRITICAL FIX: Make sure we have properly loaded fonts
         if not hasattr(self, 'current_font') or self.current_font is None:
             print("Font not initialized before creating labels - forcing font loading")
@@ -5979,6 +6106,43 @@ class PreviewWindow(QMainWindow):
                     
                     # Apply visibility
                     label.setVisible(is_visible)
+                    
+                    # First, let the label auto-size based on content
+                    label.adjustSize()
+
+                    # More aggressive approach to prevent text truncation
+                    font_metrics = QFontMetrics(label.font())
+                    text_width = font_metrics.horizontalAdvance(display_text)
+
+                    # Get font family to check if it's a custom font
+                    font_family = label.font().family()
+                    is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                    "Impact", "System"]
+
+                    # Determine base padding based on font type
+                    base_padding = 50 if is_custom_font else 30
+
+                    # Add additional padding for longer text
+                    if len(display_text) > 15:
+                        base_padding += 20
+                    if len(display_text) > 20:
+                        base_padding += 30
+                        
+                    # Special case for Select button or text containing select
+                    if "SELECT" in control_name or "Select" in action_text:
+                        base_padding += 25
+                        
+                    # Calculate final width with generous padding
+                    label_width = text_width + base_padding
+                    label_height = label.height()
+
+                    # Debug output for problematic labels
+                    if "SELECT" in control_name or len(display_text) > 15:
+                        print(f"Setting width for {control_name}: text={text_width}px, padding={base_padding}px, final={label_width}px")
+
+                    # Resize with the calculated width
+                    label.resize(label_width, label_height)
                     
                     # CRITICAL FIX: Only assign drag events if not in clean mode
                     if not clean_mode:
@@ -6315,10 +6479,13 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'prefix_button'):
             self.prefix_button.setText("Hide Prefixes" if show_button_prefix else "Show Prefixes")
         
+        # Force resize all labels to handle new font dimensions
+        self.force_resize_all_labels()
+
         # Force a repaint
         if hasattr(self, 'canvas'):
             self.canvas.update()
-        
+
         # Verify font application - do this more safely
         if hasattr(self, 'verify_font_application'):
             try:
@@ -6326,7 +6493,7 @@ class PreviewWindow(QMainWindow):
                 QTimer.singleShot(100, self.verify_font_application)
             except Exception as e:
                 print(f"Error scheduling font verification: {e}")
-        
+
         print("Text settings applied to all controls with better font handling")
 
     def verify_font_application(self, control_name=None):
@@ -8328,6 +8495,10 @@ class ColoredDraggableLabel(DraggableLabel):
         self.prefix = ""
         self.action = ""
         self.parse_text(text)
+
+        # Add text alignment control
+        from PyQt5.QtCore import Qt
+        self.text_alignment = Qt.AlignLeft | Qt.AlignVCenter  # Default to left alignment
     
     def mousePressEvent(self, event):
         """Override to ensure proper offset tracking"""
@@ -8350,7 +8521,7 @@ class ColoredDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Override paint event to draw text with better width handling"""
+        """Override paint event to draw text with left alignment"""
         if not self.text():
             return
 
@@ -8371,38 +8542,24 @@ class ColoredDraggableLabel(DraggableLabel):
         if self.prefix and ": " in self.text():
             prefix_text = f"{self.prefix}: "
 
-            # Accurate widths - using horizontalAdvance for better precision
-            prefix_width = metrics.horizontalAdvance(prefix_text)
-            action_width = metrics.horizontalAdvance(self.action)
-            total_width = prefix_width + action_width
-
-            # Horizontally center the combined text block
-            # Use a smaller value than width/2 to shift text left slightly for better visibility
-            x = int((self.width() - total_width) / 2)
-            
-            # Ensure x is never negative (text is always visible)
-            x = max(5, x)
+            # Use left alignment with small margin
+            x = 10  # Fixed left margin
 
             # Draw prefix
             painter.setPen(prefix_color)
             painter.drawText(x, y, prefix_text)
 
+            # Get prefix width
+            prefix_width = metrics.horizontalAdvance(prefix_text)
+
             # Draw action text right after prefix
             painter.setPen(action_color)
             painter.drawText(x + prefix_width, y, self.action)
-
         else:
-            # Center full single-part text
+            # Draw single-part text with left alignment
             text = self.text()
-
-            text_width = metrics.horizontalAdvance(text)
-            x = int((self.width() - text_width) / 2)
-            
-            # Ensure x is never negative
-            x = max(5, x)
-
             painter.setPen(action_color)
-            painter.drawText(x, y, text)
+            painter.drawText(10, y, text)  # 10px from left edge
 
 # 5. Modify the GradientDraggableLabel class to remove shadow functionality
 class GradientDraggableLabel(DraggableLabel):
@@ -8421,6 +8578,10 @@ class GradientDraggableLabel(DraggableLabel):
         self.prefix_gradient_end = QColor(self.settings.get("prefix_gradient_end", "#FF5722"))
         self.action_gradient_start = QColor(self.settings.get("action_gradient_start", "#2196F3"))
         self.action_gradient_end = QColor(self.settings.get("action_gradient_end", "#4CAF50"))
+
+        # Add text alignment control
+        from PyQt5.QtCore import Qt
+        self.text_alignment = Qt.AlignLeft | Qt.AlignVCenter  # Default to left alignment
     
     def mousePressEvent(self, event):
         """Override to ensure proper offset tracking"""
@@ -8443,7 +8604,7 @@ class GradientDraggableLabel(DraggableLabel):
             self.action = text
     
     def paintEvent(self, event):
-        """Paint event with gradient rendering and better width handling"""
+        """Paint event with gradient rendering and left alignment"""
         if not self.text():
             return
             
@@ -8460,17 +8621,8 @@ class GradientDraggableLabel(DraggableLabel):
         if self.prefix and ": " in self.text():
             prefix_text = f"{self.prefix}: "
             
-            # Accurate widths for centering - use horizontalAdvance for better precision
-            prefix_width = metrics.horizontalAdvance(prefix_text)
-            action_width = metrics.horizontalAdvance(self.action)
-            total_width = prefix_width + action_width
-            
-            # Horizontally center the combined text block
-            # Use a smaller value than width/2 to shift text left slightly for better visibility
-            x = int((self.width() - total_width) / 2)
-            
-            # Ensure x is never negative (text is always visible)
-            x = max(5, x)
+            # Use fixed left margin instead of centering
+            x = 10
             
             # Calculate prefix rectangle for gradient
             prefix_rect = metrics.boundingRect(prefix_text)
@@ -8499,6 +8651,7 @@ class GradientDraggableLabel(DraggableLabel):
             painter.drawText(int(x), int(y), prefix_text)
             
             # Calculate action rectangle for gradient
+            prefix_width = metrics.horizontalAdvance(prefix_text)
             action_rect = metrics.boundingRect(self.action)
             action_rect.moveLeft(int(x + prefix_width))
             action_rect.moveTop(int(y - metrics.ascent()))
@@ -8524,13 +8677,9 @@ class GradientDraggableLabel(DraggableLabel):
             # Draw action text precisely positioned after prefix
             painter.drawText(int(x + prefix_width), int(y), self.action)
         else:
-            # Center single text
+            # Left-align single text
             text = self.text()
-            text_width = metrics.horizontalAdvance(text)
-            x = int((self.width() - text_width) / 2)
-            
-            # Ensure x is never negative
-            x = max(5, x)
+            x = 10  # Fixed left margin
             
             # Create text rectangle for gradient
             text_rect = metrics.boundingRect(text)
@@ -8557,7 +8706,7 @@ class GradientDraggableLabel(DraggableLabel):
                 
             # Draw text
             painter.drawText(int(x), int(y), text)
-    
+
 class LogoSettingsDialog(QDialog):
     """Dialog for configuring logo appearance and position with improved center handling"""
     def __init__(self, parent=None, settings=None):
