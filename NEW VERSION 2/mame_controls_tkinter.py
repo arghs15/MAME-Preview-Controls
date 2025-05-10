@@ -1885,15 +1885,31 @@ class MAMEControlConfig(ctk.CTk):
             # Skip if line is empty or "No matching ROMs found"
             if not line or line.startswith("No matching ROMs"):
                 return
-                    
-            # Remove prefix indicators
-            if line.startswith("* "):
-                line = line[2:]
-            if line.startswith("+ ") or line.startswith("- "):
-                line = line[2:]
-                        
-            # Get ROM name from start of line
-            romname = line.split(" - ")[0].split(" [Clone")[0]  # Handle the clone indicator
+            
+            # DEBUGGING: Print raw line content
+            print(f"Context menu raw line: {repr(line)}")
+            
+            # Extract ROM name using regex to handle multi-word ROM names
+            import re
+            
+            # Remove prefix indicators first
+            cleaned_line = line
+            if cleaned_line.startswith("* "):
+                cleaned_line = cleaned_line[2:]
+            if cleaned_line.startswith("+ ") or cleaned_line.startswith("- "):
+                cleaned_line = cleaned_line[2:]
+            
+            # Extract the ROM name part before any " - " or " [Clone"
+            pattern = r'^([^ ].*?)(?:\s+- |\s+\[Clone)'
+            match = re.search(pattern, cleaned_line)
+            
+            if match:
+                romname = match.group(1).strip()
+                print(f"Context menu extracted ROM: '{romname}'")
+            else:
+                # Fallback: if no separator found, use the entire cleaned line
+                romname = cleaned_line.strip()
+                print(f"Context menu fallback ROM: '{romname}'")
             
             # Check if this is a clone ROM
             is_clone = romname in self.parent_lookup if hasattr(self, 'parent_lookup') else False
@@ -2000,7 +2016,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection"""
+        """Update game list based on current sidebar category selection with improved multi-word handling"""
         # Check if game_list exists before trying to use it
         if not hasattr(self, 'game_list') or self.game_list is None:
             print("Warning: game_list widget not available yet")
@@ -2017,7 +2033,7 @@ class MAMEControlConfig(ctk.CTk):
         missing_controls = []
         with_custom_config = []
         generic_controls = []
-        clone_roms = []  # New list for clone ROMs
+        clone_roms = []  # List for clone ROMs
         
         # Build parent->clone lookup if needed
         if not hasattr(self, 'parent_lookup') or not self.parent_lookup:
@@ -2085,24 +2101,45 @@ class MAMEControlConfig(ctk.CTk):
             display_roms = with_custom_config
         elif self.current_view == "generic":
             display_roms = generic_controls
-        elif self.current_view == "clones":  # Handle the new "clones" category
+        elif self.current_view == "clones":  # Handle the "clones" category
             display_roms = sorted(clone_roms)
         
         # Apply search filter if needed
         search_text = ""
         if hasattr(self, 'search_var'):
-            search_text = self.search_var.get().lower()
+            search_text = self.search_var.get().lower().strip()
         
         if search_text:
             filtered_roms = []
             for rom in display_roms:
-                if search_text in rom.lower():
-                    filtered_roms.append(rom)
-                else:
-                    # Check game name too (if available)
+                # For multi-word searches, check if all words are in the ROM name or game name
+                if ' ' in search_text:
+                    # Split search into individual terms
+                    search_terms = search_text.split()
+                    
+                    # Get game data for name checking
                     game_data = self.get_game_data(rom)
-                    if game_data and 'gamename' in game_data and search_text in game_data['gamename'].lower():
+                    game_name = game_data.get('gamename', '').lower() if game_data else ''
+                    rom_lower = rom.lower()
+                    
+                    # Check if all terms are in either the ROM name or game name
+                    all_terms_match = True
+                    for term in search_terms:
+                        if term not in rom_lower and term not in game_name:
+                            all_terms_match = False
+                            break
+                    
+                    if all_terms_match:
                         filtered_roms.append(rom)
+                else:
+                    # Single word search - simpler check
+                    if search_text in rom.lower():
+                        filtered_roms.append(rom)
+                    else:
+                        # Check game name too (if available)
+                        game_data = self.get_game_data(rom)
+                        if game_data and 'gamename' in game_data and search_text in game_data['gamename'].lower():
+                            filtered_roms.append(rom)
             display_roms = filtered_roms
         
         # Display the filtered list
@@ -2233,18 +2270,40 @@ class MAMEControlConfig(ctk.CTk):
             # DEBUGGING: Print raw line content with character codes to identify how it's formatted
             print(f"Raw line: {repr(line)}")
             
-            # Use regular expressions to extract the ROM name
+            # Extract ROM name properly using regex pattern that can handle multi-word ROM names
             import re
-            match = re.search(r'[^*+\-\s]+', line)  # Match first sequence not containing *, +, -, or whitespace
+            
+            # Pattern explanation:
+            # 1. We first look for any prefix characters (*, +, -, spaces)
+            # 2. Then capture everything up to the first " - " separator (this is the ROM name)
+            # 3. The " - " separator divides ROM name from game description
+            # 4. We handle the case with or without clone indicator
+            pattern = r'^[\*\+\- ]*([^ ].*?)(?:\s+- |\s+\[Clone)'
+            match = re.search(pattern, line)
             
             if match:
-                romname = match.group(0)
+                romname = match.group(1).strip()
                 print(f"Extracted ROM name via regex: '{romname}'")
             else:
-                # Fallback to simple split if regex fails
-                parts = line.strip().split()
-                romname = parts[-1] if parts else line.strip()
-                print(f"Fallback ROM name: '{romname}'")
+                # Alternative approach if the regex fails
+                # Remove any prefixes and clone indicators
+                cleaned_line = line.strip()
+                if cleaned_line.startswith("* "):
+                    cleaned_line = cleaned_line[2:]
+                if cleaned_line.startswith("+ ") or cleaned_line.startswith("- "):
+                    cleaned_line = cleaned_line[2:]
+                    
+                # If there's a " - " separator, take everything before it
+                if " - " in cleaned_line:
+                    romname = cleaned_line.split(" - ")[0].strip()
+                # If there's a clone indicator, take everything before it
+                elif " [Clone" in cleaned_line:
+                    romname = cleaned_line.split(" [Clone")[0].strip()
+                # Otherwise, use the whole line
+                else:
+                    romname = cleaned_line
+                    
+                print(f"Fallback ROM name extraction: '{romname}'")
             
             self.current_game = romname
 
@@ -2506,6 +2565,7 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error displaying game: {str(e)}")
             import traceback
             traceback.print_exc()
+
     #######################################################################
     #CONFIF TO CREATE INFO FILES FOR RETROFE
     #- INFO FOLDER ENEDS TO BE IN PREVIEW\SETTINGS\INFO WITH A DEFAULT TEMPLATE
@@ -3361,6 +3421,9 @@ controller xbox t		= """
                 if not rom_name:
                     messagebox.showerror("Error", "ROM Name is required")
                     return
+                
+                # Log the full ROM name being saved
+                print(f"Saving new game with ROM name: '{rom_name}'")
                 
                 # Get existing gamedata.json
                 gamedata_path = self.get_gamedata_path()
@@ -5656,8 +5719,11 @@ controller xbox t		= """
         }
 
     def save_controls(self, rom_name, dialog, description_var, playercount_var, buttons_var, sticks_var, alternating_var, control_entries, custom_control_rows):
-        """Save controls directly to gamedata.json with support for adding missing games"""
+        """Save controls directly to gamedata.json with support for adding missing games and multi-word ROM names"""
         try:
+            # Ensure we're using the complete, unmodified ROM name (important for multi-word names)
+            print(f"Saving controls for ROM: '{rom_name}'")
+            
             # Collect game properties
             game_description = description_var.get().strip() or rom_name
             game_playercount = playercount_var.get()
@@ -5758,7 +5824,7 @@ controller xbox t		= """
                         clone_data = gamedata[rom_name]['clones'][clone_name]
                         if 'controls' in clone_data:
                             clone_with_controls = clone_name
-                    
+                
                 if clone_with_controls:
                     update_controls_in_data(gamedata[rom_name]['clones'][clone_with_controls])
                     target_found = True
@@ -5796,7 +5862,7 @@ controller xbox t		= """
             # If no existing control structure was found anywhere, create a new entry
             if not target_found:
                 print(f"Game {rom_name} not found in gamedata.json - creating new entry")
-                # Create a new entry for this ROM
+                # Create a new entry for this ROM - IMPORTANT: Use full multi-word ROM name
                 gamedata[rom_name] = {
                     "description": game_description,
                     "playercount": game_playercount,
@@ -7014,9 +7080,17 @@ controller xbox t		= """
             return False
     
     def filter_games(self, *args):
-        """Filter the game list based on search text with improved performance"""
+        """Filter the game list based on search text with improved multi-word handling"""
         # Only update if game_list exists
         if hasattr(self, 'game_list') and self.game_list is not None:
+            search_text = self.search_var.get().lower()
+            
+            # First check if we have a multi-word search
+            if search_text and ' ' in search_text:
+                # Multi-word search should check the full name, not just individual words
+                print(f"Multi-word search: '{search_text}'")
+            
+            # Update the display - this will handle filtering with the current search text
             self.update_game_list_by_category()
     
     # Update scan_roms_directory method 
