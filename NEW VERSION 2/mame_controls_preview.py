@@ -4196,47 +4196,6 @@ class PreviewWindow(QMainWindow):
         
         print(f"Logo display updated: {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
         
-    # 7. Modify the duplicate_control_label method in PreviewWindow
-    def duplicate_control_label(self, label):
-        """Duplicate a control label without shadow"""
-        # Find which control this label belongs to
-        for control_name, control_data in self.control_labels.items():
-            if control_data['label'] == label:
-                # Create a new unique control name
-                new_control_name = f"{control_name}_copy"
-                counter = 1
-                
-                # Make sure the name is unique
-                while new_control_name in self.control_labels:
-                    new_control_name = f"{control_name}_copy{counter}"
-                    counter += 1
-                
-                # Create a new label with the same text
-                action_text = control_data['action']
-                
-                # Create a new draggable label
-                new_label = DraggableLabel(action_text, self.canvas, settings=self.text_settings)
-                
-                # Copy font and other properties
-                new_label.setFont(label.font())
-                new_label.setStyleSheet(label.styleSheet())
-                
-                # Position slightly offset from original
-                new_pos = QPoint(label.pos().x() + 20, label.pos().y() + 20)
-                new_label.move(new_pos)
-                
-                # Store the new label
-                self.control_labels[new_control_name] = {
-                    'label': new_label,
-                    'action': action_text,
-                    'original_pos': new_pos
-                }
-                
-                # Show the new label
-                new_label.show()
-                
-                break
-    
     def create_button_rows(self):
         """Create the button rows for the preview window"""
         # Create two rows for buttons
@@ -6892,9 +6851,8 @@ class EnhancedLabel(QLabel):
         painter.setPen(self.palette().color(QPalette.WindowText))
         painter.drawText(int(x), int(y), self.text())
         
-# 2. Also update the DraggableLabel class to strictly respect the draggable property
 class DraggableLabel(QLabel):
-    """A draggable label without shadow functionality that respects draggable flag"""
+    """A draggable label without right-click menu functionality"""
     def __init__(self, text, parent=None, settings=None):
         super().__init__(text, parent)
         self.settings = settings or {}
@@ -6912,9 +6870,6 @@ class DraggableLabel(QLabel):
         
         # Original font size
         self.original_font_size = self.settings.get("font_size", 28)
-        
-        # Create context menu - not used in clean mode
-        self.setup_context_menu()
         
         # Enable auto-resizing based on content
         self.setWordWrap(True)
@@ -6938,51 +6893,6 @@ class DraggableLabel(QLabel):
         # Also reset size policy
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
     
-    def setup_context_menu(self):
-        """Setup right-click context menu"""
-        self.menu = QMenu(self)
-        
-        # Font size options
-        font_menu = QMenu("Font Size", self.menu)
-        
-        # Add size options
-        for size in [16, 20, 24, 28, 32, 36, 40]:
-            action = QAction(f"{size}px", self)
-            action.triggered.connect(lambda checked, s=size: self.change_font_size(s))
-            font_menu.addAction(action)
-        
-        self.menu.addMenu(font_menu)
-        
-        # Color options
-        color_menu = QMenu("Text Color", self.menu)
-        
-        # Add color options
-        colors = {
-            "White": Qt.white,
-            "Yellow": Qt.yellow,
-            "Red": Qt.red,
-            "Green": QColor(50, 255, 50),
-            "Blue": QColor(80, 160, 255),
-            "Pink": QColor(255, 100, 255)
-        }
-        
-        for name, color in colors.items():
-            action = QAction(name, self)
-            action.triggered.connect(lambda checked, c=color: self.change_text_color(c))
-            color_menu.addAction(action)
-        
-        self.menu.addMenu(color_menu)
-        
-        # Add reset option
-        reset_action = QAction("Reset Size", self)
-        reset_action.triggered.connect(self.reset_font_size)
-        self.menu.addAction(reset_action)
-        
-        # Add duplicate option
-        duplicate_action = QAction("Duplicate", self)
-        duplicate_action.triggered.connect(self.duplicate_label)
-        self.menu.addAction(duplicate_action)
-        
     def update_appearance(self):
         """Update appearance based on settings"""
         # If we have an initialized font, use it directly
@@ -7250,43 +7160,11 @@ class DraggableLabel(QLabel):
                 return current
             current = current.parent()
         return None
-            
-    def contextMenuEvent(self, event):
-        """Show context menu on right-click if draggable is enabled"""
-        # CRITICAL FIX: Only show context menu if explicitly allowed
-        if not getattr(self, 'draggable', True):
-            event.ignore()  # Pass event to parent
-            return
-            
-        self.menu.exec_(event.globalPos())
     
     def paintEvent(self, event):
         """Override paint event to draw text properly centered"""
         # Use default QLabel painting
         super().paintEvent(event)
-    
-    def change_font_size(self, size):
-        """Change font size through context menu"""
-        current_font = self.font()
-        current_font.setPointSize(size)
-        self.setFont(current_font)
-        
-        # Update settings
-        if self.settings:
-            self.settings["font_size"] = size
-    
-    def reset_font_size(self):
-        """Reset font size to original"""
-        self.change_font_size(self.original_font_size)
-    
-    def change_text_color(self, color):
-        """Change text color"""
-        self.setStyleSheet(f"color: {color.name()}; background-color: transparent; border: none;")
-    
-    def duplicate_label(self):
-        """Duplicate this label"""
-        if hasattr(self.parent(), "duplicate_control_label"):
-            self.parent().duplicate_control_label(self)
 
 class TextSettingsDialog(QDialog):
     """Dialog for configuring text appearance in preview with improved live preview"""
@@ -8504,8 +8382,7 @@ class ColoredPrefixLabel(DraggableLabel):
             painter.setPen(action_color)
             painter.drawText(x, y, text)
 
-
-# 6. Modify the ColoredDraggableLabel class to remove shadow functionality
+# Simplified version of ColoredDraggableLabel (without right-click menu)
 class ColoredDraggableLabel(DraggableLabel):
     """A draggable label that supports different colors for prefix and action text"""
     def __init__(self, text, parent=None, settings=None):
@@ -8580,7 +8457,7 @@ class ColoredDraggableLabel(DraggableLabel):
             painter.setPen(action_color)
             painter.drawText(10, y, text)  # 10px from left edge
 
-# 5. Modify the GradientDraggableLabel class to remove shadow functionality
+# Simplified version of GradientDraggableLabel (without right-click menu)
 class GradientDraggableLabel(DraggableLabel):
     """A draggable label that supports gradient text for prefix and action text"""
     def __init__(self, text, parent=None, settings=None):
