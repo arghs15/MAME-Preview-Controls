@@ -1871,7 +1871,7 @@ class MAMEControlConfig(ctk.CTk):
         self.control_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
     def show_game_context_menu(self, event):
-        """Show context menu on right-click for ROM entries"""
+        """Show context menu on right-click for ROM entries with improved ROM name handling"""
         try:
             # Get the clicked line
             index = self.game_list.index(f"@{event.x},{event.y}")
@@ -1922,7 +1922,7 @@ class MAMEControlConfig(ctk.CTk):
             if is_clone and parent_rom:
                 # For clones, show different edit option that redirects to parent
                 context_menu.add_command(label=f"Edit Controls (Parent: {parent_rom})", 
-                                    command=lambda: self.show_control_editor(parent_rom))
+                                    command=lambda: self.show_control_editor(romname))
             else:
                 # Regular edit option for non-clones
                 context_menu.add_command(label="Edit Controls", 
@@ -1960,7 +1960,20 @@ class MAMEControlConfig(ctk.CTk):
             messagebox.showinfo("No Game Selected", "Please select a game first.")
     
     def preview_rom_controls(self, rom_name):
-        """Preview controls for a specific ROM"""
+        """Preview controls for a specific ROM with proper handling of prefixes"""
+        # Clean the ROM name in case it has prefixes
+        if rom_name:
+            # Remove common prefixes that might be part of the display format but not the actual ROM name
+            if rom_name.startswith("* "):
+                rom_name = rom_name[2:]
+            if rom_name.startswith("+ ") or rom_name.startswith("- "):
+                rom_name = rom_name[2:]
+                
+            # Strip any leading/trailing whitespace
+            rom_name = rom_name.strip()
+            
+            print(f"Previewing ROM with cleaned name: '{rom_name}'")
+        
         # Save current game
         previous_game = self.current_game
         
@@ -2985,646 +2998,32 @@ controller xbox t		= """
             traceback.print_exc()
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
             
-    def create_add_game_panel(self, parent_frame):
-        """Create a panel for adding new games to gamedata.json"""
-        # Main container frame with scrolling
-        container = ctk.CTkScrollableFrame(
-            parent_frame,
-            fg_color="transparent",
-            scrollbar_button_color=self.theme_colors["primary"],
-            scrollbar_button_hover_color=self.theme_colors["secondary"]
-        )
-        container.pack(expand=True, fill="both", padx=10, pady=10)
+    def show_unified_game_editor(self, rom_name=None, is_new_game=True, parent=None):
+        """
+        Unified editor for adding/editing games with complete functionality
         
-        # Title and description
-        header_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        header_frame.pack(fill="x", padx=0, pady=(0, 15))
+        Parameters:
+        - rom_name: Name of the ROM to edit, or None for a new game
+        - is_new_game: Whether this is a new game or editing an existing one
+        - parent: Parent window for this dialog (used for modal behavior)
+        """
+        # If editing existing game, load its data
+        game_data = {}
+        if rom_name and not is_new_game:
+            game_data = self.get_game_data(rom_name) or {}
         
-        ctk.CTkLabel(
-            header_frame,
-            text="Add New Game to gamedata.json",
-            font=("Arial", 16, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        description_text = (
-            "This tool allows you to add a new game to the gamedata.json database. "
-            "Fill in the required information below to create a new entry in the proper format."
-        )
-        
-        ctk.CTkLabel(
-            header_frame,
-            text=description_text,
-            font=("Arial", 13),
-            justify="left",
-            wraplength=750
-        ).pack(anchor="w", padx=15, pady=(0, 15))
-        
-        # Form card
-        form_card = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        form_card.pack(fill="x", padx=0, pady=(0, 15))
-        
-        # Basic info section
-        ctk.CTkLabel(
-            form_card,
-            text="Basic Game Information",
-            font=("Arial", 14, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        # Grid layout for form fields
-        form_grid = ctk.CTkFrame(form_card, fg_color="transparent")
-        form_grid.pack(fill="x", padx=15, pady=(0, 15))
-        form_grid.columnconfigure(0, weight=0)  # Label
-        form_grid.columnconfigure(1, weight=1)  # Entry
-        
-        # ROM Name field
-        ctk.CTkLabel(
-            form_grid,
-            text="ROM Name:",
-            font=("Arial", 13),
-            width=120,
-            anchor="w"
-        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        
-        rom_name_var = tk.StringVar()
-        rom_name_entry = ctk.CTkEntry(
-            form_grid,
-            width=300,
-            textvariable=rom_name_var,
-            fg_color=self.theme_colors["background"]
-        )
-        rom_name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        
-        # Game description field
-        ctk.CTkLabel(
-            form_grid,
-            text="Game Description:",
-            font=("Arial", 13),
-            width=120,
-            anchor="w"
-        ).grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        
-        description_var = tk.StringVar()
-        description_entry = ctk.CTkEntry(
-            form_grid,
-            width=400,
-            textvariable=description_var,
-            fg_color=self.theme_colors["background"]
-        )
-        description_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        
-        # Player count field
-        ctk.CTkLabel(
-            form_grid,
-            text="Player Count:",
-            font=("Arial", 13),
-            width=120,
-            anchor="w"
-        ).grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        
-        player_count_var = tk.StringVar(value="2")
-        player_count_combo = ctk.CTkComboBox(
-            form_grid,
-            width=80,
-            values=["1", "2", "3", "4"],
-            variable=player_count_var,
-            fg_color=self.theme_colors["background"],
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
-        )
-        player_count_combo.grid(row=2, column=1, padx=5, pady=5, sticky="w")
-        
-        # Buttons field
-        ctk.CTkLabel(
-            form_grid,
-            text="Button Count:",
-            font=("Arial", 13),
-            width=120,
-            anchor="w"
-        ).grid(row=3, column=0, padx=5, pady=5, sticky="w")
-        
-        buttons_var = tk.StringVar(value="2")
-        buttons_combo = ctk.CTkComboBox(
-            form_grid,
-            width=80,
-            values=["1", "2", "3", "4", "5", "6", "8"],
-            variable=buttons_var,
-            fg_color=self.theme_colors["background"],
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
-        )
-        buttons_combo.grid(row=3, column=1, padx=5, pady=5, sticky="w")
-        
-        # Sticks field
-        ctk.CTkLabel(
-            form_grid,
-            text="Stick Count:",
-            font=("Arial", 13),
-            width=120,
-            anchor="w"
-        ).grid(row=4, column=0, padx=5, pady=5, sticky="w")
-        
-        sticks_var = tk.StringVar(value="1")
-        sticks_combo = ctk.CTkComboBox(
-            form_grid,
-            width=80,
-            values=["0", "1", "2"],
-            variable=sticks_var,
-            fg_color=self.theme_colors["background"],
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
-        )
-        sticks_combo.grid(row=4, column=1, padx=5, pady=5, sticky="w")
-        
-        # Alternating play checkbox
-        alternating_var = tk.BooleanVar(value=False)
-        alternating_check = ctk.CTkCheckBox(
-            form_grid,
-            text="Alternating Play",
-            variable=alternating_var,
-            checkbox_width=20,
-            checkbox_height=20,
-            corner_radius=3,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["secondary"]
-        )
-        alternating_check.grid(row=5, column=1, padx=5, pady=5, sticky="w")
-        
-        # Controls section (optional)
-        ctk.CTkLabel(
-            form_card,
-            text="Basic Controls (Optional)",
-            font=("Arial", 14, "bold")
-        ).pack(anchor="w", padx=15, pady=(20, 10))
-        
-        controls_description = (
-            "You can add basic controls now, or edit them in detail later. "
-            "Default controls will be created based on button and stick count."
-        )
-        
-        ctk.CTkLabel(
-            form_card,
-            text=controls_description,
-            font=("Arial", 12),
-            text_color=self.theme_colors["text_dimmed"],
-            wraplength=750
-        ).pack(anchor="w", padx=15, pady=(0, 10))
-        
-        # Simple control names section
-        control_grid = ctk.CTkFrame(form_card, fg_color="transparent")
-        control_grid.pack(fill="x", padx=15, pady=(0, 15))
-        
-        # Create a mapping of basic controls that might be customized
-        control_entries = {}
-        basic_controls = [
-            ("P1_BUTTON1", "P1 Button 1 (A Button)"),
-            ("P1_BUTTON2", "P1 Button 2 (B Button)"),
-            ("P1_JOYSTICK_UP", "P1 Joystick Up"),
-            ("P1_JOYSTICK_DOWN", "P1 Joystick Down"),
-            ("P1_JOYSTICK_LEFT", "P1 Joystick Left"),
-            ("P1_JOYSTICK_RIGHT", "P1 Joystick Right")
-        ]
-        
-        # Create entry fields for each control
-        for i, (control_name, display_name) in enumerate(basic_controls):
-            row_frame = ctk.CTkFrame(
-                control_grid, 
-                fg_color=self.theme_colors["background"] if i % 2 else self.theme_colors["card_bg"],
-                corner_radius=4
-            )
-            row_frame.pack(fill="x", pady=2)
-            
-            ctk.CTkLabel(
-                row_frame,
-                text=display_name,
-                font=("Arial", 13),
-                width=200,
-                anchor="w"
-            ).pack(side="left", padx=10, pady=8)
-            
-            control_var = tk.StringVar()
-            
-            # Set default names based on control
-            if control_name == "P1_BUTTON1":
-                control_var.set("Fire")
-            elif control_name == "P1_BUTTON2":
-                control_var.set("Jump")
-                
-            control_entry = ctk.CTkEntry(
-                row_frame,
-                width=200,
-                textvariable=control_var,
-                fg_color=self.theme_colors["background"] if i % 2 else self.theme_colors["card_bg"]
-            )
-            control_entry.pack(side="left", padx=10, pady=8)
-            
-            # Store the entry for later use
-            control_entries[control_name] = control_var
-        
-        # Clone games section (optional)
-        ctk.CTkLabel(
-            form_card,
-            text="Clone Games (Optional)",
-            font=("Arial", 14, "bold")
-        ).pack(anchor="w", padx=15, pady=(20, 10))
-        
-        clones_description = (
-            "You can add clone ROMs for this game. These will inherit the parent game's settings."
-        )
-        
-        ctk.CTkLabel(
-            form_card,
-            text=clones_description,
-            font=("Arial", 12),
-            text_color=self.theme_colors["text_dimmed"],
-            wraplength=750
-        ).pack(anchor="w", padx=15, pady=(0, 10))
-        
-        # Container for clone entries
-        clones_container = ctk.CTkFrame(form_card, fg_color="transparent")
-        clones_container.pack(fill="x", padx=15, pady=(0, 15))
-        
-        # List to store clone entry rows
-        clone_entries = []
-        
-        def add_clone_row():
-            row_frame = ctk.CTkFrame(
-                clones_container, 
-                fg_color=self.theme_colors["background"],
-                corner_radius=4
-            )
-            row_frame.pack(fill="x", pady=2)
-            
-            # Clone ROM name
-            clone_rom_var = tk.StringVar()
-            clone_rom_entry = ctk.CTkEntry(
-                row_frame,
-                width=150,
-                textvariable=clone_rom_var,
-                fg_color=self.theme_colors["card_bg"],
-                placeholder_text="Clone ROM Name"
-            )
-            clone_rom_entry.pack(side="left", padx=10, pady=8)
-            
-            # Clone description
-            clone_desc_var = tk.StringVar()
-            clone_desc_entry = ctk.CTkEntry(
-                row_frame,
-                width=400,
-                textvariable=clone_desc_var,
-                fg_color=self.theme_colors["card_bg"],
-                placeholder_text="Clone Description"
-            )
-            clone_desc_entry.pack(side="left", padx=10, pady=8)
-            
-            # Remove button
-            def remove_row():
-                row_frame.destroy()
-                clone_entries.remove(clone_data)
-            
-            remove_button = ctk.CTkButton(
-                row_frame,
-                text="×",
-                width=30,
-                height=30,
-                command=remove_row,
-                fg_color=self.theme_colors["danger"],
-                hover_color="#c82333",
-                font=("Arial", 14, "bold"),
-                corner_radius=15
-            )
-            remove_button.pack(side="right", padx=10, pady=8)
-            
-            # Store data for this row
-            clone_data = {
-                "frame": row_frame,
-                "rom_var": clone_rom_var,
-                "desc_var": clone_desc_var
-            }
-            
-            clone_entries.append(clone_data)
-            
-            return clone_data
-        
-        # Add initial clone row
-        add_clone_row()
-        
-        # Add another clone button
-        add_clone_button = ctk.CTkButton(
-            clones_container,
-            text="+ Add Another Clone",
-            command=add_clone_row,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"],
-            height=35
-        )
-        add_clone_button.pack(pady=10)
-        
-        # Preview section - show JSON output
-        preview_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        preview_frame.pack(fill="x", padx=0, pady=(0, 15))
-        
-        ctk.CTkLabel(
-            preview_frame,
-            text="JSON Preview",
-            font=("Arial", 14, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        # Preview text box
-        preview_text = ctk.CTkTextbox(
-            preview_frame,
-            height=150,
-            font=("Consolas", 12),
-            fg_color=self.theme_colors["background"]
-        )
-        preview_text.pack(fill="x", padx=15, pady=(0, 15))
-        
-        def update_preview():
-            """Update the JSON preview based on current form values"""
-            try:
-                # Get values from form
-                rom_name = rom_name_var.get().strip()
-                if not rom_name:
-                    preview_text.delete("1.0", "end")
-                    preview_text.insert("1.0", "Please enter a ROM name to generate preview")
-                    return
-                    
-                # Build the JSON structure
-                game_entry = {
-                    rom_name: {
-                        "description": description_var.get().strip() or rom_name,
-                        "playercount": player_count_var.get(),
-                        "buttons": buttons_var.get(),
-                        "sticks": sticks_var.get(),
-                        "alternating": bool(alternating_var.get()),
-                        "clones": {},
-                        "controls": {}
-                    }
-                }
-                
-                # Add clones
-                for clone_data in clone_entries:
-                    clone_rom = clone_data["rom_var"].get().strip()
-                    clone_desc = clone_data["desc_var"].get().strip()
-                    
-                    if clone_rom:
-                        game_entry[rom_name]["clones"][clone_rom] = {
-                            "description": clone_desc or f"{clone_rom} (Clone of {rom_name})"
-                        }
-                
-                # Add controls
-                for control_name, var in control_entries.items():
-                    control_label = var.get().strip()
-                    if control_label:
-                        game_entry[rom_name]["controls"][control_name] = {
-                            "name": control_label,
-                            "tag": "",
-                            "mask": "0"
-                        }
-                
-                # Format and display the JSON
-                import json
-                formatted_json = json.dumps(game_entry, indent=2)
-                preview_text.delete("1.0", "end")
-                preview_text.insert("1.0", formatted_json)
-            except Exception as e:
-                preview_text.delete("1.0", "end")
-                preview_text.insert("1.0", f"Error generating preview: {str(e)}")
-        
-        # Add button to manually update preview
-        update_preview_button = ctk.CTkButton(
-            preview_frame,
-            text="Update Preview",
-            command=update_preview,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"],
-            height=30,
-            width=120
-        )
-        update_preview_button.pack(anchor="e", padx=15, pady=(0, 15))
-        
-        # Actions section
-        actions_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        actions_frame.pack(fill="x", padx=0, pady=(0, 15))
-        
-        # Create button container
-        button_container = ctk.CTkFrame(actions_frame, fg_color="transparent")
-        button_container.pack(fill="x", padx=15, pady=15)
-        
-        def save_game_data():
-            """Save the game data to gamedata.json"""
-            try:
-                # Validate required fields
-                rom_name = rom_name_var.get().strip()
-                if not rom_name:
-                    messagebox.showerror("Error", "ROM Name is required")
-                    return
-                
-                # Log the full ROM name being saved
-                print(f"Saving new game with ROM name: '{rom_name}'")
-                
-                # Get existing gamedata.json
-                gamedata_path = self.get_gamedata_path()
-                try:
-                    with open(gamedata_path, 'r', encoding='utf-8') as f:
-                        gamedata = json.load(f)
-                except FileNotFoundError:
-                    # Create new file if it doesn't exist
-                    gamedata = {}
-                except json.JSONDecodeError:
-                    # Handle corrupted JSON
-                    messagebox.showerror("Error", "The gamedata.json file is corrupted and could not be read.")
-                    return
-                
-                # Check if game already exists
-                if rom_name in gamedata:
-                    if not messagebox.askyesno("Warning", f"'{rom_name}' already exists in the database. Overwrite?"):
-                        return
-                
-                # Build the game entry
-                game_entry = {
-                    "description": description_var.get().strip() or rom_name,
-                    "playercount": player_count_var.get(),
-                    "buttons": buttons_var.get(),
-                    "sticks": sticks_var.get(),
-                    "alternating": bool(alternating_var.get()),
-                    "clones": {},
-                    "controls": {}
-                }
-                
-                # Add clones
-                for clone_data in clone_entries:
-                    clone_rom = clone_data["rom_var"].get().strip()
-                    clone_desc = clone_data["desc_var"].get().strip()
-                    
-                    if clone_rom:
-                        game_entry["clones"][clone_rom] = {
-                            "description": clone_desc or f"{clone_rom} (Clone of {rom_name})"
-                        }
-                
-                # Add controls
-                for control_name, var in control_entries.items():
-                    control_label = var.get().strip()
-                    if control_label:
-                        game_entry["controls"][control_name] = {
-                            "name": control_label,
-                            "tag": "",
-                            "mask": "0"
-                        }
-                
-                # Add entry to gamedata
-                gamedata[rom_name] = game_entry
-                
-                # Save the updated gamedata.json
-                with open(gamedata_path, 'w', encoding='utf-8') as f:
-                    json.dump(gamedata, f, indent=2)
-                
-                # Show success message
-                messagebox.showinfo("Success", f"Game '{rom_name}' added to gamedata.json")
-                
-                # Force reload of gamedata.json
-                if hasattr(self, 'gamedata_json'):
-                    del self.gamedata_json
-                    self.load_gamedata_json()
-                
-                # Clear the in-memory cache to force reloading data
-                if hasattr(self, 'rom_data_cache'):
-                    self.rom_data_cache = {}
-                    print("Cleared ROM data cache to force refresh")
-                
-                # Rebuild SQLite database if it's being used
-                if hasattr(self, 'db_path') and self.db_path:
-                    print("Rebuilding SQLite database to reflect new game...")
-                    self.build_gamedata_db()
-                    print("Database rebuild complete")
-                    
-                # Update sidebar categories
-                if hasattr(self, 'update_game_list_by_category'):
-                    self.update_game_list_by_category()
-                
-                # Reset form for new entry
-                rom_name_var.set("")
-                description_var.set("")
-                
-                # Clear control entries
-                for var in control_entries.values():
-                    var.set("")
-                    
-                # Reset clones
-                for clone_data in clone_entries:
-                    clone_data["frame"].destroy()
-                clone_entries.clear()
-                
-                # Add a fresh clone row
-                add_clone_row()
-                
-                # Update preview
-                update_preview()
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save game data: {str(e)}")
-                print(f"Error saving game data: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Add a Save button
-        save_button = ctk.CTkButton(
-            button_container,
-            text="Save to gamedata.json",
-            command=save_game_data,
-            fg_color=self.theme_colors["success"],
-            hover_color="#218838",
-            font=("Arial", 14, "bold"),
-            height=40,
-            width=200
-        )
-        save_button.pack(side="right", padx=5)
-        
-        # Add a Clear button
-        def clear_form():
-            """Clear all form fields"""
-            rom_name_var.set("")
-            description_var.set("")
-            player_count_var.set("2")
-            buttons_var.set("2")
-            sticks_var.set("1")
-            alternating_var.set(False)
-            
-            # Clear control entries
-            for var in control_entries.values():
-                var.set("")
-                
-            # Clear clones
-            for clone_data in clone_entries:
-                clone_data["frame"].destroy()
-            clone_entries.clear()
-            
-            # Add a fresh clone row
-            add_clone_row()
-            
-            # Update preview
-            update_preview()
-        
-        clear_button = ctk.CTkButton(
-            button_container,
-            text="Clear Form",
-            command=clear_form,
-            fg_color=self.theme_colors["danger"],
-            hover_color="#c82333",
-            font=("Arial", 14),
-            height=40,
-            width=120
-        )
-        clear_button.pack(side="left", padx=5)
-        
-        # Run initial preview update
-        update_preview()
-        
-        # Set up update events for key fields
-        def setup_update_events():
-            """Set up events to update the preview when key fields change"""
-            rom_name_var.trace_add("write", lambda *args: self.after(500, update_preview))
-            description_var.trace_add("write", lambda *args: self.after(500, update_preview))
-            player_count_var.trace_add("write", lambda *args: self.after(500, update_preview))
-            buttons_var.trace_add("write", lambda *args: self.after(500, update_preview))
-            sticks_var.trace_add("write", lambda *args: self.after(500, update_preview))
-            alternating_var.trace_add("write", lambda *args: self.after(500, update_preview))
-        
-        # Set up the update events after a short delay to ensure all widgets are created
-        parent_frame.after(200, setup_update_events)
-
-    def show_control_editor(self, rom_name, game_name=None):
-        """Show enhanced editor for a game's controls with support for specialized MAME controls"""
-        # Check if this is a clone - if so, redirect to parent ROM
-        if hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup:
-            parent_rom = self.parent_lookup[rom_name]
-            # Show a brief message about the redirection
-            messagebox.showinfo("Clone ROM", 
-                            f"{rom_name} is a clone of {parent_rom}.\n\nEditing the parent ROM's controls instead.")
-            # Redirect to edit the parent ROM
-            rom_name = parent_rom
-            # If we have game data for the clone, use it to provide context in the title
-            clone_data = self.get_game_data(rom_name)
-            if clone_data:
-                game_name = clone_data.get('gamename', rom_name)
-        
-        # Get game data
-        game_data = self.get_game_data(rom_name) or {}
-        
-        # Set game_name from game_data if not provided
-        game_name = game_name or game_data.get('gamename', rom_name)
-        
-        # Check if this is an existing game or a new one
-        is_new_game = not bool(game_data)
+        # Set display name
+        display_name = game_data.get('gamename', rom_name) if rom_name else "New Game"
         
         # Create dialog with improved styling
-        editor = ctk.CTkToplevel(self)
-        editor.title(f"{'Add New Game' if is_new_game else 'Edit Controls'} - {game_name}")
+        if parent is None:
+            parent = self
+        
+        editor = ctk.CTkToplevel(parent)
+        editor.title(f"{'Add New Game' if is_new_game else 'Edit Controls'} - {display_name}")
         editor.geometry("900x750")
         editor.configure(fg_color=self.theme_colors["background"])
-        editor.transient(self)
+        editor.transient(parent)
         editor.grab_set()
         
         # Header section
@@ -3634,7 +3033,7 @@ controller xbox t		= """
         
         ctk.CTkLabel(
             header_frame,
-            text=f"{'Add New Game' if is_new_game else 'Edit Controls for'} {game_name}",
+            text=f"{'Add New Game' if is_new_game else 'Edit Controls for'} {display_name}",
             font=("Arial", 18, "bold"),
             text_color="#ffffff"
         ).pack(side=tk.LEFT, padx=20, pady=15)
@@ -3665,25 +3064,36 @@ controller xbox t		= """
         properties_grid.pack(fill="x", padx=15, pady=(0, 15))
         
         # Get current values
-        current_description = game_data.get('gamename', game_name) or rom_name
-        current_playercount = game_data.get('numPlayers', 2)
-        if isinstance(current_playercount, str):
-            current_playercount = int(current_playercount)
-        
-        # For buttons and sticks, try to extract from miscDetails if available
-        current_buttons = "6"  # Default
-        current_sticks = "1"  # Default
-        
-        if 'miscDetails' in game_data:
-            # Try to parse from miscDetails (format: "Buttons: X, Sticks: Y")
-            details = game_data.get('miscDetails', '')
-            buttons_match = re.search(r'Buttons: (\d+)', details)
-            sticks_match = re.search(r'Sticks: (\d+)', details)
+        if is_new_game:
+            # Default values for new game
+            current_description = display_name if display_name != "New Game" else ""
+            current_playercount = 2
+            current_buttons = "6"
+            current_sticks = "1"
+            current_alternating = False
+        else:
+            # Values from existing game data
+            current_description = game_data.get('gamename', display_name) or rom_name
+            current_playercount = game_data.get('numPlayers', 2)
+            if isinstance(current_playercount, str):
+                current_playercount = int(current_playercount)
             
-            if buttons_match:
-                current_buttons = buttons_match.group(1)
-            if sticks_match:
-                current_sticks = sticks_match.group(1)
+            # For buttons and sticks, try to extract from miscDetails if available
+            current_buttons = "6"  # Default
+            current_sticks = "1"  # Default
+            
+            if 'miscDetails' in game_data:
+                # Try to parse from miscDetails (format: "Buttons: X, Sticks: Y")
+                details = game_data.get('miscDetails', '')
+                buttons_match = re.search(r'Buttons: (\d+)', details)
+                sticks_match = re.search(r'Sticks: (\d+)', details)
+                
+                if buttons_match:
+                    current_buttons = buttons_match.group(1)
+                if sticks_match:
+                    current_sticks = sticks_match.group(1)
+                    
+            current_alternating = game_data.get('alternating', False)
         
         # Configure the grid
         properties_grid.columnconfigure(0, weight=0)  # Label
@@ -3691,32 +3101,50 @@ controller xbox t		= """
         properties_grid.columnconfigure(2, weight=0)  # Label
         properties_grid.columnconfigure(3, weight=1)  # Entry
         
-        # Row 0: Game Description (Name)
+        # ROM Name field (disabled if editing existing game)
+        ctk.CTkLabel(
+            properties_grid, 
+            text="ROM Name:", 
+            font=("Arial", 13),
+            width=100
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        rom_name_var = tk.StringVar(value=rom_name or "")
+        rom_name_entry = ctk.CTkEntry(
+            properties_grid, 
+            width=300, 
+            textvariable=rom_name_var,
+            fg_color=self.theme_colors["background"],
+            state="normal" if is_new_game else "disabled"
+        )
+        rom_name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Row 1: Game Description (Name)
         ctk.CTkLabel(
             properties_grid, 
             text="Game Name:", 
             font=("Arial", 13),
             width=100
-        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ).grid(row=1, column=0, padx=5, pady=5, sticky="w")
         
-        description_var = ctk.StringVar(value=current_description)
+        description_var = tk.StringVar(value=current_description)
         description_entry = ctk.CTkEntry(
             properties_grid, 
             width=300, 
             textvariable=description_var,
             fg_color=self.theme_colors["background"]
         )
-        description_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        description_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
         
-        # Row 1: Player Count
+        # Row 2: Player Count
         ctk.CTkLabel(
             properties_grid, 
             text="Players:", 
             font=("Arial", 13),
             width=100
-        ).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ).grid(row=2, column=0, padx=5, pady=5, sticky="w")
         
-        playercount_var = ctk.StringVar(value=str(current_playercount))
+        playercount_var = tk.StringVar(value=str(current_playercount))
         playercount_combo = ctk.CTkComboBox(
             properties_grid, 
             width=100, 
@@ -3727,10 +3155,10 @@ controller xbox t		= """
             button_hover_color=self.theme_colors["secondary"],
             dropdown_fg_color=self.theme_colors["card_bg"]
         )
-        playercount_combo.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        playercount_combo.grid(row=2, column=1, padx=5, pady=5, sticky="w")
         
         # Set up players alternating option
-        alternating_var = ctk.BooleanVar(value=game_data.get('alternating', False))
+        alternating_var = tk.BooleanVar(value=current_alternating)
         alternating_check = ctk.CTkCheckBox(
             properties_grid, 
             text="Alternating Play", 
@@ -3741,17 +3169,17 @@ controller xbox t		= """
             fg_color=self.theme_colors["primary"],
             hover_color=self.theme_colors["secondary"]
         )
-        alternating_check.grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        alternating_check.grid(row=2, column=2, padx=5, pady=5, sticky="w")
         
-        # Row 2: Buttons and Sticks
+        # Row 3: Buttons and Sticks
         ctk.CTkLabel(
             properties_grid, 
             text="Buttons:", 
             font=("Arial", 13),
             width=100
-        ).grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        ).grid(row=3, column=0, padx=5, pady=5, sticky="w")
         
-        buttons_var = ctk.StringVar(value=current_buttons)
+        buttons_var = tk.StringVar(value=current_buttons)
         buttons_combo = ctk.CTkComboBox(
             properties_grid, 
             width=100, 
@@ -3762,16 +3190,16 @@ controller xbox t		= """
             button_hover_color=self.theme_colors["secondary"],
             dropdown_fg_color=self.theme_colors["card_bg"]
         )
-        buttons_combo.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        buttons_combo.grid(row=3, column=1, padx=5, pady=5, sticky="w")
         
         ctk.CTkLabel(
             properties_grid, 
             text="Sticks:", 
             font=("Arial", 13),
             width=100
-        ).grid(row=2, column=2, padx=5, pady=5, sticky="w")
+        ).grid(row=3, column=2, padx=5, pady=5, sticky="w")
         
-        sticks_var = ctk.StringVar(value=current_sticks)
+        sticks_var = tk.StringVar(value=current_sticks)
         sticks_combo = ctk.CTkComboBox(
             properties_grid, 
             width=100, 
@@ -3782,7 +3210,131 @@ controller xbox t		= """
             button_hover_color=self.theme_colors["secondary"],
             dropdown_fg_color=self.theme_colors["card_bg"]
         )
-        sticks_combo.grid(row=2, column=3, padx=5, pady=5, sticky="w")
+        sticks_combo.grid(row=3, column=3, padx=5, pady=5, sticky="w")
+        
+        # Clone games section (only for new games)
+        clone_entries = []
+        preview_text = None  # Define here to avoid NameError
+        
+        if is_new_game:
+            # Clone games card
+            clone_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+            clone_card.pack(fill="x", padx=0, pady=(0, 15))
+            
+            ctk.CTkLabel(
+                clone_card,
+                text="Clone Games (Optional)",
+                font=("Arial", 16, "bold"),
+                anchor="w"
+            ).pack(anchor="w", padx=15, pady=(15, 10))
+            
+            clones_description = (
+                "You can add clone ROMs for this game. These will inherit the parent game's settings."
+            )
+            
+            ctk.CTkLabel(
+                clone_card,
+                text=clones_description,
+                font=("Arial", 12),
+                text_color=self.theme_colors["text_dimmed"],
+                wraplength=750
+            ).pack(anchor="w", padx=15, pady=(0, 10))
+            
+            # Container for clone entries
+            clones_container = ctk.CTkFrame(clone_card, fg_color="transparent")
+            clones_container.pack(fill="x", padx=15, pady=(0, 15))
+            
+            def add_clone_row():
+                row_frame = ctk.CTkFrame(
+                    clones_container, 
+                    fg_color=self.theme_colors["background"],
+                    corner_radius=4
+                )
+                row_frame.pack(fill="x", pady=2)
+                
+                # Clone ROM name
+                clone_rom_var = tk.StringVar()
+                clone_rom_entry = ctk.CTkEntry(
+                    row_frame,
+                    width=150,
+                    textvariable=clone_rom_var,
+                    fg_color=self.theme_colors["card_bg"],
+                    placeholder_text="Clone ROM Name"
+                )
+                clone_rom_entry.pack(side="left", padx=10, pady=8)
+                
+                # Clone description
+                clone_desc_var = tk.StringVar()
+                clone_desc_entry = ctk.CTkEntry(
+                    row_frame,
+                    width=400,
+                    textvariable=clone_desc_var,
+                    fg_color=self.theme_colors["card_bg"],
+                    placeholder_text="Clone Description"
+                )
+                clone_desc_entry.pack(side="left", padx=10, pady=8)
+                
+                # Remove button
+                def remove_row():
+                    row_frame.destroy()
+                    clone_entries.remove(clone_data)
+                
+                remove_button = ctk.CTkButton(
+                    row_frame,
+                    text="×",
+                    width=30,
+                    height=30,
+                    command=remove_row,
+                    fg_color=self.theme_colors["danger"],
+                    hover_color="#c82333",
+                    font=("Arial", 14, "bold"),
+                    corner_radius=15
+                )
+                remove_button.pack(side="right", padx=10, pady=8)
+                
+                # Store data for this row
+                clone_data = {
+                    "frame": row_frame,
+                    "rom_var": clone_rom_var,
+                    "desc_var": clone_desc_var
+                }
+                
+                clone_entries.append(clone_data)
+                
+                return clone_data
+            
+            # Add initial clone row
+            add_clone_row()
+            
+            # Add another clone button
+            add_clone_button = ctk.CTkButton(
+                clones_container,
+                text="+ Add Another Clone",
+                command=add_clone_row,
+                fg_color=self.theme_colors["primary"],
+                hover_color=self.theme_colors["button_hover"],
+                height=35
+            )
+            add_clone_button.pack(pady=10)
+            
+            # Preview section - show JSON output
+            preview_frame = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+            preview_frame.pack(fill="x", padx=0, pady=(0, 15))
+            
+            ctk.CTkLabel(
+                preview_frame,
+                text="JSON Preview",
+                font=("Arial", 14, "bold")
+            ).pack(anchor="w", padx=15, pady=(15, 10))
+            
+            # Preview text box
+            preview_text = ctk.CTkTextbox(
+                preview_frame,
+                height=150,
+                font=("Consolas", 12),
+                fg_color=self.theme_colors["background"]
+            )
+            preview_text.pack(fill="x", padx=15, pady=(0, 15))
         
         # Control mappings card
         controls_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
@@ -3912,11 +3464,21 @@ controller xbox t		= """
         controls_container = ctk.CTkFrame(controls_card, fg_color="transparent")
         controls_container.pack(fill="x", padx=15, pady=(0, 15))
         
+        # Create a scrollable container for controls
+        controls_scroll = ctk.CTkScrollableFrame(
+            controls_container,
+            fg_color="transparent",
+            height=300,  # Limit height to make sure we don't get a huge dialog
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        controls_scroll.pack(fill="x", expand=True)
+        
         # Row alternating colors
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
         # Title for standard controls
-        standard_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+        standard_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
         standard_header.pack(fill="x", pady=(0, 10))
         
         ctk.CTkLabel(
@@ -3930,7 +3492,7 @@ controller xbox t		= """
         for i, (control_name, display_name) in enumerate(standard_controls):
             # Create a frame for each control with alternating background
             control_frame = ctk.CTkFrame(
-                controls_container, 
+                controls_scroll, 
                 fg_color=alt_colors[i % 2],
                 corner_radius=4
             )
@@ -3965,7 +3527,7 @@ controller xbox t		= """
             control_entries[control_name] = action_entry
         
         # Add a header for specialized controls
-        specialized_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+        specialized_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
         specialized_header.pack(fill="x", pady=(20, 10))
         
         ctk.CTkLabel(
@@ -3979,7 +3541,7 @@ controller xbox t		= """
         for i, (control_name, display_name) in enumerate(specialized_controls):
             # Create a frame for each control with alternating background
             control_frame = ctk.CTkFrame(
-                controls_container, 
+                controls_scroll, 
                 fg_color=alt_colors[i % 2],
                 corner_radius=4
             )
@@ -4021,7 +3583,7 @@ controller xbox t		= """
         
         if additional_controls:
             # Add a header for additional controls
-            additional_header = ctk.CTkFrame(controls_container, fg_color=self.theme_colors["primary"], corner_radius=4)
+            additional_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
             additional_header.pack(fill="x", pady=(20, 10))
             
             ctk.CTkLabel(
@@ -4034,7 +3596,7 @@ controller xbox t		= """
             # Create entry fields for additional controls
             for i, (control_name, action) in enumerate(additional_controls):
                 control_frame = ctk.CTkFrame(
-                    controls_container, 
+                    controls_scroll, 
                     fg_color=alt_colors[i % 2],
                     corner_radius=4
                 )
@@ -4149,6 +3711,107 @@ controller xbox t		= """
         )
         add_custom_button.pack(pady=10)
         
+        # Preview JSON function - only used if is_new_game is True
+        def update_preview():
+            """Update the JSON preview based on current form values"""
+            if not is_new_game or not preview_text:
+                return
+                
+            try:
+                # Get values from form
+                current_rom_name = rom_name_var.get().strip()
+                if not current_rom_name:
+                    preview_text.delete("1.0", "end")
+                    preview_text.insert("1.0", "Please enter a ROM name to generate preview")
+                    return
+                    
+                # Build the JSON structure
+                game_entry = {
+                    current_rom_name: {
+                        "description": description_var.get().strip() or current_rom_name,
+                        "playercount": playercount_var.get(),
+                        "buttons": buttons_var.get(),
+                        "sticks": sticks_var.get(),
+                        "alternating": bool(alternating_var.get()),
+                        "clones": {},
+                        "controls": {}
+                    }
+                }
+                
+                # Add clones
+                for clone_data in clone_entries:
+                    clone_rom = clone_data["rom_var"].get().strip()
+                    clone_desc = clone_data["desc_var"].get().strip()
+                    
+                    if clone_rom:
+                        game_entry[current_rom_name]["clones"][clone_rom] = {
+                            "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
+                        }
+                
+                # Add controls
+                for control_name, entry in control_entries.items():
+                    if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
+                        control_label = entry.get().strip()
+                        if control_label:
+                            game_entry[current_rom_name]["controls"][control_name] = {
+                                "name": control_label,
+                                "tag": "",
+                                "mask": "0"
+                            }
+                
+                # Add custom controls
+                for row_data in custom_control_rows:
+                    control_name = row_data['control'].get().strip()
+                    control_label = row_data['action'].get().strip()
+                    if control_name and control_label:
+                        game_entry[current_rom_name]["controls"][control_name] = {
+                            "name": control_label,
+                            "tag": "",
+                            "mask": "0"
+                        }
+                
+                # Format and display the JSON
+                import json
+                formatted_json = json.dumps(game_entry, indent=2)
+                preview_text.delete("1.0", "end")
+                preview_text.insert("1.0", formatted_json)
+            except Exception as e:
+                preview_text.delete("1.0", "end")
+                preview_text.insert("1.0", f"Error generating preview: {str(e)}")
+                print(f"Preview error: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Add button to manually update preview if we're adding a new game
+        if is_new_game and preview_text:
+            update_preview_button = ctk.CTkButton(
+                preview_frame,
+                text="Update Preview",
+                command=update_preview,
+                fg_color=self.theme_colors["primary"],
+                hover_color=self.theme_colors["button_hover"],
+                height=30,
+                width=120
+            )
+            update_preview_button.pack(anchor="e", padx=15, pady=(0, 15))
+            
+            # Initial preview update
+            editor.after(100, update_preview)
+        
+        # Set up update events for key fields
+        def setup_update_events():
+            """Set up events to update the preview when key fields change"""
+            if is_new_game and preview_text:
+                rom_name_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                description_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                playercount_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                buttons_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                sticks_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                alternating_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+        
+        # Set up update events after a short delay
+        editor.after(200, setup_update_events)
+        
         # Bottom buttons area (fixed at bottom)
         button_area = ctk.CTkFrame(editor, height=70, fg_color=self.theme_colors["card_bg"], corner_radius=0)
         button_area.pack(fill="x", side="bottom", padx=0, pady=0)
@@ -4158,34 +3821,148 @@ controller xbox t		= """
         button_container = ctk.CTkFrame(button_area, fg_color="transparent")
         button_container.pack(fill="both", expand=True, padx=20, pady=15)
         
-        # Remove Game button (with confirmation)
-        remove_button = ctk.CTkButton(
-            button_container,
-            text="Remove Game",
-            command=lambda: self.remove_game(rom_name, editor),
-            fg_color=self.theme_colors["danger"],
-            hover_color="#c82333",
-            font=("Arial", 14),
-            height=40,
-            width=150
-        )
-        remove_button.pack(side="left", padx=5)
+        # Remove Game button (with confirmation) - only show if not a new game
+        if not is_new_game:
+            remove_button = ctk.CTkButton(
+                button_container,
+                text="Remove Game",
+                command=lambda: self.remove_game(rom_name, editor),
+                fg_color=self.theme_colors["danger"],
+                hover_color="#c82333",
+                font=("Arial", 14),
+                height=40,
+                width=150
+            )
+            remove_button.pack(side="left", padx=5)
         
-        # Save button with direct call to the class method
+        # Save function to handle both new and existing games
+        def save_game():
+            try:
+                # Validate ROM name
+                current_rom_name = rom_name_var.get().strip()
+                if not current_rom_name:
+                    messagebox.showerror("Error", "ROM Name is required", parent=editor)
+                    return
+                    
+                # Get existing gamedata.json
+                gamedata_path = self.get_gamedata_path()
+                try:
+                    with open(gamedata_path, 'r', encoding='utf-8') as f:
+                        gamedata = json.load(f)
+                except FileNotFoundError:
+                    # Create new file if it doesn't exist
+                    gamedata = {}
+                except json.JSONDecodeError:
+                    # Handle corrupted JSON
+                    messagebox.showerror("Error", "The gamedata.json file is corrupted", parent=editor)
+                    return
+                    
+                # Check if game already exists
+                if is_new_game and current_rom_name in gamedata:
+                    if not messagebox.askyesno("Warning", 
+                                        f"'{current_rom_name}' already exists. Overwrite?", 
+                                        parent=editor):
+                        return
+                
+                # Build the game entry
+                game_entry = {
+                    "description": description_var.get().strip() or current_rom_name,
+                    "playercount": playercount_var.get(),
+                    "buttons": buttons_var.get(),
+                    "sticks": sticks_var.get(),
+                    "alternating": bool(alternating_var.get()),
+                    "clones": {},
+                    "controls": {}
+                }
+                
+                # Add clones if this is a new game
+                if is_new_game:
+                    for clone_data in clone_entries:
+                        clone_rom = clone_data["rom_var"].get().strip()
+                        clone_desc = clone_data["desc_var"].get().strip()
+                        
+                        if clone_rom:
+                            game_entry["clones"][clone_rom] = {
+                                "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
+                            }
+                
+                # Add standard controls
+                for control_name, entry in control_entries.items():
+                    if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
+                        control_label = entry.get().strip()
+                        if control_label:
+                            game_entry["controls"][control_name] = {
+                                "name": control_label,
+                                "tag": "",
+                                "mask": "0"
+                            }
+                
+                # Add custom controls
+                for row_data in custom_control_rows:
+                    control_name = row_data['control'].get().strip()
+                    control_label = row_data['action'].get().strip()
+                    if control_name and control_label:
+                        game_entry["controls"][control_name] = {
+                            "name": control_label,
+                            "tag": "",
+                            "mask": "0"
+                        }
+                
+                # Update or add entry to gamedata
+                gamedata[current_rom_name] = game_entry
+                
+                # Save the updated gamedata.json
+                with open(gamedata_path, 'w', encoding='utf-8') as f:
+                    json.dump(gamedata, f, indent=2)
+                
+                # Show success message
+                messagebox.showinfo("Success", 
+                            f"Game '{current_rom_name}' {'added to' if is_new_game else 'updated in'} gamedata.json", 
+                            parent=editor)
+                
+                # Force reload of gamedata.json
+                if hasattr(self, 'gamedata_json'):
+                    del self.gamedata_json
+                    self.load_gamedata_json()
+                
+                # Clear the in-memory cache to force reloading data
+                if hasattr(self, 'rom_data_cache'):
+                    self.rom_data_cache = {}
+                    print("Cleared ROM data cache to force refresh")
+                
+                # Rebuild SQLite database if it's being used
+                if hasattr(self, 'db_path') and self.db_path:
+                    print("Rebuilding SQLite database to reflect changes...")
+                    self.build_gamedata_db()
+                    print("Database rebuild complete")
+                    
+                # Update sidebar categories
+                if hasattr(self, 'update_game_list_by_category'):
+                    self.update_game_list_by_category()
+                
+                # Close the editor
+                editor.destroy()
+                
+                # Force refresh of the current display if needed
+                if hasattr(self, 'on_game_select') and hasattr(self, 'game_list') and hasattr(self, 'selected_line'):
+                    # Create a mock event to trigger refresh if needed
+                    class MockEvent:
+                        def __init__(self):
+                            self.x = 10
+                            self.y = 10
+                    self.after(100, lambda: self.on_game_select(MockEvent()))
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save game data: {str(e)}", parent=editor)
+                print(f"Error saving game data: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Save button
         save_button = ctk.CTkButton(
             button_container,
             text="Save Controls",
-            command=lambda: self.save_controls(
-                rom_name, 
-                editor, 
-                description_var, 
-                playercount_var, 
-                buttons_var, 
-                sticks_var, 
-                alternating_var, 
-                control_entries, 
-                custom_control_rows
-            ),
+            command=save_game,
             fg_color=self.theme_colors["success"],
             hover_color="#218838",
             font=("Arial", 14, "bold"),
@@ -4217,6 +3994,116 @@ controller xbox t		= """
         x = (editor.winfo_screenwidth() // 2) - (width // 2)
         y = (editor.winfo_screenheight() // 2) - (height // 2)
         editor.geometry(f'{width}x{height}+{x}+{y}')
+
+    def create_add_game_panel(self, parent_frame):
+        """Create a panel for adding new games to gamedata.json using the unified editor"""
+        # Main container frame with scrolling
+        container = ctk.CTkScrollableFrame(
+            parent_frame,
+            fg_color="transparent",
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        container.pack(expand=True, fill="both", padx=10, pady=10)
+        
+        # Title and description
+        header_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        header_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="Add New Game to gamedata.json",
+            font=("Arial", 16, "bold")
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        description_text = (
+            "This tool allows you to add a new game to the gamedata.json database. "
+            "Fill in the required information below to create a new entry in the proper format."
+        )
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=description_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=(0, 15))
+        
+        # Add "Launch Editor" button
+        def launch_editor():
+            # Use the unified editor with no initial ROM name (new game)
+            self.show_unified_game_editor(None, True, parent_frame.winfo_toplevel())
+        
+        launch_button = ctk.CTkButton(
+            container,
+            text="Launch Game Editor",
+            command=launch_editor,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"],
+            font=("Arial", 16, "bold"),
+            height=60
+        )
+        launch_button.pack(pady=20)
+        
+        # Add help text
+        help_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        help_frame.pack(fill="x", padx=0, pady=(15, 0))
+        
+        help_text = (
+            "Click the button above to open the full-featured game editor where you can:\n\n"
+            "• Enter all game properties (name, button count, etc.)\n"
+            "• Define all standard and specialized controls\n"
+            "• Add clone ROMs\n"
+            "• Add custom controls\n"
+            "• Preview the JSON that will be added to gamedata.json\n\n"
+            "The editor provides a streamlined interface for creating new game entries "
+            "with all the necessary configuration options."
+        )
+        
+        ctk.CTkLabel(
+            help_frame,
+            text=help_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=15)
+
+    def show_control_editor(self, rom_name, game_name=None):
+        """Show enhanced editor for a game's controls by using the unified editor"""
+        # Strip any prefixes (*, +, -) that might have been included in the ROM name
+        if rom_name:
+            # Remove common prefixes that might be part of the display format but not the actual ROM name
+            if rom_name.startswith("* "):
+                rom_name = rom_name[2:]
+            if rom_name.startswith("+ ") or rom_name.startswith("- "):
+                rom_name = rom_name[2:]
+                
+            # Strip any leading/trailing whitespace
+            rom_name = rom_name.strip()
+            
+            print(f"Editing ROM with cleaned name: '{rom_name}'")
+        
+        # Check if this is a clone - if so, redirect to parent ROM
+        if hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup:
+            parent_rom = self.parent_lookup[rom_name]
+            # Show a brief message about the redirection
+            messagebox.showinfo("Clone ROM", 
+                            f"{rom_name} is a clone of {parent_rom}.\n\nEditing the parent ROM's controls instead.")
+            # Redirect to edit the parent ROM
+            rom_name = parent_rom
+            # If we have game data for the clone, use it to provide context in the title
+            clone_data = self.get_game_data(rom_name)
+            if clone_data:
+                game_name = clone_data.get('gamename', rom_name)
+        
+        # Get game data
+        game_data = self.get_game_data(rom_name)
+        
+        # Check if this is an existing game or a new one
+        is_new_game = not bool(game_data)
+        
+        # Use the unified editor instead of duplicating code
+        self.show_unified_game_editor(rom_name, is_new_game, self)
 
     def build_gamedata_db(self):
         """Build SQLite database from gamedata.json for faster lookups"""
