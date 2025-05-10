@@ -4287,7 +4287,7 @@ class PreviewWindow(QMainWindow):
         self.button_layout.addLayout(self.bottom_row)
     
     def save_image(self):
-        """Enhanced save_image method that preserves transparency"""
+        """Enhanced save_image method that preserves transparency and correct text alignment"""
         try:
             # Create the images directory if it doesn't exist
             images_dir = os.path.join(self.preview_dir, "screenshots")
@@ -4371,7 +4371,6 @@ class PreviewWindow(QMainWindow):
                     
                     # Get label position
                     pos = label.pos()
-                    label_width = label.width()
                     
                     # Get settings and properties from the label
                     settings = getattr(label, 'settings', {})
@@ -4381,17 +4380,20 @@ class PreviewWindow(QMainWindow):
                     # Calculate vertical position - centered in the label
                     y = int(pos.y() + (label.height() + metrics.ascent() - metrics.descent()) / 2)
                     
+                    # Check for the label's text alignment mode - default to left alignment
+                    text_alignment = getattr(label, 'text_alignment', Qt.AlignLeft | Qt.AlignVCenter)
+                    
+                    # FIXED: Use fixed left margin to match label classes
+                    # This ensures consistent text positioning between preview and saved image
+                    left_margin = 10  # Same as in ColoredDraggableLabel and GradientDraggableLabel
+                    x = int(pos.x() + left_margin)  # Fixed left margin
+                    
                     # Handle colored/gradient text
                     if prefix and ": " in label.text():
                         prefix_text = f"{prefix}: "
                         
-                        # Calculate widths for centering - Using width() for Qt compatibility
-                        prefix_width = metrics.width(prefix_text)
-                        action_width = metrics.width(action)
-                        total_width = prefix_width + action_width
-                        
-                        # Center the text within the label
-                        x = int(pos.x() + (label_width - total_width) / 2)
+                        # Calculate widths
+                        prefix_width = metrics.horizontalAdvance(prefix_text)
                         
                         # Draw prefix with its color or gradient
                         if hasattr(label, 'use_prefix_gradient') and getattr(label, 'use_prefix_gradient', False):
@@ -4457,9 +4459,7 @@ class PreviewWindow(QMainWindow):
                         # Draw action
                         painter.drawText(int(x + prefix_width), int(y), action)
                     else:
-                        # Single text - center it
-                        text_width = metrics.width(label.text())
-                        x = int(pos.x() + (label_width - text_width) / 2)
+                        # Single text - use same left alignment as label classes
                         
                         # Use action color/gradient for the whole text
                         if hasattr(label, 'use_action_gradient') and getattr(label, 'use_action_gradient', False):
