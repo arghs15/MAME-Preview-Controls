@@ -974,27 +974,6 @@ class PreviewWindow(QMainWindow):
             if hasattr(self, 'load_snapping_settings'):
                 self.load_snapping_settings()
             
-            # ONLY add the shortcut text if NOT in clean mode AND we don't already have it
-            if (not hasattr(self, 'clean_mode') or not self.clean_mode) and not hasattr(self, 'shortcuts_label'):
-                from PyQt5.QtWidgets import QLabel
-                
-                try:
-                    self.shortcuts_label = QLabel("Hold Shift to temporarily disable snapping", self)
-                    self.shortcuts_label.setStyleSheet("""
-                        background-color: rgba(0, 0, 0, 180);
-                        color: white;
-                        padding: 5px;
-                        border-radius: 3px;
-                    """)
-                    self.shortcuts_label.adjustSize()
-                    self.shortcuts_label.move(10, self.height() - self.shortcuts_label.height() - 10)
-                    self.shortcuts_label.show()
-                    
-                    # Hide after a delay
-                    from PyQt5.QtCore import QTimer
-                    QTimer.singleShot(5000, lambda: self.shortcuts_label.hide())
-                except Exception as e:
-                    print(f"Error creating shortcuts label: {e}")
         except Exception as e:
             print(f"Error in enhance_preview_window_init: {e}")
     
