@@ -2578,7 +2578,6 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error displaying game: {str(e)}")
             import traceback
             traceback.print_exc()
-
     #######################################################################
     #CONFIF TO CREATE INFO FILES FOR RETROFE
     #- INFO FOLDER ENEDS TO BE IN PREVIEW\SETTINGS\INFO WITH A DEFAULT TEMPLATE
@@ -2998,6 +2997,79 @@ controller xbox t		= """
             traceback.print_exc()
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
             
+    def create_add_game_panel(self, parent_frame):
+        """Create a panel for adding new games to gamedata.json using the unified editor"""
+        # Main container frame with scrolling
+        container = ctk.CTkScrollableFrame(
+            parent_frame,
+            fg_color="transparent",
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        container.pack(expand=True, fill="both", padx=10, pady=10)
+        
+        # Title and description
+        header_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        header_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="Add New Game to gamedata.json",
+            font=("Arial", 16, "bold")
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        description_text = (
+            "This tool allows you to add a new game to the gamedata.json database. "
+            "Fill in the required information below to create a new entry in the proper format."
+        )
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=description_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=(0, 15))
+        
+        # Add "Launch Editor" button
+        def launch_editor():
+            # Use the unified editor with no initial ROM name (new game)
+            self.show_unified_game_editor(None, True, parent_frame.winfo_toplevel())
+        
+        launch_button = ctk.CTkButton(
+            container,
+            text="Launch Game Editor",
+            command=launch_editor,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"],
+            font=("Arial", 16, "bold"),
+            height=60
+        )
+        launch_button.pack(pady=20)
+        
+        # Add help text
+        help_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        help_frame.pack(fill="x", padx=0, pady=(15, 0))
+        
+        help_text = (
+            "Click the button above to open the full-featured game editor where you can:\n\n"
+            "• Enter all game properties (name, button count, etc.)\n"
+            "• Define all standard and specialized controls\n"
+            "• Add clone ROMs\n"
+            "• Add custom controls\n"
+            "• Preview the JSON that will be added to gamedata.json\n\n"
+            "The editor provides a streamlined interface for creating new game entries "
+            "with all the necessary configuration options."
+        )
+        
+        ctk.CTkLabel(
+            help_frame,
+            text=help_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=15)
+
     def show_unified_game_editor(self, rom_name=None, is_new_game=True, parent=None):
         """
         Unified editor for adding/editing games with complete functionality
@@ -3994,79 +4066,6 @@ controller xbox t		= """
         x = (editor.winfo_screenwidth() // 2) - (width // 2)
         y = (editor.winfo_screenheight() // 2) - (height // 2)
         editor.geometry(f'{width}x{height}+{x}+{y}')
-
-    def create_add_game_panel(self, parent_frame):
-        """Create a panel for adding new games to gamedata.json using the unified editor"""
-        # Main container frame with scrolling
-        container = ctk.CTkScrollableFrame(
-            parent_frame,
-            fg_color="transparent",
-            scrollbar_button_color=self.theme_colors["primary"],
-            scrollbar_button_hover_color=self.theme_colors["secondary"]
-        )
-        container.pack(expand=True, fill="both", padx=10, pady=10)
-        
-        # Title and description
-        header_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        header_frame.pack(fill="x", padx=0, pady=(0, 15))
-        
-        ctk.CTkLabel(
-            header_frame,
-            text="Add New Game to gamedata.json",
-            font=("Arial", 16, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        description_text = (
-            "This tool allows you to add a new game to the gamedata.json database. "
-            "Fill in the required information below to create a new entry in the proper format."
-        )
-        
-        ctk.CTkLabel(
-            header_frame,
-            text=description_text,
-            font=("Arial", 13),
-            justify="left",
-            wraplength=750
-        ).pack(anchor="w", padx=15, pady=(0, 15))
-        
-        # Add "Launch Editor" button
-        def launch_editor():
-            # Use the unified editor with no initial ROM name (new game)
-            self.show_unified_game_editor(None, True, parent_frame.winfo_toplevel())
-        
-        launch_button = ctk.CTkButton(
-            container,
-            text="Launch Game Editor",
-            command=launch_editor,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"],
-            font=("Arial", 16, "bold"),
-            height=60
-        )
-        launch_button.pack(pady=20)
-        
-        # Add help text
-        help_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        help_frame.pack(fill="x", padx=0, pady=(15, 0))
-        
-        help_text = (
-            "Click the button above to open the full-featured game editor where you can:\n\n"
-            "• Enter all game properties (name, button count, etc.)\n"
-            "• Define all standard and specialized controls\n"
-            "• Add clone ROMs\n"
-            "• Add custom controls\n"
-            "• Preview the JSON that will be added to gamedata.json\n\n"
-            "The editor provides a streamlined interface for creating new game entries "
-            "with all the necessary configuration options."
-        )
-        
-        ctk.CTkLabel(
-            help_frame,
-            text=help_text,
-            font=("Arial", 13),
-            justify="left",
-            wraplength=750
-        ).pack(anchor="w", padx=15, pady=15)
 
     def show_control_editor(self, rom_name, game_name=None):
         """Show enhanced editor for a game's controls by using the unified editor"""
@@ -6102,9 +6101,6 @@ controller xbox t		= """
         # Ensure the selected item is visible
         self.game_list.see(f"{line_index}.0")
 
-    # Here's the complete method with the fix - this is ready to copy and replace
-    # the display_controls_table method in your code
-
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """Display controls organized by function rather than just type"""
         row = start_row
@@ -6315,7 +6311,7 @@ controller xbox t		= """
         control_row = 0
         all_controls = []
         
-        # Collect all controls from all players with user-friendly display names
+        # Collect all controls from all players
         for player in game_data.get('players', []):
             for label in player.get('labels', []):
                 # Add control to our list
@@ -6340,111 +6336,23 @@ controller xbox t		= """
                     mapping_source = "Game Data"
                     mapping_value = ""
                 
-                # Get player number for display name prefix
-                player_num = player['number']
-                player_prefix = f"P{player_num}"
-                
-                # THIS IS THE KEY PART: Create user-friendly display name based on control type
-                if self.use_xinput:
-                    # XInput specific display names
-                    if '_JOYSTICK_UP' in control_name:
-                        display_name = f"{player_prefix} Left Stick Up"
-                    elif '_JOYSTICK_DOWN' in control_name:
-                        display_name = f"{player_prefix} Left Stick Down"
-                    elif '_JOYSTICK_LEFT' in control_name:
-                        display_name = f"{player_prefix} Left Stick Left"
-                    elif '_JOYSTICK_RIGHT' in control_name:
-                        display_name = f"{player_prefix} Left Stick Right"
-                    elif '_JOYSTICKRIGHT_UP' in control_name or '_JOYSTICK2_UP' in control_name:
-                        display_name = f"{player_prefix} Right Stick Up"
-                    elif '_JOYSTICKRIGHT_DOWN' in control_name or '_JOYSTICK2_DOWN' in control_name:
-                        display_name = f"{player_prefix} Right Stick Down"
-                    elif '_JOYSTICKRIGHT_LEFT' in control_name or '_JOYSTICK2_LEFT' in control_name:
-                        display_name = f"{player_prefix} Right Stick Left"
-                    elif '_JOYSTICKRIGHT_RIGHT' in control_name or '_JOYSTICK2_RIGHT' in control_name:
-                        display_name = f"{player_prefix} Right Stick Right"
-                    elif '_DPAD_UP' in control_name:
-                        display_name = f"{player_prefix} D-Pad Up"
-                    elif '_DPAD_DOWN' in control_name:
-                        display_name = f"{player_prefix} D-Pad Down"
-                    elif '_DPAD_LEFT' in control_name:
-                        display_name = f"{player_prefix} D-Pad Left"
-                    elif '_DPAD_RIGHT' in control_name:
-                        display_name = f"{player_prefix} D-Pad Right"
-                    elif '_BUTTON1' in control_name:
-                        display_name = f"{player_prefix} A Button"
-                    elif '_BUTTON2' in control_name:
-                        display_name = f"{player_prefix} B Button"
-                    elif '_BUTTON3' in control_name:
-                        display_name = f"{player_prefix} X Button"
-                    elif '_BUTTON4' in control_name:
-                        display_name = f"{player_prefix} Y Button"
-                    elif '_BUTTON5' in control_name:
-                        display_name = f"{player_prefix} LB Button"
-                    elif '_BUTTON6' in control_name:
-                        display_name = f"{player_prefix} RB Button"
-                    elif '_BUTTON7' in control_name:
-                        display_name = f"{player_prefix} LT Button"
-                    elif '_BUTTON8' in control_name:
-                        display_name = f"{player_prefix} RT Button"
-                    elif '_BUTTON9' in control_name:
-                        display_name = f"{player_prefix} Left Stick Button"
-                    elif '_BUTTON10' in control_name:
-                        display_name = f"{player_prefix} Right Stick Button"
-                    elif '_START' in control_name:
-                        display_name = f"{player_prefix} Start Button"
-                    elif '_SELECT' in control_name or '_COIN' in control_name:
-                        display_name = f"{player_prefix} Select/Coin Button"
-                    # Add specialized inputs
-                    elif '_DIAL' in control_name and '_V' in control_name:
-                        display_name = f"{player_prefix} Vertical Dial"
-                    elif '_DIAL' in control_name:
-                        display_name = f"{player_prefix} Dial/Spinner"
-                    elif '_PADDLE' in control_name:
-                        display_name = f"{player_prefix} Paddle Control"
-                    elif '_TRACKBALL_X' in control_name:
-                        display_name = f"{player_prefix} Trackball X-Axis"
-                    elif '_TRACKBALL_Y' in control_name:
-                        display_name = f"{player_prefix} Trackball Y-Axis"
-                    elif '_MOUSE_X' in control_name:
-                        display_name = f"{player_prefix} Mouse X-Axis"
-                    elif '_MOUSE_Y' in control_name:
-                        display_name = f"{player_prefix} Mouse Y-Axis"
-                    elif '_LIGHTGUN_X' in control_name:
-                        display_name = f"{player_prefix} Light Gun X-Axis"
-                    elif '_LIGHTGUN_Y' in control_name:
-                        display_name = f"{player_prefix} Light Gun Y-Axis"
-                    elif '_AD_STICK_X' in control_name:
-                        display_name = f"{player_prefix} Analog X-Axis"
-                    elif '_AD_STICK_Y' in control_name:
-                        display_name = f"{player_prefix} Analog Y-Axis"
-                    elif '_AD_STICK_Z' in control_name:
-                        display_name = f"{player_prefix} Analog Z-Axis"
-                    elif '_PEDAL' in control_name:
-                        display_name = f"{player_prefix} Pedal Input"
-                    # Fallback for any other controls
-                    elif 'target_button' in label:
-                        display_name = f"{player_prefix} {label['target_button']}"
-                    else:
-                        # Last resort - use the format_control_name method
-                        display_name = self.format_control_name(control_name)
-                else:
-                    # JOYCODE mode
-                    if 'target_button' in label:
-                        display_name = f"{player_prefix} {label['target_button']}"
-                    else:
-                        display_name = self.format_control_name(control_name)
-                
-                # Create the control data entry with our user-friendly display name
+                # Add to the list
                 control_data = {
                     'name': control_name,
                     'action': action,
-                    'display_name': display_name,  # Set the custom display name
                     'mapping': mapping_value,
                     'is_custom': is_custom,
                     'is_default': is_default,
                     'source': mapping_source
                 }
+                
+                # Extract display name from the label for display
+                if 'target_button' in label:
+                    control_data['display_name'] = f"P{player['number']} {label['target_button']}"
+                elif 'display_name' in label:
+                    control_data['display_name'] = label['display_name']
+                else:
+                    control_data['display_name'] = self.format_control_name(control_name)
                 
                 all_controls.append(control_data)
         
@@ -6470,8 +6378,8 @@ controller xbox t		= """
             row_frame.columnconfigure(1, minsize=220, weight=0)
             row_frame.columnconfigure(2, minsize=180, weight=0)
             
-            # Use the custom display name we created
-            display_name = control['display_name']
+            # Display name for the control
+            display_name = control.get('display_name', self.format_control_name(control['name']))
             
             button_label = ctk.CTkLabel(
                 row_frame,
