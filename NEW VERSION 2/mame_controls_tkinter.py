@@ -5207,6 +5207,41 @@ controller xbox t		= """
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
 
 
+    # New helper method (add to the class) for mapping XInput codes to user-friendly names:
+    def get_friendly_xinput_name(self, mapping: str) -> str:
+        """Convert an XINPUT mapping code into a human-friendly button/stick name."""
+        parts = mapping.split('_', 2)  # e.g., ["XINPUT", "1", "A"] or ["XINPUT", "1", "LEFTX_NEG"]
+        if len(parts) < 3:
+            return mapping
+        action = parts[2]
+        # Changed: define friendly labels for known XInput controls
+        friendly_map = {
+            "A":           "A Button",
+            "B":           "B Button",
+            "X":           "X Button",
+            "Y":           "Y Button",
+            "SHOULDER_L":  "LB Button",
+            "SHOULDER_R":  "RB Button",
+            "TRIGGER_L":   "LT Button",
+            "TRIGGER_R":   "RT Button",
+            "THUMB_L":     "Left Stick Button",
+            "THUMB_R":     "Right Stick Button",
+            "DPAD_UP":     "D-Pad Up",
+            "DPAD_DOWN":   "D-Pad Down",
+            "DPAD_LEFT":   "D-Pad Left",
+            "DPAD_RIGHT":  "D-Pad Right",
+            "LEFTX_NEG":   "Left Stick (Left)",
+            "LEFTX_POS":   "Left Stick (Right)",
+            "LEFTY_NEG":   "Left Stick (Up)",
+            "LEFTY_POS":   "Left Stick (Down)",
+            "RIGHTX_NEG":  "Right Stick (Left)",
+            "RIGHTX_POS":  "Right Stick (Right)",
+            "RIGHTY_NEG":  "Right Stick (Up)",
+            "RIGHTY_POS":  "Right Stick (Down)"
+        }
+        return friendly_map.get(action, action)  # Return friendly name or fallback to raw action
+
+    
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
         """Update game_data to include the custom control mappings with function-based organization"""
         if not cfg_controls and not hasattr(self, 'default_controls'):
@@ -5342,27 +5377,8 @@ controller xbox t		= """
                     # NEW CODE: Extract target button from mapping for better display
                     if self.use_xinput and 'XINPUT' in mapping_info['mapping']:
                         # Extract the button part (e.g., XINPUT_1_X -> X Button)
-                        parts = mapping_info['mapping'].split('_')
-                        if len(parts) >= 3:
-                            button_part = parts[2]
-                            if button_part == 'A':
-                                label['target_button'] = 'A Button'
-                            elif button_part == 'B':
-                                label['target_button'] = 'B Button'
-                            elif button_part == 'X':
-                                label['target_button'] = 'X Button'
-                            elif button_part == 'Y':
-                                label['target_button'] = 'Y Button'
-                            elif button_part == 'SHOULDER_L':
-                                label['target_button'] = 'LB Button'
-                            elif button_part == 'SHOULDER_R':
-                                label['target_button'] = 'RB Button'
-                            elif button_part == 'TRIGGER_L':
-                                label['target_button'] = 'LT Button'
-                            elif button_part == 'TRIGGER_R':
-                                label['target_button'] = 'RT Button'
-                            else:
-                                label['target_button'] = button_part
+                        label['target_button'] = self.get_friendly_xinput_name(mapping_info['mapping'])
+
                     elif 'JOYCODE' in mapping_info['mapping']:
                         # Check if the mapping contains an OR statement
                         if " OR " in mapping_info['mapping']:
@@ -6016,18 +6032,14 @@ controller xbox t		= """
         return control_name
     
     def format_mapping_display(self, mapping: str) -> str:
-        """Format the mapping string for display"""
-        # Handle XInput mappings
-        if "XINPUT" in mapping:
-            # Convert XINPUT_1_A to "XInput A"
-            parts = mapping.split('_')
-            if len(parts) >= 3:
-                button_part = ' '.join(parts[2:])
-                return f"XInput {button_part}"
-                
-        # Handle JOYCODE mappings
+        """Format the mapping string for display using friendly names when available."""
+        
+        # Handle XInput mappings with helper
+        if mapping.startswith("XINPUT"):
+            return self.get_friendly_xinput_name(mapping)
+
+        # Handle JOYCODE mappings (your existing logic, preserved)
         elif "JOYCODE" in mapping:
-            # Special handling for axis/stick controls
             if "YAXIS_UP" in mapping or "DPADUP" in mapping:
                 return "Joy Stick Up"
             elif "YAXIS_DOWN" in mapping or "DPADDOWN" in mapping:
@@ -6036,32 +6048,35 @@ controller xbox t		= """
                 return "Joy Stick Left"
             elif "XAXIS_RIGHT" in mapping or "DPADRIGHT" in mapping:
                 return "Joy Stick Right"
-            elif "RYAXIS_NEG" in mapping:  # Right stick Y-axis negative
+            elif "RYAXIS_NEG" in mapping:
                 return "Joy Right Stick Up"
-            elif "RYAXIS_POS" in mapping:  # Right stick Y-axis positive
+            elif "RYAXIS_POS" in mapping:
                 return "Joy Right Stick Down"
-            elif "RXAXIS_NEG" in mapping:  # Right stick X-axis negative
+            elif "RXAXIS_NEG" in mapping:
                 return "Joy Right Stick Left"
-            elif "RXAXIS_POS" in mapping:  # Right stick X-axis positive
+            elif "RXAXIS_POS" in mapping:
                 return "Joy Right Stick Right"
             
-            # Standard button format for other joystick controls
+            # Standard joystick button formatting
             parts = mapping.split('_')
             if len(parts) >= 4:
                 joy_num = parts[1]
                 control_type = parts[2].capitalize()
                 
-                # Extract button number for BUTTON types
-                if control_type == "Button" and len(parts) >= 4:
+                if control_type == "Button":
                     button_num = parts[3]
-                    return f"Joy {joy_num} {control_type} {button_num}"
+                    return f"Joy {joy_num} Button {button_num}"
                 else:
-                    # Generic format for other controls
                     remainder = '_'.join(parts[3:])
                     return f"Joy {joy_num} {control_type} {remainder}"
-                    
+
+        # Optional: format KEYCODE mappings
+        elif "KEYCODE" in mapping:
+            return mapping.replace("KEYCODE_", "").capitalize()
+
+        # Fallback
         return mapping
-        
+
     def select_first_rom(self):
         # Get the first available ROM (no filtering)
         if not self.available_roms:
