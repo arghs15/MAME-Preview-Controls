@@ -1199,7 +1199,6 @@ class MAMEControlConfig(ctk.CTk):
         print("Error: gamedata.json not found in known locations")
         return None
 
-
     def toggle_xinput(self):
         """Handle toggling between JOYCODE and XInput mappings"""
         if hasattr(self, 'xinput_toggle'):
@@ -1216,44 +1215,50 @@ class MAMEControlConfig(ctk.CTk):
                 self.rom_data_cache = {}
             
             # Refresh the current game display if one is selected
-            if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None and hasattr(self, 'game_list'):
-                # Store the current scroll position if possible
-                scroll_pos = None
-                if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                    scroll_pos = self.control_frame._scrollbar.get()
-                
+            if self.current_game:
                 # Clear existing controls
                 if hasattr(self, 'control_frame'):
                     for widget in self.control_frame.winfo_children():
                         widget.destroy()
-                        
-                # Create a mock event with coordinates for the selected line
-                class MockEvent:
-                    def __init__(self_mock, line_num):
-                        # Default position
-                        self_mock.x = 10
-                        self_mock.y = 10
-                        
-                        # Try to get better position if possible
-                        if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
-                            # Calculate position to hit the middle of the line
-                            bbox = self.game_list._textbox.bbox(f"{line_num}.0")
-                            if bbox:
-                                self_mock.x = bbox[0] + 5  # A bit to the right of line start
-                                self_mock.y = bbox[1] + 5  # A bit below line top
                 
-                # Create the mock event targeting our current line
-                mock_event = MockEvent(self.selected_line)
-                
-                # Force a full refresh of the display
-                self.on_game_select(mock_event)
-                
-                # Restore scroll position if we saved it
-                if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                    try:
-                        self.control_frame._scrollbar.set(*scroll_pos)
-                    except:
-                        pass
+                # For listbox-based interface, directly call display_game_info
+                if hasattr(self, 'game_listbox'):
+                    # Store current scroll position if possible
+                    scroll_pos = None
+                    if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
+                        scroll_pos = self.control_frame._scrollbar.get()
+                    
+                    # Directly refresh the display with the current game
+                    self.display_game_info(self.current_game)
+                    
+                    # Restore scroll position if we saved it
+                    if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
+                        try:
+                            self.control_frame._scrollbar.set(*scroll_pos)
+                        except:
+                            pass
+                else:
+                    # Fall back to the old text widget approach
+                    # Create a mock event with coordinates for the selected line
+                    class MockEvent:
+                        def __init__(self_mock, line_num):
+                            # Default position
+                            self_mock.x = 10
+                            self_mock.y = 10
+                            
+                            # Try to get better position if possible
+                            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
+                                # Calculate position to hit the middle of the line
+                                bbox = self.game_list._textbox.bbox(f"{line_num}.0")
+                                if bbox:
+                                    self_mock.x = bbox[0] + 5  # A bit to the right of line start
+                                    self_mock.y = bbox[1] + 5  # A bit below line top
+                    
+                    # Create the mock event targeting our current line
+                    mock_event = MockEvent(self.selected_line)
+                    
+                    # Force a full refresh of the display
+                    self.on_game_select(mock_event)
 
     def create_layout(self):
         """Create the modern application layout with sidebar and content panels"""
@@ -1749,13 +1754,12 @@ class MAMEControlConfig(ctk.CTk):
         # Force layout update
         self.update_idletasks()
 
-    # 3. Update the create_game_list_panel method to accept width parameter:
     def create_game_list_panel(self, width=None):
-        """Create the game list panel with fixed width"""
+        """Create the game list panel with a virtual list for better performance"""
         # Set default width if not provided
         if width is None:
             width = self.MIN_LEFT_PANEL_WIDTH
-            
+                
         # Game list container with fixed width
         self.left_panel = ctk.CTkFrame(
             self.split_container, 
@@ -1778,39 +1782,96 @@ class MAMEControlConfig(ctk.CTk):
         list_header = ctk.CTkFrame(self.left_panel, fg_color="transparent", height=40)
         list_header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
         
-        list_title = ctk.CTkLabel(
+        # List title
+        self.list_title_label = ctk.CTkLabel(
             list_header, 
             text="Available ROMs",
             font=("Arial", 14, "bold"),
             anchor="w"
         )
-        list_title.pack(side="left", padx=5)
+        self.list_title_label.pack(side="left", padx=5)
         
-        # Create the game list with improved styling
+        # Create the game list frame
         self.game_list_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         self.game_list_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         
-        # Game list using CTkTextbox
-        self.game_list = ctk.CTkTextbox(
+        # Use a tkinter Listbox with custom styling inside a Frame
+        # Create a frame with the card_bg color
+        list_container = tk.Frame(
             self.game_list_frame, 
-            font=("Arial", 13),
-            fg_color="transparent",
-            text_color=self.theme_colors["text"],
-            scrollbar_button_color=self.theme_colors["primary"],
-            scrollbar_button_hover_color=self.theme_colors["secondary"]
+            background=self.theme_colors["card_bg"]  # Match the card background color
         )
-        self.game_list.pack(fill="both", expand=True, padx=5, pady=5)
+        list_container.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Configure highlighting
-        self.game_list._textbox.tag_configure(
-            self.highlight_tag, 
-            background=self.theme_colors["primary"], 
-            foreground="white"
+        # Create a Listbox with custom styling
+        self.game_listbox = tk.Listbox(
+            list_container,
+            background=self.theme_colors["card_bg"],  # Grey background like before
+            foreground=self.theme_colors["text"],
+            font=("Arial", 13),
+            activestyle="none",
+            selectbackground=self.theme_colors["primary"],  # Blue selection color
+            selectforeground="white",
+            relief="flat",
+            highlightthickness=0,
+            borderwidth=0
         )
+        self.game_listbox.pack(side="left", fill="both", expand=True)
+        
+        # Create a custom CTkScrollbar instead of ttk.Scrollbar
+        # Creating a bit of margin around the scrollbar with a frame
+        scrollbar_frame = ctk.CTkFrame(list_container, fg_color="transparent", width=22)
+        scrollbar_frame.pack(side="right", fill="y", padx=(2, 4))
+        
+        # Custom CTk scrollbar that matches your theme with curved edges
+        game_scrollbar = ctk.CTkScrollbar(
+            scrollbar_frame,
+            orientation="vertical",
+            button_color=self.theme_colors["primary"],         # Primary color for scrollbar thumb
+            button_hover_color=self.theme_colors["secondary"], # Secondary color for hover
+            fg_color=self.theme_colors["card_bg"],            # Background color matching panel
+            corner_radius=10,                                 # Enhanced rounded corners (was 5)
+            width=14                                          # Make it slightly narrower for more pronounced curves
+        )
+        game_scrollbar.pack(fill="y", expand=True)
+        
+        # Connect scrollbar to listbox (need a custom function to bridge CTkScrollbar to Listbox)
+        def on_listbox_scroll(*args):
+            game_scrollbar.set(*args)
+            
+        def on_scrollbar_move(value):
+            self.game_listbox.yview_moveto(value)
+        
+        self.game_listbox.configure(yscrollcommand=on_listbox_scroll)
+        game_scrollbar.configure(command=self.game_listbox.yview)
         
         # Bind events
-        self.game_list.bind("<Button-1>", self.on_game_select)
-        self.game_list.bind("<Button-3>", self.show_game_context_menu)  # Right-click context menu
+        self.game_listbox.bind("<<ListboxSelect>>", self.on_game_select_from_listbox)
+        self.game_listbox.bind("<Button-3>", self.show_game_context_menu_listbox)  # Right-click menu
+        self.game_listbox.bind("<Double-Button-1>", self.on_game_double_click)     # Double-click to preview
+        
+        # Store references to helper properties
+        self.highlight_tag = "highlight"  # Keep for compatibility
+        self.selected_line = None  # Keep for compatibility
+        
+        # Store the list data
+        self.game_list_data = []  # Will hold (rom_name, display_text) tuples
+        
+        # Create a StringVar to hold list items for better performance
+        self.game_list_var = tk.StringVar()
+        self.game_list_var.set([])  # Empty list initially
+
+    def on_game_double_click(self, event):
+        """Handle double-click on game list item to preview controls"""
+        selected_indices = self.game_listbox.curselection()
+        if not selected_indices:
+            return
+            
+        index = selected_indices[0]
+        if index < len(self.game_list_data):
+            rom_name, _ = self.game_list_data[index]
+            self.current_game = rom_name
+            self.show_preview()
 
     def create_control_display_panel(self):
         """Create the control display panel with fixed proportions"""
@@ -2029,15 +2090,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection with improved multi-word handling"""
-        # Check if game_list exists before trying to use it
-        if not hasattr(self, 'game_list') or self.game_list is None:
-            print("Warning: game_list widget not available yet")
-            return
-            
-        # Clear current list
-        self.game_list.delete("1.0", "end")
-        
+        """Update game list based on current sidebar category selection with virtual list"""
         # Get all ROMs
         available_roms = sorted(self.available_roms)
         
@@ -2123,74 +2176,56 @@ class MAMEControlConfig(ctk.CTk):
             search_text = self.search_var.get().lower().strip()
         
         if search_text:
-            filtered_roms = []
-            for rom in display_roms:
-                # For multi-word searches, check if all words are in the ROM name or game name
-                if ' ' in search_text:
-                    # Split search into individual terms
-                    search_terms = search_text.split()
-                    
-                    # Get game data for name checking
-                    game_data = self.get_game_data(rom)
-                    game_name = game_data.get('gamename', '').lower() if game_data else ''
-                    rom_lower = rom.lower()
-                    
-                    # Check if all terms are in either the ROM name or game name
-                    all_terms_match = True
-                    for term in search_terms:
-                        if term not in rom_lower and term not in game_name:
-                            all_terms_match = False
-                            break
-                    
-                    if all_terms_match:
-                        filtered_roms.append(rom)
-                else:
-                    # Single word search - simpler check
-                    if search_text in rom.lower():
-                        filtered_roms.append(rom)
-                    else:
-                        # Check game name too (if available)
-                        game_data = self.get_game_data(rom)
-                        if game_data and 'gamename' in game_data and search_text in game_data['gamename'].lower():
-                            filtered_roms.append(rom)
+            filtered_roms = self._filter_rom_list(display_roms, search_text)
             display_roms = filtered_roms
         
-        # Display the filtered list
+        # Build the list data
+        self.game_list_data = []
+        list_display_items = []
+        
+        # Check if we have any ROMs to display
         if not display_roms:
-            self.game_list.insert("end", "No matching ROMs found.\n")
+            self.game_list_var.set(["No matching ROMs found."])
             return
         
+        # Build display items for each ROM
         for rom in display_roms:
             # Determine display format
             has_config = rom in self.custom_configs
             has_data = self.get_game_data(rom) is not None
-            is_clone = rom in self.parent_lookup
+            is_clone = rom in self.parent_lookup if hasattr(self, 'parent_lookup') else False
             
             # Build the prefix
             prefix = "* " if has_config else "  "
             prefix += "+ " if has_data else "- "
             
-            # Add a clone indicator for the clone view or when showing all ROMs
+            # Create display text
             if is_clone and (self.current_view == "clones" or self.current_view == "all"):
                 parent_rom = self.parent_lookup.get(rom, "")
                 
                 # Get game name if available
                 if has_data:
                     game_data = self.get_game_data(rom)
-                    display_name = f"{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
+                    display_text = f"{prefix}{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
                 else:
-                    display_name = f"{rom} [Clone of {parent_rom}]"
-            # Regular display for non-clones or when not in clone view
+                    display_text = f"{prefix}{rom} [Clone of {parent_rom}]"
             else:
-                # Get game name if available
+                # Regular display for non-clones or when not in clone view
                 if has_data:
                     game_data = self.get_game_data(rom)
-                    display_name = f"{rom} - {game_data['gamename']}"
+                    display_text = f"{prefix}{rom} - {game_data['gamename']}"
                 else:
-                    display_name = rom
+                    display_text = f"{prefix}{rom}"
             
-            # Insert the line
-            self.game_list.insert("end", f"{prefix}{display_name}\n")
+            # Store both the ROM name and display text
+            self.game_list_data.append((rom, display_text))
+            list_display_items.append(display_text)
+        
+        # Update the listbox
+        self.game_list_var.set(list_display_items)
+        self.game_listbox.delete(0, tk.END)
+        for item in list_display_items:
+            self.game_listbox.insert(tk.END, item)
         
         # Update the title based on current view
         view_titles = {
@@ -2208,13 +2243,277 @@ class MAMEControlConfig(ctk.CTk):
 
     def update_list_title(self, title_text):
         """Update the title of the game list panel"""
-        # Find the title label in the list_header
-        for widget in self.left_panel.winfo_children():
-            if isinstance(widget, ctk.CTkFrame) and widget.winfo_y() < 50:  # Header is at the top
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkLabel):
-                        child.configure(text=title_text)
-                        return
+        if hasattr(self, 'list_title_label'):
+            self.list_title_label.configure(text=title_text)
+        else:
+            # Fallback for backward compatibility
+            for widget in self.left_panel.winfo_children():
+                if isinstance(widget, ctk.CTkFrame) and widget.winfo_y() < 50:  # Header is at the top
+                    for child in widget.winfo_children():
+                        if isinstance(child, ctk.CTkLabel):
+                            child.configure(text=title_text)
+                            return
+    
+    def on_game_select_from_listbox(self, event):
+        """Handle game selection from listbox"""
+        try:
+            # Get selected index
+            selected_indices = self.game_listbox.curselection()
+            if not selected_indices:
+                return
+                
+            index = selected_indices[0]
+            
+            # Get ROM name from our data list
+            if index < len(self.game_list_data):
+                rom_name, display_text = self.game_list_data[index]
+                
+                # Store the selected ROM
+                self.current_game = rom_name
+                
+                # Store selected line (for compatibility)
+                self.selected_line = index + 1  # 1-indexed for compatibility
+                
+                # Update the display
+                self.display_game_info(rom_name)
+            
+        except Exception as e:
+            print(f"Error selecting game from listbox: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def display_game_info(self, rom_name):
+        """Display game information and controls"""
+        try:
+            # Get game data
+            game_data = self.get_game_data(rom_name)
+            
+            # Update UI with game data
+            if not game_data:
+                # Clear display for ROMs without control data
+                self.game_title.configure(text=f"No control data: {rom_name}")
+                
+                # Clear existing controls
+                for widget in self.control_frame.winfo_children():
+                    widget.destroy()
+                
+                # Create a card to show the missing data
+                missing_card = ctk.CTkFrame(
+                    self.control_frame, 
+                    fg_color=self.theme_colors["card_bg"], 
+                    corner_radius=6
+                )
+                missing_card.pack(fill="x", padx=10, pady=10)
+                
+                # Title
+                ctk.CTkLabel(
+                    missing_card,
+                    text="No Control Data Available",
+                    font=("Arial", 16, "bold")
+                ).pack(anchor="w", padx=15, pady=(15, 10))
+                
+                # Message
+                ctk.CTkLabel(
+                    missing_card,
+                    text=f"The ROM '{rom_name}' doesn't have any control configuration data.",
+                    font=("Arial", 13)
+                ).pack(anchor="w", padx=15, pady=(0, 5))
+                
+                # Debug info
+                has_rom_cfg = rom_name in self.custom_configs 
+                has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
+                
+                debug_info = f"ROM-specific CFG: {'Yes' if has_rom_cfg else 'No'}\n"
+                debug_info += f"Default CFG: {'Yes' if has_default_cfg else 'No'}\n" 
+                debug_info += f"Gamedata.json: {'Yes' if rom_name in self.gamedata_json else 'No'}"
+                
+                ctk.CTkLabel(
+                    missing_card,
+                    text=debug_info,
+                    font=("Arial", 11),
+                    text_color=self.theme_colors["text_dimmed"]
+                ).pack(anchor="w", padx=15, pady=(5, 5))
+                
+                # Add button to create controls
+                add_button = ctk.CTkButton(
+                    missing_card,
+                    text="Add Control Configuration",
+                    command=lambda r=rom_name: self.show_control_editor(r),
+                    fg_color=self.theme_colors["primary"],
+                    hover_color=self.theme_colors["button_hover"],
+                    height=35
+                )
+                add_button.pack(anchor="w", padx=15, pady=(5, 15))
+                
+                return
+
+            # IMPORTANT: Get custom control configuration if it exists
+            cfg_controls = {}
+            if rom_name in self.custom_configs:
+                # Parse the custom config
+                cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                
+                # Convert if XInput is enabled
+                if self.use_xinput:
+                    cfg_controls = {
+                        control: self.convert_mapping(mapping, True)
+                        for control, mapping in cfg_controls.items()
+                    }
+                
+                # Update game_data with custom mappings
+                self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+
+            # Update game title
+            source_text = f" ({game_data.get('source', 'unknown')})"
+            title_text = f"{game_data['gamename']}{source_text}"
+            self.game_title.configure(text=title_text)
+            
+            # Clear existing display
+            for widget in self.control_frame.winfo_children():
+                widget.destroy()
+                
+            # Display controls with enhanced styling
+            row = 0
+            self.display_controls_table(row, game_data, cfg_controls)
+            
+        except Exception as e:
+            print(f"Error displaying game info: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def show_game_context_menu_listbox(self, event):
+        """Show context menu on right-click for ROM entries in listbox"""
+        try:
+            # Get the index at the event position
+            index = self.game_listbox.nearest(event.y)
+            
+            # Select the clicked item
+            self.game_listbox.selection_clear(0, tk.END)
+            self.game_listbox.selection_set(index)
+            self.game_listbox.activate(index)
+            
+            # Get ROM name from our data list
+            if index < len(self.game_list_data):
+                rom_name, display_text = self.game_list_data[index]
+                
+                # DEBUGGING: Print raw line content
+                print(f"Context menu for ROM: '{rom_name}'")
+                
+                # Check if this is a clone ROM
+                is_clone = rom_name in self.parent_lookup if hasattr(self, 'parent_lookup') else False
+                parent_rom = self.parent_lookup.get(rom_name) if is_clone else None
+                
+                # Create context menu
+                context_menu = tk.Menu(self, tearoff=0)
+                
+                # Add menu items
+                if is_clone and parent_rom:
+                    # For clones, show different edit option that redirects to parent
+                    context_menu.add_command(label=f"Edit Controls (Parent: {parent_rom})", 
+                                        command=lambda: self.show_control_editor(rom_name))
+                else:
+                    # Regular edit option for non-clones
+                    context_menu.add_command(label="Edit Controls", 
+                                        command=lambda: self.show_control_editor(rom_name))
+                
+                # Preview controls is always available
+                context_menu.add_command(label="Preview Controls", 
+                                    command=lambda: self.preview_rom_controls(rom_name))
+                
+                context_menu.add_separator()
+                
+                # Check if ROM has custom config
+                has_custom_config = rom_name in self.custom_configs
+                
+                if has_custom_config:
+                    context_menu.add_command(label="View Custom Config", 
+                                        command=lambda: self.show_custom_config(rom_name))
+                
+                context_menu.add_command(label="Clear Cache for this ROM", 
+                                    command=lambda: self.perform_cache_clear(None, all_files=False, rom_name=rom_name))
+                
+                # Display the context menu
+                context_menu.tk_popup(event.x_root, event.y_root)
+        
+        except Exception as e:
+            print(f"Error showing context menu: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _get_category_roms(self):
+        """Get the ROM list for the current category without any search filtering"""
+        # Get all ROMs
+        available_roms = sorted(self.available_roms)
+            
+        # Prepare lists for different categories
+        with_controls = []
+        missing_controls = []
+        with_custom_config = []
+        generic_controls = []
+        clone_roms = []
+        
+        # We'll only load the necessary category data based on current view
+        if self.current_view == "all":
+            return available_roms
+        elif self.current_view == "clones":
+            # Just return list from parent_lookup
+            if hasattr(self, 'parent_lookup'):
+                return sorted(self.parent_lookup.keys())
+            return []
+        elif self.current_view == "custom_config":
+            # These we can get directly
+            return sorted(self.custom_configs.keys())
+        
+        # For these categories we need to check each ROM's data
+        for rom in available_roms:
+            # Quick check for category - only load data if absolutely necessary
+            if self.current_view == "with_controls":
+                # Check if ROM has cached data or exists in database
+                if rom in self.rom_data_cache or self.rom_exists_in_db(rom):
+                    with_controls.append(rom)
+                
+            elif self.current_view == "missing":
+                # Opposite of with_controls
+                if rom not in self.rom_data_cache and not self.rom_exists_in_db(rom):
+                    missing_controls.append(rom)
+                    
+            elif self.current_view == "generic":
+                # This requires actual data inspection, more expensive
+                game_data = self.get_game_data(rom)
+                if not game_data:
+                    continue
+                    
+                # Check if controls are generic
+                has_custom_controls = False
+                for player in game_data.get('players', []):
+                    for label in player.get('labels', []):
+                        action = label['value']
+                        # Standard generic actions
+                        generic_actions = [
+                            "A Button", "B Button", "X Button", "Y Button", 
+                            "LB Button", "RB Button", "LT Button", "RT Button",
+                            "Up", "Down", "Left", "Right"
+                        ]
+                        # If we find any non-generic action, mark as having custom controls
+                        if action not in generic_actions:
+                            has_custom_controls = True
+                            break
+                    if has_custom_controls:
+                        break
+                        
+                if not has_custom_controls and game_data.get('players'):
+                    generic_controls.append(rom)
+        
+        # Return the appropriate list based on current view
+        if self.current_view == "with_controls":
+            return with_controls
+        elif self.current_view == "missing":
+            return missing_controls
+        elif self.current_view == "generic":
+            return generic_controls
+        
+        # Fallback to all ROMs
+        return available_roms
     
     # Helper function to dynamically add more buttons to the top bar
     def add_button(self, text, command, width=150):
@@ -2261,323 +2560,147 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
             return {}
     
-    def on_game_select(self, event):
-        """Handle game selection with enhanced visual feedback"""
-        try:
-            # Get the selected game name
-            index = self.game_list.index(f"@{event.x},{event.y}")
+    def _filter_rom_list(self, rom_list, search_text):
+        """Filter a list of ROMs based on search text"""
+        # If no search text, return original list
+        if not search_text:
+            return rom_list
             
-            # Get the line number (starting from 1)
-            line_num = int(index.split('.')[0])
+        filtered_roms = []
+        
+        # For multi-word searches
+        if ' ' in search_text:
+            search_terms = search_text.split()
             
-            # Get the text from this line
-            line = self.game_list.get(f"{line_num}.0", f"{line_num}.0 lineend")
-            
-            # Skip if line is empty or "No matching ROMs found"
-            if not line or line.startswith("No matching ROMs"):
-                return
+            for rom in rom_list:
+                rom_lower = rom.lower()
+                
+                # First check if all terms match the ROM name (fast check)
+                all_terms_in_rom = True
+                for term in search_terms:
+                    if term not in rom_lower:
+                        all_terms_in_rom = False
+                        break
+                
+                if all_terms_in_rom:
+                    filtered_roms.append(rom)
+                    continue
                     
-            # Highlight the selected line
-            self.highlight_selected_game(line_num)
-            
-            # DEBUGGING: Print raw line content with character codes to identify how it's formatted
-            print(f"Raw line: {repr(line)}")
-            
-            # Extract ROM name properly using regex pattern that can handle multi-word ROM names
-            import re
-            
-            # Pattern explanation:
-            # 1. We first look for any prefix characters (*, +, -, spaces)
-            # 2. Then capture everything up to the first " - " separator (this is the ROM name)
-            # 3. The " - " separator divides ROM name from game description
-            # 4. We handle the case with or without clone indicator
-            pattern = r'^[\*\+\- ]*([^ ].*?)(?:\s+- |\s+\[Clone)'
-            match = re.search(pattern, line)
-            
-            if match:
-                romname = match.group(1).strip()
-                print(f"Extracted ROM name via regex: '{romname}'")
+                # Check game name using name cache (if available)
+                if hasattr(self, 'name_cache') and rom in self.name_cache:
+                    game_name = self.name_cache[rom]
+                    
+                    # Check if all terms are in the game name
+                    all_terms_in_game = True
+                    for term in search_terms:
+                        if term not in game_name:
+                            all_terms_in_game = False
+                            break
+                    
+                    if all_terms_in_game:
+                        filtered_roms.append(rom)
+                # Fallback to loading game data if name cache not available
+                elif rom in self.rom_data_cache:
+                    game_data = self.rom_data_cache[rom]
+                    game_name = game_data.get('gamename', '').lower()
+                    
+                    # Check if all terms are in the game name
+                    all_terms_in_game = True
+                    for term in search_terms:
+                        if term not in game_name:
+                            all_terms_in_game = False
+                            break
+                    
+                    if all_terms_in_game:
+                        filtered_roms.append(rom)
+        else:
+            # Single-word search (simpler)
+            # Try to use text lookup cache if available
+            if hasattr(self, 'text_lookup') and search_text in self.text_lookup:
+                # Get all ROMs that contain this word
+                matching_roms = self.text_lookup[search_text]
+                # But only include ROMs from our current list
+                filtered_roms = [rom for rom in rom_list if rom in matching_roms]
             else:
-                # Alternative approach if the regex fails
-                # Remove any prefixes and clone indicators
-                cleaned_line = line.strip()
-                if cleaned_line.startswith("* "):
-                    cleaned_line = cleaned_line[2:]
-                if cleaned_line.startswith("+ ") or cleaned_line.startswith("- "):
-                    cleaned_line = cleaned_line[2:]
-                    
-                # If there's a " - " separator, take everything before it
-                if " - " in cleaned_line:
-                    romname = cleaned_line.split(" - ")[0].strip()
-                # If there's a clone indicator, take everything before it
-                elif " [Clone" in cleaned_line:
-                    romname = cleaned_line.split(" [Clone")[0].strip()
-                # Otherwise, use the whole line
+                # Fallback to standard filtering
+                for rom in rom_list:
+                    if search_text in rom.lower():
+                        filtered_roms.append(rom)
+                        continue
+                        
+                    # Check game name using name cache (if available)
+                    if hasattr(self, 'name_cache') and rom in self.name_cache:
+                        game_name = self.name_cache[rom]
+                        if search_text in game_name:
+                            filtered_roms.append(rom)
+                    # Fallback to ROM data cache
+                    elif rom in self.rom_data_cache:
+                        game_data = self.rom_data_cache[rom]
+                        if 'gamename' in game_data and search_text in game_data['gamename'].lower():
+                            filtered_roms.append(rom)
+        
+        return filtered_roms
+    
+    def on_game_select(self, event):
+        """Compatibility method for handling game selection from the text widget"""
+        if hasattr(self, 'game_listbox'):
+            # For listbox, we use on_game_select_from_listbox instead
+            # But we can directly call display_game_info for the current_game if it exists
+            if hasattr(self, 'current_game') and self.current_game:
+                self.display_game_info(self.current_game)
+        else:
+            # Original implementation for text widget
+            try:
+                # Get the selected game name
+                index = self.game_list.index(f"@{event.x},{event.y}")
+                
+                # Get the line number (starting from 1)
+                line_num = int(index.split('.')[0])
+                
+                # Get the text from this line
+                line = self.game_list.get(f"{line_num}.0", f"{line_num}.0 lineend")
+                
+                # Skip if line is empty or "No matching ROMs found"
+                if not line or line.startswith("No matching ROMs"):
+                    return
+                        
+                # Highlight the selected line
+                self.highlight_selected_game(line_num)
+                
+                # Extract ROM name
+                import re
+                pattern = r'^[\*\+\- ]*([^ ].*?)(?:\s+- |\s+\[Clone)'
+                match = re.search(pattern, line)
+                
+                if match:
+                    romname = match.group(1).strip()
                 else:
-                    romname = cleaned_line
-                    
-                print(f"Fallback ROM name extraction: '{romname}'")
-            
-            self.current_game = romname
-
-            # Force load of gamedata.json if needed
-            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
-                self.load_gamedata_json()
-            
-            # DEBUG: Print a sample of gamedata keys to verify
-            if self.gamedata_json:
-                sample_keys = list(self.gamedata_json.keys())[:5]
-                print(f"Sample gamedata keys: {sample_keys}")
-                print(f"Current ROM ('{romname}') in gamedata keys: '{romname}' in self.gamedata_json")
-            
-            # DIRECT CHECK - does this ROM exist in gamedata.json?
-            rom_in_gamedata = romname in self.gamedata_json
-            print(f"ROM '{romname}' found in gamedata.json: {rom_in_gamedata}")
-            
-            # Check if ROM-specific CFG exists
-            has_rom_cfg = romname in self.custom_configs
-            print(f"ROM '{romname}' has custom CFG: {has_rom_cfg}")
-            
-            # Check if default.cfg exists
-            has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
-            print(f"Default CFG available: {has_default_cfg}")
-            
-            # Get game data through normal method
-            game_data = self.get_game_data(romname)
-
-            # IMPORTANT: Add this code to apply mappings before display
-            if game_data:
-                # Get custom control configuration if it exists
-                cfg_controls = {}
-                if romname in self.custom_configs:
-                    # Parse the custom config
-                    cfg_controls = self.parse_cfg_controls(self.custom_configs[romname])
-                    
-                    # Convert if XInput is enabled
-                    if self.use_xinput:
-                        cfg_controls = {
-                            control: self.convert_mapping(mapping, True)
-                            for control, mapping in cfg_controls.items()
-                        }
-                    
-                    # Update game_data with custom mappings
-                    self.update_game_data_with_custom_mappings(game_data, cfg_controls)
-                    print(f"Applied custom mappings to game_data")
-            
-            # Clear existing display
-            for widget in self.control_frame.winfo_children():
-                widget.destroy()
-
-            # Only show "No control data" if BOTH game_data is None AND rom is not in gamedata
-            if not game_data and not rom_in_gamedata:
-                # Clear display for ROMs without control data
-                self.game_title.configure(text=f"No control data: {romname}")
-                
-                # Create a card to show the missing data
-                missing_card = ctk.CTkFrame(
-                    self.control_frame, 
-                    fg_color=self.theme_colors["card_bg"], 
-                    corner_radius=6
-                )
-                missing_card.pack(fill="x", padx=10, pady=10)
-                
-                # Title
-                ctk.CTkLabel(
-                    missing_card,
-                    text="No Control Data Available",
-                    font=("Arial", 16, "bold")
-                ).pack(anchor="w", padx=15, pady=(15, 10))
-                
-                # Message
-                ctk.CTkLabel(
-                    missing_card,
-                    text=f"The ROM '{romname}' doesn't have any control configuration data.",
-                    font=("Arial", 13)
-                ).pack(anchor="w", padx=15, pady=(0, 5))
-                
-                # Debug info
-                debug_info = f"ROM-specific CFG: {'Yes' if has_rom_cfg else 'No'}\n"
-                debug_info += f"Default CFG: {'Yes' if has_default_cfg else 'No'}\n" 
-                debug_info += f"Gamedata.json: {'Yes' if rom_in_gamedata else 'No'}"
-                
-                ctk.CTkLabel(
-                    missing_card,
-                    text=debug_info,
-                    font=("Arial", 11),
-                    text_color=self.theme_colors["text_dimmed"]
-                ).pack(anchor="w", padx=15, pady=(5, 5))
-                
-                # Add button to create controls
-                add_button = ctk.CTkButton(
-                    missing_card,
-                    text="Add Control Configuration",
-                    command=lambda r=romname: self.show_control_editor(r),
-                    fg_color=self.theme_colors["primary"],
-                    hover_color=self.theme_colors["button_hover"],
-                    height=35
-                )
-                add_button.pack(anchor="w", padx=15, pady=(5, 15))
-                
-                return
-
-            # If we get here, we either have game_data OR the ROM exists in gamedata
-            # If we don't have game_data but the ROM is in gamedata, create it now
-            if not game_data and rom_in_gamedata:
-                print(f"Creating game_data directly from gamedata.json for {romname}")
-                gamedata_entry = self.gamedata_json[romname]
-                
-                # Minimal creation - just enough to not crash
-                game_data = {
-                    'romname': romname,
-                    'gamename': gamedata_entry.get('description', romname),
-                    'numPlayers': int(gamedata_entry.get('playercount', 2)),
-                    'alternating': gamedata_entry.get('alternating', False),
-                    'mirrored': False,
-                    'miscDetails': f"Buttons: {gamedata_entry.get('buttons', '?')}, Sticks: {gamedata_entry.get('sticks', '?')}",
-                    'players': [],
-                    'source': 'gamedata.json (direct)'
-                }
-                
-                # If controls exist in gamedata, add them to game_data
-                if 'controls' in gamedata_entry:
-                    # Process P1 controls
-                    p1_controls = []
-                    for control, info in gamedata_entry['controls'].items():
-                        if control.startswith('P1_'):
-                            # Use either the name from control_data, or a default name based on control
-                            action_name = info.get('name', '')
-                            if not action_name:
-                                # Default names for common controls
-                                if 'BUTTON' in control:
-                                    button_num = control.replace('P1_BUTTON', '')
-                                    action_name = f"Button {button_num}"
-                                elif 'JOYSTICK_UP' in control:
-                                    action_name = "Up"
-                                elif 'JOYSTICK_DOWN' in control:
-                                    action_name = "Down"
-                                elif 'JOYSTICK_LEFT' in control:
-                                    action_name = "Left"
-                                elif 'JOYSTICK_RIGHT' in control:
-                                    action_name = "Right"
-                                else:
-                                    action_name = control.split('_')[-1]
-                                    
-                            p1_controls.append({
-                                'name': control,
-                                'value': action_name
-                            })
-                    
-                    # Process P2 controls
-                    p2_controls = []
-                    for control, info in gamedata_entry['controls'].items():
-                        if control.startswith('P2_'):
-                            # Use either the name from control_data, or a default name based on control
-                            action_name = info.get('name', '')
-                            if not action_name:
-                                # Default names for common controls
-                                if 'BUTTON' in control:
-                                    button_num = control.replace('P2_BUTTON', '')
-                                    action_name = f"Button {button_num}"
-                                elif 'JOYSTICK_UP' in control:
-                                    action_name = "Up"
-                                elif 'JOYSTICK_DOWN' in control:
-                                    action_name = "Down"
-                                elif 'JOYSTICK_LEFT' in control:
-                                    action_name = "Left"
-                                elif 'JOYSTICK_RIGHT' in control:
-                                    action_name = "Right"
-                                else:
-                                    action_name = control.split('_')[-1]
-                                    
-                            p2_controls.append({
-                                'name': control,
-                                'value': action_name
-                            })
-                    
-                    # Sort controls for consistent display
-                    p1_controls.sort(key=lambda x: x['name'])
-                    p2_controls.sort(key=lambda x: x['name'])
-                    
-                    # Add P1 to players if we have controls
-                    if p1_controls:
-                        game_data['players'].append({
-                            'number': 1,
-                            'numButtons': int(gamedata_entry.get('buttons', 6)),
-                            'labels': p1_controls
-                        })
+                    # Alternative approach if the regex fails
+                    cleaned_line = line.strip()
+                    if cleaned_line.startswith("* "):
+                        cleaned_line = cleaned_line[2:]
+                    if cleaned_line.startswith("+ ") or cleaned_line.startswith("- "):
+                        cleaned_line = cleaned_line[2:]
                         
-                    # Add P2 to players if we have controls
-                    if p2_controls:
-                        game_data['players'].append({
-                            'number': 2,
-                            'numButtons': int(gamedata_entry.get('buttons', 6)),
-                            'labels': p2_controls
-                        })
-                        
-                    # Cache this data for future use
-                    if hasattr(self, 'rom_data_cache'):
-                        self.rom_data_cache[romname] = game_data
-                        
-                    print(f"Created game_data with {len(p1_controls)} P1 controls and {len(p2_controls)} P2 controls")
-
-            # Update game title - ensure full title is visible
-            source_text = f" ({game_data.get('source', 'unknown')})"
-            title_text = f"{game_data['gamename']}{source_text}"
-            
-            # Update title text
-            self.game_title.configure(text=title_text)
-
-            # Configure columns for the controls table
-            self.control_frame.grid_columnconfigure(0, weight=1)
-
-            row = 0
-
-            # Get custom controls if they exist (cached lookup)
-            rom_cfg_controls = {}
-            if romname in self.custom_configs:
-                # Only parse the custom configs if we need them
-                rom_cfg_controls = self.parse_cfg_controls(self.custom_configs[romname])
+                    # If there's a " - " separator, take everything before it
+                    if " - " in cleaned_line:
+                        romname = cleaned_line.split(" - ")[0].strip()
+                    # If there's a clone indicator, take everything before it
+                    elif " [Clone" in cleaned_line:
+                        romname = cleaned_line.split(" [Clone")[0].strip()
+                    # Otherwise, use the whole line
+                    else:
+                        romname = cleaned_line
                 
-                # Debug output for cfg_controls
-                print(f"Parsed custom controls for {romname}:")
-                for control_name, mapping in list(rom_cfg_controls.items())[:5]:
-                    print(f"  {control_name}: {mapping}")
-            
-            # Get default controls
-            default_cfg_controls = {}
-            if hasattr(self, 'default_controls') and self.default_controls:
-                # Only include controls not already in rom_cfg_controls
-                for control, mapping in self.default_controls.items():
-                    if control not in rom_cfg_controls:
-                        default_cfg_controls[control] = mapping
+                self.current_game = romname
                 
-                print(f"Loaded {len(default_cfg_controls)} default controls")
-                if default_cfg_controls:
-                    print("Sample default controls:")
-                    for control, mapping in list(default_cfg_controls.items())[:3]:
-                        print(f"  {control}: {mapping}")
-            
-            # Combine ROM-specific and default controls, with ROM-specific taking priority
-            cfg_controls = {}
-            cfg_controls.update(default_cfg_controls)  # Default controls first
-            cfg_controls.update(rom_cfg_controls)      # Then ROM-specific (overriding defaults)
-            
-            # Convert mappings if XInput is enabled
-            if hasattr(self, 'use_xinput') and self.use_xinput:
-                converted_cfg_controls = {}
-                for control, mapping in cfg_controls.items():
-                    converted_mapping = self.convert_mapping(mapping, True)
-                    converted_cfg_controls[control] = converted_mapping
-                    print(f"  Converted {control}: {mapping} -> {converted_mapping}")
-                cfg_controls = converted_cfg_controls
-
-            # Display controls with enhanced styling
-            self.display_controls_table(row, game_data, cfg_controls)
-            
-        except Exception as e:
-            print(f"Error displaying game: {str(e)}")
-            import traceback
-            traceback.print_exc()
+                # Display ROM info
+                self.display_game_info(romname)
+                    
+            except Exception as e:
+                print(f"Error displaying game: {str(e)}")
+                import traceback
+                traceback.print_exc()
     #######################################################################
     #CONFIF TO CREATE INFO FILES FOR RETROFE
     #- INFO FOLDER ENEDS TO BE IN PREVIEW\SETTINGS\INFO WITH A DEFAULT TEMPLATE
@@ -6078,46 +6201,77 @@ controller xbox t		= """
         return mapping
 
     def select_first_rom(self):
-        # Get the first available ROM (no filtering)
+        """Select the first available ROM in the listbox"""
+        # Check if we have any ROMs
         if not self.available_roms:
             return
+        
+        # Make sure the game_list_data is populated
+        if not hasattr(self, 'game_list_data') or not self.game_list_data:
+            # If we don't have any items in the data list yet, trigger an update
+            if hasattr(self, 'update_game_list_by_category'):
+                self.update_game_list_by_category()
+        
+        # Check if we have any items in the listbox
+        if not hasattr(self, 'game_listbox') or self.game_listbox.size() == 0:
+            print("No ROMs found in listbox")
+            return
             
-        first_rom = sorted(list(self.available_roms))[0]
-        self.current_game = first_rom
+        # Select the first item in the listbox
+        self.game_listbox.selection_clear(0, tk.END)  # Clear any existing selection
+        self.game_listbox.selection_set(0)  # Select the first item
+        self.game_listbox.activate(0)  # Make it the active item
+        self.game_listbox.see(0)  # Ensure it's visible
         
-        # Find it in the display list
-        list_content = self.game_list.get("1.0", "end-1c")
-        lines = list_content.split('\n')
-        
-        for i, line in enumerate(lines):
-            if first_rom in line:
-                # Highlight the first line (1-indexed)
-                self.highlight_selected_game(i + 1)
-                break
-                
-        # Create mock event and display ROM info
-        class MockEvent:
-            def __init__(self):
-                self.x = 10
-                self.y = 10
-        
-        self.after(200, lambda: self.on_game_select(MockEvent()))
+        # Get the ROM name for the first item
+        if hasattr(self, 'game_list_data') and len(self.game_list_data) > 0:
+            first_rom, _ = self.game_list_data[0]
+            self.current_game = first_rom
+            
+            # Update selected_line for compatibility with other methods
+            self.selected_line = 1
+            
+            # Display the ROM info
+            self.after(200, lambda: self.display_game_info(first_rom))
+        else:
+            print("No game data available for selection")
+            
+        print(f"Selected first ROM: {getattr(self, 'current_game', 'None')}")
+
             
     def highlight_selected_game(self, line_index):
         """Highlight the selected game in the list with enhanced visual styling"""
-        # Clear previous highlight if any
-        if self.selected_line is not None:
-            self.game_list._textbox.tag_remove(self.highlight_tag, f"{self.selected_line}.0", f"{self.selected_line + 1}.0")
-        
-        # Apply new highlight
-        self.selected_line = line_index
-        self.game_list._textbox.tag_add(self.highlight_tag, f"{line_index}.0", f"{line_index + 1}.0")
-        
-        # Ensure the selected item is visible
-        self.game_list.see(f"{line_index}.0")
+        if hasattr(self, 'game_listbox'):
+            # Clear any previous selection
+            self.game_listbox.selection_clear(0, tk.END)
+            
+            # Convert from 1-indexed to 0-indexed if needed
+            listbox_index = line_index - 1 if line_index > 0 else 0
+            
+            # Set the new selection
+            if listbox_index < self.game_listbox.size():
+                self.game_listbox.selection_set(listbox_index)
+                self.game_listbox.activate(listbox_index)
+                self.game_listbox.see(listbox_index)
+            
+            # Store the selected line (1-indexed for backward compatibility)
+            self.selected_line = line_index
+        else:
+            # Fallback for original text widget if it exists
+            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox'):
+                # Clear previous highlight if any
+                if self.selected_line is not None:
+                    self.game_list._textbox.tag_remove(self.highlight_tag, f"{self.selected_line}.0", f"{self.selected_line + 1}.0")
+                
+                # Apply new highlight
+                self.selected_line = line_index
+                self.game_list._textbox.tag_add(self.highlight_tag, f"{line_index}.0", f"{line_index + 1}.0")
+                
+                # Ensure the selected item is visible
+                self.game_list.see(f"{line_index}.0")
 
     def display_controls_table(self, start_row, game_data, cfg_controls):
-        """Display controls organized by function rather than just type"""
+        """Display controls with a structured table layout that prevents column shifting"""
         row = start_row
         
         # Get romname from game_data
@@ -6129,22 +6283,29 @@ controller xbox t		= """
             total_controls += len(player.get('labels', []))
         print(f"Total controls for {romname}: {total_controls}")
         
-        # Game info card
+        # Clear existing controls first
+        for widget in self.control_frame.winfo_children():
+            widget.destroy()
+        
+        # Game info card - now with proper full width
         info_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        info_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
-        info_card.grid_columnconfigure(0, weight=1)
+        info_card.pack(fill="x", padx=10, pady=10, expand=True)
+        
+        # Configure the info_card for proper expansion
+        info_card.columnconfigure(0, weight=1)
         
         # Game metadata section
         metadata_frame = ctk.CTkFrame(info_card, fg_color="transparent")
         metadata_frame.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
         
-        # Two-column layout for metadata
-        metadata_frame.grid_columnconfigure(0, weight=1)
-        metadata_frame.grid_columnconfigure(1, weight=1)
+        # Two-column layout for metadata with proper expansion
+        metadata_frame.columnconfigure(0, weight=1)
+        metadata_frame.columnconfigure(1, weight=1)
         
         # Left column - Basic info
         basic_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
-        basic_info.grid(row=0, column=0, sticky="nw", padx=(0, 10))
+        basic_info.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        basic_info.columnconfigure(0, weight=1)
         
         # ROM info
         ctk.CTkLabel(
@@ -6152,7 +6313,7 @@ controller xbox t		= """
             text="ROM Information",
             font=("Arial", 14, "bold"),
             anchor="w"
-        ).pack(anchor="w", pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 10), fill="x")
         
         info_text = f"ROM Name: {game_data['romname']}\n"
         info_text += f"Players: {game_data['numPlayers']}\n"
@@ -6165,19 +6326,20 @@ controller xbox t		= """
             font=("Arial", 13),
             justify="left",
             anchor="w"
-        ).pack(anchor="w")
+        ).pack(anchor="w", fill="x")
         
         # Right column - Additional info
         if game_data.get('miscDetails'):
             additional_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
-            additional_info.grid(row=0, column=1, sticky="nw", padx=(10, 0))
+            additional_info.grid(row=0, column=1, sticky="ew", padx=(10, 0))
+            additional_info.columnconfigure(0, weight=1)
             
             ctk.CTkLabel(
                 additional_info,
                 text="Additional Details",
                 font=("Arial", 14, "bold"),
                 anchor="w"
-            ).pack(anchor="w", pady=(0, 10))
+            ).pack(anchor="w", pady=(0, 10), fill="x")
             
             ctk.CTkLabel(
                 additional_info,
@@ -6186,11 +6348,11 @@ controller xbox t		= """
                 justify="left",
                 anchor="w",
                 wraplength=300
-            ).pack(anchor="w")
+            ).pack(anchor="w", fill="x")
         
         # Add indicators for config sources and input mode
         indicator_frame = ctk.CTkFrame(info_card, fg_color="transparent")
-        indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="w")
+        indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
         
         # Check which sources are active
         has_rom_cfg = romname in self.custom_configs
@@ -6264,9 +6426,12 @@ controller xbox t		= """
         
         row += 1
         
-        # Controls table section
+        # Controls table section - ensure full width
         controls_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        controls_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
+        controls_card.pack(fill="x", padx=10, pady=10, expand=True)
+        
+        # Configure grid for full width expansion
+        controls_card.columnconfigure(0, weight=1)
         
         # Card title
         ctk.CTkLabel(
@@ -6274,59 +6439,46 @@ controller xbox t		= """
             text="Controller Mappings",
             font=("Arial", 16, "bold"),
             anchor="w"
-        ).pack(anchor="w", padx=15, pady=(15, 10))
+        ).pack(anchor="w", padx=15, pady=(15, 10), fill="x")
         
-        # Table header and content container
-        table_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
-        table_frame.pack(fill="x", padx=15, pady=5)
+        # Create a frame for the table
+        table_container = ctk.CTkFrame(controls_card, fg_color="transparent")
+        table_container.pack(fill="x", padx=15, pady=5, expand=True)
         
-        # Use a grid layout with fixed column widths
-        table_frame.columnconfigure(0, minsize=220, weight=0)  # Control name
-        table_frame.columnconfigure(1, minsize=220, weight=0)  # Game Action
-        table_frame.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
+        # Configure table columns - we'll use percentages of the total width
+        col_widths = [0.4, 0.35, 0.25]  # Control name: 40%, Game Action: 35%, Mapping Source: 25%
         
-        # Create header with fixed-width columns in a grid
-        header_frame = ctk.CTkFrame(table_frame, fg_color="transparent")
-        header_frame.pack(fill="x", pady=(0, 10))
-        
-        # Configure grid for header
-        header_frame.columnconfigure(0, minsize=220, weight=0)
-        header_frame.columnconfigure(1, minsize=220, weight=0)
-        header_frame.columnconfigure(2, minsize=180, weight=0)
-        
-        # Header columns with simplified names
-        header_texts = ["Control", "Game Action", "Mapping Source"]
-        
-        # Create headers with fixed widths using grid
-        for i, text in enumerate(header_texts):
+        # Create the table headers with a single continuous blue background
+        header_container = ctk.CTkFrame(table_container, fg_color=self.theme_colors["primary"], height=36)
+        header_container.pack(fill="x", pady=(0, 10))
+        header_container.pack_propagate(False)  # Fix the height
+
+        # Create individual header cells directly in the blue background
+        header_titles = ["Control", "Game Action", "Mapping Source"]
+
+        # Add the titles directly to the blue background
+        for i, title in enumerate(header_titles):
+            # Create a container for each header at the right position
+            col_pos = sum(col_widths[:i])  # Position is sum of previous widths
+            col_width = col_widths[i]  # Width for this column
+            
+            # Position in relative coordinates
+            rel_x = col_pos
+            rel_width = col_width
+            
+            # Create a label directly in the header container
             header_label = ctk.CTkLabel(
-                header_frame,
-                text=text,
+                header_container,
+                text=title,
                 font=("Arial", 13, "bold"),
-                fg_color=self.theme_colors["primary"],
                 text_color="#ffffff",
-                corner_radius=4,
-                height=36
+                anchor="w",
+                justify="left"
             )
-            header_label.grid(row=0, column=i, padx=5, sticky="ew")
-        
-        # Create a container for the rows
-        rows_container = ctk.CTkFrame(table_frame, fg_color="transparent")
-        rows_container.pack(fill="x", expand=True)
-        
-        # Configure grid to align with headers
-        rows_container.columnconfigure(0, minsize=220, weight=0)  # Control name
-        rows_container.columnconfigure(1, minsize=220, weight=0)  # Game Action
-        rows_container.columnconfigure(2, minsize=180, weight=0)  # Mapping Source
-        
-        # Row alternating colors
-        row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
-        
-        # SIMPLIFIED APPROACH: Just display all controls directly without categories
-        control_row = 0
-        all_controls = []
+            header_label.place(relx=rel_x, rely=0, relwidth=rel_width, relheight=1, x=10)  # x=10 adds left padding
         
         # Collect all controls from all players
+        all_controls = []
         for player in game_data.get('players', []):
             for label in player.get('labels', []):
                 # Add control to our list
@@ -6376,78 +6528,205 @@ controller xbox t		= """
         
         print(f"Displaying {len(all_controls)} controls for {romname}")
         
-        # Display all controls in a simple list
-        for i, control in enumerate(all_controls):
-            # Row container with alternating background
-            row_frame = ctk.CTkFrame(
-                rows_container, 
-                fg_color=row_alt_colors[i % 2],
-                corner_radius=4,
-                height=40
-            )
-            row_frame.pack(fill="x", pady=2)
-            row_frame.pack_propagate(False)  # Ensure consistent height
-            
-            # Configure row frame to use same grid as header
-            row_frame.columnconfigure(0, minsize=220, weight=0)
-            row_frame.columnconfigure(1, minsize=220, weight=0)
-            row_frame.columnconfigure(2, minsize=180, weight=0)
-            
-            # Display name for the control
-            display_name = control.get('display_name', self.format_control_name(control['name']))
-            
-            button_label = ctk.CTkLabel(
-                row_frame,
-                text=display_name,
-                font=("Arial", 12),
-                anchor="w"
-            )
-            button_label.grid(row=0, column=0, padx=15, pady=10, sticky="w")
-            
-            # Game action (middle column)
-            action_label = ctk.CTkLabel(
-                row_frame,
-                text=control['action'],
-                font=("Arial", 12, "bold"),
-                text_color=self.theme_colors["primary"],
-                anchor="w"
-            )
-            action_label.grid(row=0, column=1, padx=5, pady=10, sticky="w")
-            
-            # Source (right column)
-            source_color = self.theme_colors["success"] if "ROM CFG" in control['source'] else \
-                        self.theme_colors["primary"] if "Default CFG" in control['source'] else \
-                        "#888888"  # For Game Data
-                        
-            source_label = ctk.CTkLabel(
-                row_frame,
-                text=control['source'],
-                font=("Arial", 11),
-                text_color=source_color,
-                anchor="w"
-            )
-            source_label.grid(row=0, column=2, padx=5, pady=10, sticky="w")
-            
-            control_row += 1
+        # Create scrollable frame for rows for better handling of many controls
+        rows_scroll_frame = ctk.CTkScrollableFrame(
+            table_container, 
+            fg_color="transparent",
+            height=300,  # Limit initial height
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        rows_scroll_frame.pack(fill="x", expand=True)
+        
+        # Row alternating colors
+        row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
         # If there are no controls to display
-        if control_row == 0:
-            empty_frame = ctk.CTkFrame(rows_container, fg_color="transparent")
+        if not all_controls:
+            empty_frame = ctk.CTkFrame(rows_scroll_frame, fg_color="transparent", height=60)
             empty_frame.pack(fill="x", pady=10)
+            empty_frame.pack_propagate(False)
             
             ctk.CTkLabel(
                 empty_frame,
                 text="No controller mappings found for this ROM",
                 font=("Arial", 13),
                 text_color=self.theme_colors["text_dimmed"]
-            ).pack(pady=20)
+            ).pack(fill="both", expand=True, pady=20)
+        else:
+            # OPTIMIZATION: Reuse cell frames
+            cell_frames = {}
+            
+            # OPTIMIZATION: Only create the first N rows initially
+            max_initial_rows = min(20, len(all_controls))  # Limit initial rows
+            
+            # Display all controls in a well-structured table
+            for i in range(max_initial_rows):
+                control = all_controls[i]
+                
+                # Create a container for this row with alternating color
+                row_container = ctk.CTkFrame(
+                    rows_scroll_frame, 
+                    fg_color=row_alt_colors[i % 2],
+                    corner_radius=4,
+                    height=40
+                )
+                row_container.pack(fill="x", pady=2)
+                row_container.pack_propagate(False)  # Keep the fixed height
+                
+                # Create fixed width containers for each column
+                # This is the key to preventing text from one column affecting others
+                col1 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[0]))
+                col1.place(x=0, y=0, relwidth=col_widths[0], relheight=1)
+                col1.pack_propagate(False)  # Keep fixed width
+                
+                col2 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[1]))
+                col2.place(relx=col_widths[0], y=0, relwidth=col_widths[1], relheight=1)
+                col2.pack_propagate(False)  # Keep fixed width
+                
+                col3 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[2]))
+                col3.place(relx=col_widths[0]+col_widths[1], y=0, relwidth=col_widths[2], relheight=1)
+                col3.pack_propagate(False)  # Keep fixed width
+                
+                # Display name for the control
+                display_name = control.get('display_name', self.format_control_name(control['name']))
+                action = control['action']
+                source = control['source']
+                
+                # Create labels for each column
+                ctk.CTkLabel(
+                    col1,
+                    text=display_name,
+                    font=("Arial", 12),
+                    anchor="w",
+                    justify="left"
+                ).pack(side="left", padx=10, pady=10, fill="x")
+                
+                ctk.CTkLabel(
+                    col2,
+                    text=action,
+                    font=("Arial", 12, "bold"),
+                    text_color=self.theme_colors["primary"],
+                    anchor="w",
+                    justify="left"
+                ).pack(side="left", padx=10, pady=10, fill="x")
+                
+                # Source color based on type
+                if "ROM CFG" in source:
+                    source_color = self.theme_colors["success"]
+                elif "Default CFG" in source:
+                    source_color = self.theme_colors["primary"]
+                else:
+                    source_color = "#888888"  # Game Data
+                    
+                ctk.CTkLabel(
+                    col3,
+                    text=source,
+                    font=("Arial", 11),
+                    text_color=source_color,
+                    anchor="w",
+                    justify="left"
+                ).pack(side="left", padx=10, pady=10, fill="x")
+            
+            # OPTIMIZATION: If there are more rows, add a "Load more" button or implement lazy loading
+            if len(all_controls) > max_initial_rows:
+                load_more_frame = ctk.CTkFrame(rows_scroll_frame, fg_color="transparent")
+                load_more_frame.pack(fill="x", pady=5)
+                
+                remaining = len(all_controls) - max_initial_rows
+                
+                def load_more_rows():
+                    # Remove the load more button
+                    load_more_frame.pack_forget()
+                    load_more_frame.destroy()
+                    
+                    # Load the rest of the controls
+                    for j in range(max_initial_rows, len(all_controls)):
+                        control = all_controls[j]
+                        
+                        # Create a container for this row with alternating color
+                        row_container = ctk.CTkFrame(
+                            rows_scroll_frame, 
+                            fg_color=row_alt_colors[j % 2],
+                            corner_radius=4,
+                            height=40
+                        )
+                        row_container.pack(fill="x", pady=2)
+                        row_container.pack_propagate(False)  # Keep the fixed height
+                        
+                        # Create fixed width containers for each column
+                        col1 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[0]))
+                        col1.place(x=0, y=0, relwidth=col_widths[0], relheight=1)
+                        col1.pack_propagate(False)
+                        
+                        col2 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[1]))
+                        col2.place(relx=col_widths[0], y=0, relwidth=col_widths[1], relheight=1)
+                        col2.pack_propagate(False)
+                        
+                        col3 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[2]))
+                        col3.place(relx=col_widths[0]+col_widths[1], y=0, relwidth=col_widths[2], relheight=1)
+                        col3.pack_propagate(False)
+                        
+                        # Display name for the control
+                        display_name = control.get('display_name', self.format_control_name(control['name']))
+                        action = control['action']
+                        source = control['source']
+                        
+                        # Create labels for each column
+                        ctk.CTkLabel(
+                            col1,
+                            text=display_name,
+                            font=("Arial", 12),
+                            anchor="w",
+                            justify="left"
+                        ).pack(side="left", padx=10, pady=10, fill="x")
+                        
+                        ctk.CTkLabel(
+                            col2,
+                            text=action,
+                            font=("Arial", 12, "bold"),
+                            text_color=self.theme_colors["primary"],
+                            anchor="w",
+                            justify="left"
+                        ).pack(side="left", padx=10, pady=10, fill="x")
+                        
+                        # Source color based on type
+                        if "ROM CFG" in source:
+                            source_color = self.theme_colors["success"]
+                        elif "Default CFG" in source:
+                            source_color = self.theme_colors["primary"]
+                        else:
+                            source_color = "#888888"  # Game Data
+                            
+                        ctk.CTkLabel(
+                            col3,
+                            text=source,
+                            font=("Arial", 11),
+                            text_color=source_color,
+                            anchor="w",
+                            justify="left"
+                        ).pack(side="left", padx=10, pady=10, fill="x")
+                
+                # Add load more button
+                load_more_button = ctk.CTkButton(
+                    load_more_frame,
+                    text=f"Load {remaining} more items",
+                    command=load_more_rows,
+                    fg_color=self.theme_colors["primary"],
+                    hover_color=self.theme_colors["button_hover"],
+                    height=30
+                )
+                load_more_button.pack(pady=5)
         
         row += 1
         
         # Display raw custom config if it exists
         if romname in self.custom_configs:
             config_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-            config_card.grid(row=row, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
+            config_card.pack(fill="x", padx=10, pady=10, expand=True)
+            
+            # Configure grid for proper expansion
+            config_card.columnconfigure(0, weight=1)
             
             # Card title with indicator
             title_frame = ctk.CTkFrame(config_card, fg_color="transparent")
@@ -6488,7 +6767,7 @@ controller xbox t		= """
                 height=100,
                 fg_color=self.theme_colors["background"]
             )
-            config_preview.pack(fill="x", padx=15, pady=(0, 15))
+            config_preview.pack(fill="x", padx=15, pady=(0, 15), expand=True)
             
             # Get first few lines of the config
             config_lines = self.custom_configs[romname].split('\n')
@@ -6501,10 +6780,7 @@ controller xbox t		= """
             
             row += 1
         
-        # Debug output
-        print(f"Processed total of {control_row} control rows")
-                
-        # Update and save cache for this ROM
+        # Update and save cache
         try:
             if hasattr(self, 'cache_dir') and self.cache_dir:
                 # Create cache directory if it doesn't exist
@@ -6514,28 +6790,20 @@ controller xbox t		= """
                 if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
                     # Filter the game data to only include XInput controls
                     cache_game_data = self.filter_xinput_controls(game_data)
-                    
-                    # Save the filtered data to cache
                     cache_path = os.path.join(self.cache_dir, f"{romname}_cache.json")
                     with open(cache_path, 'w', encoding='utf-8') as f:
                         json.dump(cache_game_data, f, indent=2)
-                        
                     # Also update in-memory cache
                     if hasattr(self, 'rom_data_cache'):
                         self.rom_data_cache[romname] = cache_game_data
-                        
-                    print(f"Updated cache for {romname} with XInput-only controls")
                 else:
                     # Standard caching for non-XInput-only mode
                     cache_path = os.path.join(self.cache_dir, f"{romname}_cache.json")
                     with open(cache_path, 'w', encoding='utf-8') as f:
                         json.dump(game_data, f, indent=2)
-                        
                     # Also update in-memory cache
                     if hasattr(self, 'rom_data_cache'):
                         self.rom_data_cache[romname] = game_data
-                        
-                    print(f"Updated cache for {romname} with full control set")
         except Exception as e:
             print(f"Warning: Could not update cache: {e}")
         
@@ -6835,44 +7103,8 @@ controller xbox t		= """
         
     def update_game_list(self):
         """Update the game list to show all available ROMs with improved performance"""
-        self.game_list.delete("1.0", "end")
-        
-        # Sort available ROMs
-        available_roms = sorted(self.available_roms)
-        
-        # Pre-fetch custom config status for all ROMs (faster than checking one by one)
-        has_config = {rom: rom in self.custom_configs for rom in available_roms}
-        
-        # Batch process with fewer database hits
-        for romname in available_roms:
-            # Check first if ROM data is in cache to avoid database lookups
-            if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
-                game_data = self.rom_data_cache[romname]
-                has_data = True
-            else:
-                # Minimal check for existence - don't load full data yet
-                has_data = self.rom_exists_in_db(romname) if hasattr(self, 'db_path') else False
-                game_data = None
-            
-            # Build the prefix
-            prefix = "* " if has_config.get(romname, False) else "  "
-            
-            if has_data:
-                prefix += "+ "
-                # Only fetch the full data if not in cache and needed for display
-                if not game_data:
-                    game_data = self.get_game_data(romname)
-                
-                if game_data:
-                    display_name = f"{romname} - {game_data['gamename']}"
-                else:
-                    display_name = romname
-            else:
-                prefix += "- "
-                display_name = romname
-            
-            # Insert the line
-            self.game_list.insert("end", f"{prefix}{display_name}\n")
+        # For compatibility, now just calls the category-based update
+        self.update_game_list_by_category()
 
     def rom_exists_in_db(self, romname):
         """Quick check if ROM exists in database without loading full data"""
@@ -6890,18 +7122,109 @@ controller xbox t		= """
             return False
     
     def filter_games(self, *args):
-        """Filter the game list based on search text with improved multi-word handling"""
-        # Only update if game_list exists
-        if hasattr(self, 'game_list') and self.game_list is not None:
-            search_text = self.search_var.get().lower()
+        """Filter the game list based on search text with debouncing and direct filtering for Listbox"""
+        # If we had a scheduled update, cancel it
+        if hasattr(self, '_filter_timer') and self._filter_timer:
+            self.after_cancel(self._filter_timer)
+            self._filter_timer = None
+
+        # Schedule a new update after short delay (300ms)
+        self._filter_timer = self.after(200, self._perform_filtering)
+    
+    def _perform_filtering(self):
+        """Actually perform the filtering after debounce delay for Listbox"""
+        try:
+            # Get search text
+            search_text = self.search_var.get().lower().strip()
             
-            # First check if we have a multi-word search
-            if search_text and ' ' in search_text:
-                # Multi-word search should check the full name, not just individual words
-                print(f"Multi-word search: '{search_text}'")
+            # Skip rebuild if search text is empty
+            if not search_text:
+                # Just do a normal category update
+                self.update_game_list_by_category()
+                return
             
-            # Update the display - this will handle filtering with the current search text
-            self.update_game_list_by_category()
+            # Get the current category list without filtering
+            category_roms = self._get_category_roms()
+            
+            # Apply filter directly to this list
+            filtered_roms = self._filter_rom_list(category_roms, search_text)
+            
+            # Update the listbox with filtered roms (reusing code from update_game_list_by_category)
+            self.game_list_data = []
+            list_display_items = []
+            
+            # Check if we have any ROMs to display
+            if not filtered_roms:
+                self.game_listbox.delete(0, tk.END)
+                self.game_listbox.insert(tk.END, "No matching ROMs found.")
+                
+                # Update the title
+                title = f"{self.current_view.capitalize()} (filtered: 0)"
+                self.update_list_title(title)
+                return
+            
+            # Build display items for each ROM
+            for rom in filtered_roms:
+                # Determine display format
+                has_config = rom in self.custom_configs
+                has_data = self.get_game_data(rom) is not None
+                is_clone = rom in self.parent_lookup if hasattr(self, 'parent_lookup') else False
+                
+                # Build the prefix
+                prefix = "* " if has_config else "  "
+                prefix += "+ " if has_data else "- "
+                
+                # Create display text
+                if is_clone and (self.current_view == "clones" or self.current_view == "all"):
+                    parent_rom = self.parent_lookup.get(rom, "")
+                    
+                    # Get game name if available (use name cache if available)
+                    if has_data:
+                        if hasattr(self, 'name_cache') and rom in self.name_cache:
+                            game_name = self.name_cache[rom].capitalize()
+                            display_text = f"{prefix}{rom} - {game_name} [Clone of {parent_rom}]"
+                        else:
+                            game_data = self.get_game_data(rom)
+                            display_text = f"{prefix}{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
+                    else:
+                        display_text = f"{prefix}{rom} [Clone of {parent_rom}]"
+                else:
+                    # Regular display for non-clones or when not in clone view
+                    if has_data:
+                        if hasattr(self, 'name_cache') and rom in self.name_cache:
+                            game_name = self.name_cache[rom].capitalize()
+                            display_text = f"{prefix}{rom} - {game_name}"
+                        else:
+                            game_data = self.get_game_data(rom)
+                            display_text = f"{prefix}{rom} - {game_data['gamename']}"
+                    else:
+                        display_text = f"{prefix}{rom}"
+                
+                # Store both the ROM name and display text
+                self.game_list_data.append((rom, display_text))
+                list_display_items.append(display_text)
+            
+            # Update the listbox
+            self.game_listbox.delete(0, tk.END)
+            for item in list_display_items:
+                self.game_listbox.insert(tk.END, item)
+            
+            # Update the title
+            view_titles = {
+                "all": "All ROMs",
+                "with_controls": "ROMs with Controls",
+                "missing": "ROMs Missing Controls",
+                "custom_config": "ROMs with Custom Config",
+                "generic": "ROMs with Generic Controls",
+                "clones": "Clone ROMs"
+            }
+            title = f"{view_titles.get(self.current_view, 'ROMs')} (filtered: {len(filtered_roms)})"
+            self.update_list_title(title)
+            
+        except Exception as e:
+            print(f"Error in search filtering: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Update scan_roms_directory method 
     def scan_roms_directory(self):
