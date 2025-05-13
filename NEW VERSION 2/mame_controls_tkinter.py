@@ -1468,7 +1468,7 @@ class MAMEControlConfig(ctk.CTk):
         # Prevent the top bar from resizing
         self.top_bar.pack_propagate(False)
         
-        # Add collapse button - NEW CODE
+        # Add collapse button
         collapse_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
         collapse_frame.pack(side="left", padx=(10, 0), pady=10)
         
@@ -1505,27 +1505,23 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.search_entry.pack(side="left", padx=0)
         
-        # Add XInput toggle on the right
+        # Add buttons on the right side
         toggle_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
         toggle_frame.pack(side="right", padx=20, pady=10)
         
-        # XInput toggle switch
-        self.xinput_toggle = ctk.CTkSwitch(
-            toggle_frame,
-            text="Use XInput Mappings",
-            command=self.toggle_xinput,
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"]
-        )
-        # Set default state based on current use_xinput value
-        if hasattr(self, 'use_xinput') and self.use_xinput:
-            self.xinput_toggle.select()
-        else:
-            self.xinput_toggle.deselect()
+        # CHANGED ORDER: The packing order is reversed to get correct right-to-left appearance
         
-        self.xinput_toggle.pack(side="right", padx=5)
-
-        # Add "XInput Only Mode" toggle
+        self.preview_button = ctk.CTkButton(
+            toggle_frame,
+            text="Preview Controls",
+            command=self.show_preview,
+            fg_color=self.theme_colors["success"],  # Changed from primary to success (green)
+            hover_color="#218838",  # Darker green for hover
+            height=32
+        )
+        self.preview_button.pack(side="right", padx=10)
+        
+        # 2. XInput Only Mode toggle (will appear to the left of Preview Controls)
         self.xinput_only_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="XInput Only Mode",
@@ -1541,18 +1537,7 @@ class MAMEControlConfig(ctk.CTk):
         
         self.xinput_only_toggle.pack(side="right", padx=10)
         
-        # Add "Preview Controls" button
-        self.preview_button = ctk.CTkButton(
-            toggle_frame,
-            text="Preview Controls",
-            command=self.show_preview,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"],
-            height=32
-        )
-        self.preview_button.pack(side="right", padx=10)
-        
-        # Hide buttons toggle next to preview button
+        # 3. Hide buttons toggle (will appear to the left of XInput only toggle)
         self.hide_buttons_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="Hide Preview Buttons",
@@ -1565,7 +1550,7 @@ class MAMEControlConfig(ctk.CTk):
             self.hide_buttons_toggle.select()
         else:
             self.hide_buttons_toggle.deselect()
-            
+        
         self.hide_buttons_toggle.pack(side="right", padx=10)
 
     def toggle_xinput_only_mode(self):
@@ -1905,18 +1890,6 @@ class MAMEControlConfig(ctk.CTk):
             justify="left"
         )
         self.game_title.pack(side="left", fill="x", expand=True)
-        
-        # Add edit button for controls
-        self.edit_button = ctk.CTkButton(
-            title_frame,
-            text="Edit Controls",
-            command=self.edit_current_game_controls,
-            width=120,
-            height=30,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"]
-        )
-        self.edit_button.pack(side="right", padx=5)
         
         # Create scrollable frame for controls with enhanced styling
         self.control_frame_container = ctk.CTkFrame(self.right_panel, fg_color="transparent")
@@ -6433,13 +6406,49 @@ controller xbox t		= """
         # Configure grid for full width expansion
         controls_card.columnconfigure(0, weight=1)
         
-        # Card title
+        # Add XInput toggle above the Controller Mappings title
+        xinput_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
+        xinput_frame.pack(fill="x", padx=15, pady=(15, 0))
+        
+        # XInput toggle switch
+        self.xinput_toggle = ctk.CTkSwitch(
+            xinput_frame,
+            text="Use XInput Mappings",
+            command=self.toggle_xinput,
+            button_color=self.theme_colors["primary"],
+            button_hover_color=self.theme_colors["secondary"]
+        )
+        # Set default state based on current use_xinput value
+        if hasattr(self, 'use_xinput') and self.use_xinput:
+            self.xinput_toggle.select()
+        else:
+            self.xinput_toggle.deselect()
+        
+        self.xinput_toggle.pack(anchor="w")
+        
+        # Create a frame for title and edit button
+        title_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
+        title_frame.pack(fill="x", padx=15, pady=(10, 10))
+        
+        # Title on the left
         ctk.CTkLabel(
-            controls_card,
+            title_frame,
             text="Controller Mappings",
             font=("Arial", 16, "bold"),
             anchor="w"
-        ).pack(anchor="w", padx=15, pady=(15, 10), fill="x")
+        ).pack(side="left", anchor="w")
+        
+        # Edit button on the right
+        edit_button = ctk.CTkButton(
+            title_frame,
+            text="Edit Controls",
+            command=self.edit_current_game_controls,
+            width=120,
+            height=30,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"]
+        )
+        edit_button.pack(side="right", padx=5)
         
         # Create a frame for the table
         table_container = ctk.CTkFrame(controls_card, fg_color="transparent")
