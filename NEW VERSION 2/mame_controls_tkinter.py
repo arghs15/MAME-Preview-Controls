@@ -1740,7 +1740,7 @@ class MAMEControlConfig(ctk.CTk):
         self.update_idletasks()
 
     def create_game_list_panel(self, width=None):
-        """Create the game list panel with a virtual list for better performance"""
+        """Create the game list panel with a virtual list for better performance and improved stability"""
         # Set default width if not provided
         if width is None:
             width = self.MIN_LEFT_PANEL_WIDTH
@@ -1799,9 +1799,11 @@ class MAMEControlConfig(ctk.CTk):
             selectforeground="white",
             relief="flat",
             highlightthickness=0,
-            borderwidth=0
+            borderwidth=0,
+            exportselection=False  # IMPORTANT: Prevent external selection interference
         )
-        self.game_listbox.pack(side="left", fill="both", expand=True)
+        # Add additional left padding to prevent text from being cut off
+        self.game_listbox.pack(side="left", fill="both", expand=True, padx=(5, 0))  # Add left padding
         
         # Create a custom CTkScrollbar instead of ttk.Scrollbar
         # Creating a bit of margin around the scrollbar with a frame
@@ -1830,8 +1832,14 @@ class MAMEControlConfig(ctk.CTk):
         self.game_listbox.configure(yscrollcommand=on_listbox_scroll)
         game_scrollbar.configure(command=self.game_listbox.yview)
         
-        # Bind events
-        self.game_listbox.bind("<<ListboxSelect>>", self.on_game_select_from_listbox)
+        # Bind events with debouncing to prevent selection issues
+        # Replace direct event binding with debounced version
+        def on_selection_change(event):
+            if hasattr(self, '_selection_timer') and self._selection_timer:
+                self.after_cancel(self._selection_timer)
+            self._selection_timer = self.after(50, lambda: self.on_game_select_from_listbox(event))
+
+        self.game_listbox.bind("<<ListboxSelect>>", on_selection_change)
         self.game_listbox.bind("<Button-3>", self.show_game_context_menu_listbox)  # Right-click menu
         self.game_listbox.bind("<Double-Button-1>", self.on_game_double_click)     # Double-click to preview
         
@@ -2063,7 +2071,10 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection with virtual list"""
+        """Update game list based on current sidebar category selection with virtual list and preserved selection"""
+        # Remember currently selected ROM if any
+        previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
+        
         # Get all ROMs
         available_roms = sorted(self.available_roms)
         
@@ -2158,7 +2169,9 @@ class MAMEControlConfig(ctk.CTk):
         
         # Check if we have any ROMs to display
         if not display_roms:
-            self.game_list_var.set(["No matching ROMs found."])
+            # Clear the listbox and set a message
+            self.game_listbox.delete(0, tk.END)
+            self.game_listbox.insert(tk.END, "No matching ROMs found.")
             return
         
         # Build display items for each ROM
@@ -2195,10 +2208,24 @@ class MAMEControlConfig(ctk.CTk):
             list_display_items.append(display_text)
         
         # Update the listbox
-        self.game_list_var.set(list_display_items)
         self.game_listbox.delete(0, tk.END)
         for item in list_display_items:
             self.game_listbox.insert(tk.END, item)
+        
+        # Try to select the previously selected ROM if it's still in the list
+        if previously_selected_rom:
+            for i, (rom_name, _) in enumerate(self.game_list_data):
+                if rom_name == previously_selected_rom:
+                    # We found the previously selected ROM, select it again
+                    self.game_listbox.selection_clear(0, tk.END)
+                    self.game_listbox.selection_set(i)
+                    self.game_listbox.see(i)  # Ensure it's visible
+                    self.current_game = rom_name
+                    self.selected_line = i + 1
+                    
+                    # Force a refresh of the display after a short delay
+                    self.after(50, lambda: self.display_game_info(rom_name))
+                    break
         
         # Update the title based on current view
         view_titles = {
@@ -2228,27 +2255,41 @@ class MAMEControlConfig(ctk.CTk):
                             return
     
     def on_game_select_from_listbox(self, event):
-        """Handle game selection from listbox"""
+        """Handle game selection from listbox with improved stability"""
         try:
-            # Get selected index
+            # Check if selection is active
+            if not self.game_listbox.winfo_exists():
+                return
+                
+            # Get selected index - carefully handle empty selection
             selected_indices = self.game_listbox.curselection()
             if not selected_indices:
                 return
-                
+                    
             index = selected_indices[0]
             
-            # Get ROM name from our data list
+            # Ensure index is valid for our data list
             if index < len(self.game_list_data):
                 rom_name, display_text = self.game_list_data[index]
                 
+                # Check if this is actually a change in selection
+                if self.current_game == rom_name:
+                    return  # Skip processing if no change
+                    
                 # Store the selected ROM
                 self.current_game = rom_name
                 
                 # Store selected line (for compatibility)
                 self.selected_line = index + 1  # 1-indexed for compatibility
                 
-                # Update the display
-                self.display_game_info(rom_name)
+                # Update the display with a slight delay to prevent UI conflicts
+                self.after(10, lambda: self.display_game_info(rom_name))
+                
+                # Explicitly maintain selection (prevents flickering)
+                self.after(20, lambda idx=index: self.game_listbox.selection_set(idx))
+                
+                # Ensure listbox still has focus
+                self.after(30, lambda: self.game_listbox.focus_set())
             
         except Exception as e:
             print(f"Error selecting game from listbox: {e}")
@@ -6253,8 +6294,9 @@ controller xbox t		= """
         # Debug - print total controls before display
         total_controls = 0
         for player in game_data.get('players', []):
-            total_controls += len(player.get('labels', []))
-        print(f"Total controls for {romname}: {total_controls}")
+            if player.get('number') == 1:  # Only count Player 1 controls
+                total_controls += len(player.get('labels', []))
+        print(f"Total P1 controls for {romname}: {total_controls}")
         
         # Clear existing controls first
         for widget in self.control_frame.winfo_children():
@@ -6433,7 +6475,7 @@ controller xbox t		= """
         # Title on the left
         ctk.CTkLabel(
             title_frame,
-            text="Controller Mappings",
+            text="Player 1 Controller Mappings",  # Updated to specify Player 1
             font=("Arial", 16, "bold"),
             anchor="w"
         ).pack(side="left", anchor="w")
@@ -6486,56 +6528,57 @@ controller xbox t		= """
             )
             header_label.place(relx=rel_x, rely=0, relwidth=rel_width, relheight=1, x=10)  # x=10 adds left padding
         
-        # Collect all controls from all players
+        # Collect only Player 1 controls
         all_controls = []
         for player in game_data.get('players', []):
-            for label in player.get('labels', []):
-                # Add control to our list
-                control_name = label['name']
-                action = label['value']
-                
-                # Determine mapping information
-                is_custom = control_name in cfg_controls
-                is_default = not is_custom and hasattr(self, 'default_controls') and control_name in self.default_controls
-                
-                if is_custom:
-                    mapping_source = f"ROM CFG ({romname}.cfg)"
-                    mapping_value = cfg_controls[control_name]
-                elif is_default:
-                    mapping_source = "Default CFG"
-                    default_mapping = self.default_controls[control_name]
-                    if self.use_xinput:
-                        mapping_value = self.convert_mapping(default_mapping, True)
+            if player.get('number') == 1:  # Only include Player 1
+                for label in player.get('labels', []):
+                    # Add control to our list
+                    control_name = label['name']
+                    action = label['value']
+                    
+                    # Determine mapping information
+                    is_custom = control_name in cfg_controls
+                    is_default = not is_custom and hasattr(self, 'default_controls') and control_name in self.default_controls
+                    
+                    if is_custom:
+                        mapping_source = f"ROM CFG ({romname}.cfg)"
+                        mapping_value = cfg_controls[control_name]
+                    elif is_default:
+                        mapping_source = "Default CFG"
+                        default_mapping = self.default_controls[control_name]
+                        if self.use_xinput:
+                            mapping_value = self.convert_mapping(default_mapping, True)
+                        else:
+                            mapping_value = default_mapping
                     else:
-                        mapping_value = default_mapping
-                else:
-                    mapping_source = "Game Data"
-                    mapping_value = ""
-                
-                # Add to the list
-                control_data = {
-                    'name': control_name,
-                    'action': action,
-                    'mapping': mapping_value,
-                    'is_custom': is_custom,
-                    'is_default': is_default,
-                    'source': mapping_source
-                }
-                
-                # Extract display name from the label for display
-                if 'target_button' in label:
-                    control_data['display_name'] = f"P{player['number']} {label['target_button']}"
-                elif 'display_name' in label:
-                    control_data['display_name'] = label['display_name']
-                else:
-                    control_data['display_name'] = self.format_control_name(control_name)
-                
-                all_controls.append(control_data)
+                        mapping_source = "Game Data"
+                        mapping_value = ""
+                    
+                    # Add to the list
+                    control_data = {
+                        'name': control_name,
+                        'action': action,
+                        'mapping': mapping_value,
+                        'is_custom': is_custom,
+                        'is_default': is_default,
+                        'source': mapping_source
+                    }
+                    
+                    # Extract display name from the label for display
+                    if 'target_button' in label:
+                        control_data['display_name'] = f"P1 {label['target_button']}"
+                    elif 'display_name' in label:
+                        control_data['display_name'] = label['display_name']
+                    else:
+                        control_data['display_name'] = self.format_control_name(control_name)
+                    
+                    all_controls.append(control_data)
         
         # Sort controls to keep a consistent order (BUTTON1, BUTTON2, etc.)
         all_controls.sort(key=lambda c: c['name'])
         
-        print(f"Displaying {len(all_controls)} controls for {romname}")
+        print(f"Displaying {len(all_controls)} Player 1 controls for {romname}")
         
         # Create scrollable frame for rows for better handling of many controls
         rows_scroll_frame = ctk.CTkScrollableFrame(
@@ -6558,7 +6601,7 @@ controller xbox t		= """
             
             ctk.CTkLabel(
                 empty_frame,
-                text="No controller mappings found for this ROM",
+                text="No controller mappings found for Player 1",
                 font=("Arial", 13),
                 text_color=self.theme_colors["text_dimmed"]
             ).pack(fill="both", expand=True, pady=20)
