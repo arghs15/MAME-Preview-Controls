@@ -1867,7 +1867,7 @@ class MAMEControlConfig(ctk.CTk):
             self.show_preview()
 
     def create_control_display_panel(self):
-        """Create the control display panel with fixed proportions"""
+        """Create the control display panel with fixed proportions and consistent alignment"""
         # Control display container with fixed proportions
         self.right_panel = ctk.CTkFrame(
             self.split_container, 
@@ -1885,11 +1885,11 @@ class MAMEControlConfig(ctk.CTk):
         self.right_panel.rowconfigure(0, weight=0)  # Header
         self.right_panel.rowconfigure(1, weight=1)  # Control content
         
-        # Create header with game title
+        # Create header with game title - FIXED PADDING TO MATCH CONTENT BELOW
         title_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent", height=40)
         title_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 0))
         
-        # Game title label
+        # Game title label - FIXED ALIGNMENT AND PADDING 
         self.game_title = ctk.CTkLabel(
             title_frame, 
             text="Select a game",
@@ -1897,7 +1897,7 @@ class MAMEControlConfig(ctk.CTk):
             anchor="w",
             justify="left"
         )
-        self.game_title.pack(side="left", fill="x", expand=True)
+        self.game_title.pack(side="left", fill="x", expand=True, padx=0)  # Explicit padx=0 to ensure no extra padding
         
         # Create scrollable frame for controls with enhanced styling
         self.control_frame_container = ctk.CTkFrame(self.right_panel, fg_color="transparent")
@@ -6285,24 +6285,17 @@ controller xbox t		= """
                 self.game_list.see(f"{line_index}.0")
 
     def display_controls_table(self, start_row, game_data, cfg_controls):
-        """Display controls with a structured table layout that prevents column shifting"""
+        """Display controls using a canvas-based approach for significantly better performance"""
         row = start_row
         
         # Get romname from game_data
         romname = game_data.get('romname', '')
         
-        # Debug - print total controls before display
-        total_controls = 0
-        for player in game_data.get('players', []):
-            if player.get('number') == 1:  # Only count Player 1 controls
-                total_controls += len(player.get('labels', []))
-        print(f"Total P1 controls for {romname}: {total_controls}")
-        
         # Clear existing controls first
         for widget in self.control_frame.winfo_children():
             widget.destroy()
         
-        # Game info card - now with proper full width
+        # Game info card - for the header section
         info_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         info_card.pack(fill="x", padx=10, pady=10, expand=True)
         
@@ -6441,7 +6434,7 @@ controller xbox t		= """
         
         row += 1
         
-        # Controls table section - ensure full width
+        # Controls card - container for the canvas approach
         controls_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         controls_card.pack(fill="x", padx=10, pady=10, expand=True)
         
@@ -6492,41 +6485,36 @@ controller xbox t		= """
         )
         edit_button.pack(side="right", padx=5)
         
-        # Create a frame for the table
-        table_container = ctk.CTkFrame(controls_card, fg_color="transparent")
-        table_container.pack(fill="x", padx=15, pady=5, expand=True)
+        # Container for the canvas and scrollbar
+        canvas_container = ctk.CTkFrame(controls_card, fg_color="transparent")
+        canvas_container.pack(fill="both", expand=True, padx=15, pady=5)
         
-        # Configure table columns - we'll use percentages of the total width
-        col_widths = [0.4, 0.35, 0.25]  # Control name: 40%, Game Action: 35%, Mapping Source: 25%
+        # Create the header
+        header_frame = ctk.CTkFrame(canvas_container, fg_color=self.theme_colors["primary"], height=36)
+        header_frame.pack(fill="x", pady=(0, 5))
+        header_frame.pack_propagate(False)  # Fix the height
         
-        # Create the table headers with a single continuous blue background
-        header_container = ctk.CTkFrame(table_container, fg_color=self.theme_colors["primary"], height=36)
-        header_container.pack(fill="x", pady=(0, 10))
-        header_container.pack_propagate(False)  # Fix the height
-
-        # Create individual header cells directly in the blue background
+        # Header column widths (in pixels)
+        col_widths = [300, 250, 200]  # Hardcoded for better performance
+        
+        # Create header labels
         header_titles = ["Control", "Game Action", "Mapping Source"]
-
-        # Add the titles directly to the blue background
+        
         for i, title in enumerate(header_titles):
-            # Create a container for each header at the right position
-            col_pos = sum(col_widths[:i])  # Position is sum of previous widths
-            col_width = col_widths[i]  # Width for this column
+            # Position offset for each column
+            x_pos = 15  # Start with padding
+            for j in range(i):
+                x_pos += col_widths[j] + 15  # Add previous columns + padding
             
-            # Position in relative coordinates
-            rel_x = col_pos
-            rel_width = col_width
-            
-            # Create a label directly in the header container
             header_label = ctk.CTkLabel(
-                header_container,
+                header_frame,
                 text=title,
                 font=("Arial", 13, "bold"),
                 text_color="#ffffff",
                 anchor="w",
                 justify="left"
             )
-            header_label.place(relx=rel_x, rely=0, relwidth=rel_width, relheight=1, x=10)  # x=10 adds left padding
+            header_label.place(x=x_pos, y=5)
         
         # Collect only Player 1 controls
         all_controls = []
@@ -6580,88 +6568,110 @@ controller xbox t		= """
         
         print(f"Displaying {len(all_controls)} Player 1 controls for {romname}")
         
-        # Create scrollable frame for rows for better handling of many controls
-        rows_scroll_frame = ctk.CTkScrollableFrame(
-            table_container, 
-            fg_color="transparent",
-            height=300,  # Limit initial height
-            scrollbar_button_color=self.theme_colors["primary"],
-            scrollbar_button_hover_color=self.theme_colors["secondary"]
-        )
-        rows_scroll_frame.pack(fill="x", expand=True)
+        # Create a canvas for the controls list with NATIVE Tkinter canvas (not CTk)
+        # This is MUCH faster than using CTk widgets for the list items
+        canvas_height = min(400, len(all_controls) * 40 + 10)  # Limit initial height, with 40px per row
         
-        # Row alternating colors
-        row_alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
+        # We're using a tk.Canvas (not CTk) for maximum performance
+        # This avoids the double-rendering overhead of CTk
+        canvas = tk.Canvas(
+            canvas_container,
+            height=canvas_height,
+            background=self.theme_colors["card_bg"],  # Use card_bg for light gray like left frame
+            highlightthickness=0,
+            bd=0
+        )
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Create scrollbar for the canvas - use CTkScrollbar for consistent styling
+        scrollbar = ctk.CTkScrollbar(
+            canvas_container, 
+            orientation="vertical",
+            command=canvas.yview,
+            button_color=self.theme_colors["primary"],         # Primary color for scrollbar thumb
+            button_hover_color=self.theme_colors["secondary"], # Secondary color for hover
+            fg_color=self.theme_colors["card_bg"],             # Match the frame background color
+            corner_radius=10,                                  # Rounded corners
+            width=14                                           # Make it slightly narrower for more pronounced curves
+        )
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Configure the canvas scrolling
+        def on_canvas_yscroll(*args):
+            canvas.yview_moveto(args[0])
+            
+        scrollbar.configure(command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Create a frame inside the canvas to hold the controls
+        controls_frame = tk.Frame(canvas, background=self.theme_colors["card_bg"])  # Match the canvas background
+        canvas_window = canvas.create_window((0, 0), window=controls_frame, anchor=tk.NW)
+        
+        # Row alternating colors - remove this line as we're not using alternating colors anymore
         
         # If there are no controls to display
         if not all_controls:
-            empty_frame = ctk.CTkFrame(rows_scroll_frame, fg_color="transparent", height=60)
-            empty_frame.pack(fill="x", pady=10)
-            empty_frame.pack_propagate(False)
+            empty_frame = tk.Frame(controls_frame, background=self.theme_colors["card_bg"], height=60)
+            empty_frame.pack(fill=tk.X, pady=10)
             
-            ctk.CTkLabel(
+            # No matching controls message with consistent font
+            tk.Label(
                 empty_frame,
                 text="No controller mappings found for Player 1",
-                font=("Arial", 13),
-                text_color=self.theme_colors["text_dimmed"]
-            ).pack(fill="both", expand=True, pady=20)
+                font=("Arial", 13),  # Match CTk font style
+                foreground=self.theme_colors["text_dimmed"],
+                background=self.theme_colors["card_bg"]  # Match the frame background
+            ).pack(fill=tk.BOTH, expand=True, pady=20)
         else:
-            # OPTIMIZATION: Reuse cell frames
-            cell_frames = {}
+            # CRITICAL OPTIMIZATION: Create rows directly with tk widgets, not CTk
+            # This eliminates the double-rendering overhead of CTk
+            max_rows = 100  # Show up to 100 controls without a "Load more" button
+            visible_rows = min(max_rows, len(all_controls))
             
-            # OPTIMIZATION: Only create the first N rows initially
-            max_initial_rows = min(20, len(all_controls))  # Limit initial rows
+            # Use a single consistent background color matching card_bg
+            bg_color = self.theme_colors["card_bg"]
             
-            # Display all controls in a well-structured table
-            for i in range(max_initial_rows):
+            for i in range(visible_rows):
                 control = all_controls[i]
                 
-                # Create a container for this row with alternating color
-                row_container = ctk.CTkFrame(
-                    rows_scroll_frame, 
-                    fg_color=row_alt_colors[i % 2],
-                    corner_radius=4,
-                    height=40
+                # Create row container with consistent background
+                row_height = 40
+                row_frame = tk.Frame(
+                    controls_frame,
+                    background=bg_color,
+                    height=row_height
                 )
-                row_container.pack(fill="x", pady=2)
-                row_container.pack_propagate(False)  # Keep the fixed height
-                
-                # Create fixed width containers for each column
-                # This is the key to preventing text from one column affecting others
-                col1 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[0]))
-                col1.place(x=0, y=0, relwidth=col_widths[0], relheight=1)
-                col1.pack_propagate(False)  # Keep fixed width
-                
-                col2 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[1]))
-                col2.place(relx=col_widths[0], y=0, relwidth=col_widths[1], relheight=1)
-                col2.pack_propagate(False)  # Keep fixed width
-                
-                col3 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[2]))
-                col3.place(relx=col_widths[0]+col_widths[1], y=0, relwidth=col_widths[2], relheight=1)
-                col3.pack_propagate(False)  # Keep fixed width
+                row_frame.pack(fill=tk.X, pady=1, expand=True)
+                row_frame.pack_propagate(False)  # Keep fixed height
                 
                 # Display name for the control
                 display_name = control.get('display_name', self.format_control_name(control['name']))
                 action = control['action']
                 source = control['source']
                 
-                # Create labels for each column
-                ctk.CTkLabel(
-                    col1,
+                # Direct column placement with pixel positioning - MUCH faster than grid/pack
+                # Use native tk.Label (not CTk) but with consistent fonts matching CTk styling
+                label1 = tk.Label(
+                    row_frame,
                     text=display_name,
-                    font=("Arial", 12),
+                    font=("Arial", 13),  # Match CTk font style
                     anchor="w",
-                    justify="left"
-                ).pack(side="left", padx=10, pady=10, fill="x")
+                    justify="left",
+                    background=bg_color,
+                    foreground=self.theme_colors["text"]
+                )
+                label1.place(x=15, y=10, width=col_widths[0])
                 
-                ctk.CTkLabel(
-                    col2,
+                label2 = tk.Label(
+                    row_frame,
                     text=action,
-                    font=("Arial", 12, "bold"),
-                    text_color=self.theme_colors["primary"],
+                    font=("Arial", 13, "bold"),  # Match CTk font style with bold
                     anchor="w",
-                    justify="left"
-                ).pack(side="left", padx=10, pady=10, fill="x")
+                    justify="left",
+                    background=bg_color,
+                    foreground=self.theme_colors["primary"]  # Use primary color for action
+                )
+                label2.place(x=15 + col_widths[0], y=10, width=col_widths[1])
                 
                 # Source color based on type
                 if "ROM CFG" in source:
@@ -6670,107 +6680,38 @@ controller xbox t		= """
                     source_color = self.theme_colors["primary"]
                 else:
                     source_color = "#888888"  # Game Data
-                    
-                ctk.CTkLabel(
-                    col3,
+                
+                label3 = tk.Label(
+                    row_frame,
                     text=source,
-                    font=("Arial", 11),
-                    text_color=source_color,
+                    font=("Arial", 13),  # Match CTk font style
                     anchor="w",
-                    justify="left"
-                ).pack(side="left", padx=10, pady=10, fill="x")
-            
-            # OPTIMIZATION: If there are more rows, add a "Load more" button or implement lazy loading
-            if len(all_controls) > max_initial_rows:
-                load_more_frame = ctk.CTkFrame(rows_scroll_frame, fg_color="transparent")
-                load_more_frame.pack(fill="x", pady=5)
-                
-                remaining = len(all_controls) - max_initial_rows
-                
-                def load_more_rows():
-                    # Remove the load more button
-                    load_more_frame.pack_forget()
-                    load_more_frame.destroy()
-                    
-                    # Load the rest of the controls
-                    for j in range(max_initial_rows, len(all_controls)):
-                        control = all_controls[j]
-                        
-                        # Create a container for this row with alternating color
-                        row_container = ctk.CTkFrame(
-                            rows_scroll_frame, 
-                            fg_color=row_alt_colors[j % 2],
-                            corner_radius=4,
-                            height=40
-                        )
-                        row_container.pack(fill="x", pady=2)
-                        row_container.pack_propagate(False)  # Keep the fixed height
-                        
-                        # Create fixed width containers for each column
-                        col1 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[0]))
-                        col1.place(x=0, y=0, relwidth=col_widths[0], relheight=1)
-                        col1.pack_propagate(False)
-                        
-                        col2 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[1]))
-                        col2.place(relx=col_widths[0], y=0, relwidth=col_widths[1], relheight=1)
-                        col2.pack_propagate(False)
-                        
-                        col3 = ctk.CTkFrame(row_container, fg_color="transparent", width=int(row_container.winfo_width() * col_widths[2]))
-                        col3.place(relx=col_widths[0]+col_widths[1], y=0, relwidth=col_widths[2], relheight=1)
-                        col3.pack_propagate(False)
-                        
-                        # Display name for the control
-                        display_name = control.get('display_name', self.format_control_name(control['name']))
-                        action = control['action']
-                        source = control['source']
-                        
-                        # Create labels for each column
-                        ctk.CTkLabel(
-                            col1,
-                            text=display_name,
-                            font=("Arial", 12),
-                            anchor="w",
-                            justify="left"
-                        ).pack(side="left", padx=10, pady=10, fill="x")
-                        
-                        ctk.CTkLabel(
-                            col2,
-                            text=action,
-                            font=("Arial", 12, "bold"),
-                            text_color=self.theme_colors["primary"],
-                            anchor="w",
-                            justify="left"
-                        ).pack(side="left", padx=10, pady=10, fill="x")
-                        
-                        # Source color based on type
-                        if "ROM CFG" in source:
-                            source_color = self.theme_colors["success"]
-                        elif "Default CFG" in source:
-                            source_color = self.theme_colors["primary"]
-                        else:
-                            source_color = "#888888"  # Game Data
-                            
-                        ctk.CTkLabel(
-                            col3,
-                            text=source,
-                            font=("Arial", 11),
-                            text_color=source_color,
-                            anchor="w",
-                            justify="left"
-                        ).pack(side="left", padx=10, pady=10, fill="x")
-                
-                # Add load more button
-                load_more_button = ctk.CTkButton(
-                    load_more_frame,
-                    text=f"Load {remaining} more items",
-                    command=load_more_rows,
-                    fg_color=self.theme_colors["primary"],
-                    hover_color=self.theme_colors["button_hover"],
-                    height=30
+                    justify="left",
+                    background=bg_color,
+                    foreground=source_color
                 )
-                load_more_button.pack(pady=5)
+                label3.place(x=15 + col_widths[0] + col_widths[1], y=10, width=col_widths[2])
         
-        row += 1
+        # Update the canvas scroll region
+        def update_canvas_width(event=None):
+            # Set the proper width for controls_frame to match canvas width
+            canvas_width = canvas.winfo_width()
+            canvas.itemconfig(canvas_window, width=canvas_width)
+            
+            # Make sure all row frames fill the width
+            for child in controls_frame.winfo_children():
+                if isinstance(child, tk.Frame):
+                    child.configure(width=canvas_width)
+        
+        # Bind resize event
+        canvas.bind("<Configure>", update_canvas_width)
+            
+        controls_frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        # Initial call to set correct widths
+        canvas.update_idletasks()
+        update_canvas_width()
         
         # Display raw custom config if it exists
         if romname in self.custom_configs:
@@ -6781,11 +6722,11 @@ controller xbox t		= """
             config_card.columnconfigure(0, weight=1)
             
             # Card title with indicator
-            title_frame = ctk.CTkFrame(config_card, fg_color="transparent")
-            title_frame.pack(fill="x", padx=15, pady=(15, 10))
+            cfg_title_frame = ctk.CTkFrame(config_card, fg_color="transparent")
+            cfg_title_frame.pack(fill="x", padx=15, pady=(15, 10))
             
             ctk.CTkLabel(
-                title_frame,
+                cfg_title_frame,
                 text="Custom Configuration File",
                 font=("Arial", 16, "bold"),
                 anchor="w"
@@ -6793,7 +6734,7 @@ controller xbox t		= """
             
             # Add an indicator for the file
             ctk.CTkLabel(
-                title_frame,
+                cfg_title_frame,
                 text=f"({romname}.cfg)",
                 font=("Arial", 12),
                 text_color=self.theme_colors["text_dimmed"],
