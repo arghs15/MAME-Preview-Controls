@@ -1343,7 +1343,7 @@ class MAMEControlConfig(ctk.CTk):
                 
             # Update view based on tab
             self.current_view = tab_name
-            if hasattr(self, 'game_list'):  # Only update if game_list exists
+            if hasattr(self, 'game_listbox'):  # Only update if game_list exists
                 self.update_game_list_by_category()
         
         # Add "All ROMs" tab
@@ -2071,6 +2071,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
+       
         """Update game list based on current sidebar category selection with virtual list and preserved selection"""
         # Remember currently selected ROM if any
         previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
