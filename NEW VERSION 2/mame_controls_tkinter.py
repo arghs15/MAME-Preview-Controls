@@ -28,6 +28,7 @@ THEME_COLORS = {
         "sidebar_bg": "#252525",      # Sidebar background
         "text": "#ffffff",            # Main text color
         "text_dimmed": "#a0a0a0",     # Secondary text color
+        "text_grey": "#d6d6d6",
         "highlight": "#3a7ebf",       # Highlight color
         "success": "#28a745",         # Success color
         "warning": "#ffc107",         # Warning color  
@@ -432,7 +433,7 @@ class MAMEControlConfig(ctk.CTk):
             self.scan_roms_directory()
             
             # Update the game list with minimal data
-            if hasattr(self, 'game_list'):
+            if hasattr(self, 'game_listbox'):  # CHANGED: Check for game_listbox instead
                 self.update_game_list_by_category()
                 
             # Update status message
@@ -1567,7 +1568,7 @@ class MAMEControlConfig(ctk.CTk):
             self.clear_xinput_mode_cache()
             
             # Refresh the current game display if one is selected
-            if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None and hasattr(self, 'game_list'):
+            if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None:
                 # Store the current scroll position if possible
                 scroll_pos = None
                 if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
@@ -1580,26 +1581,38 @@ class MAMEControlConfig(ctk.CTk):
                         
                 # Update the game info
                 try:
-                    # Create a mock event with coordinates for the selected line
-                    class MockEvent:
-                        def __init__(self_mock, line_num):
-                            # Default position
-                            self_mock.x = 10
-                            self_mock.y = 10
-                            
-                            # Try to get better position if possible
-                            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
-                                # Calculate position to hit the middle of the line
-                                bbox = self.game_list._textbox.bbox(f"{line_num}.0")
-                                if bbox:
-                                    self_mock.x = bbox[0] + 5  # A bit to the right of line start
-                                    self_mock.y = bbox[1] + 5  # A bit below line top
-                    
-                    # Create the mock event targeting our current line
-                    mock_event = MockEvent(self.selected_line)
-                    
-                    # Force a full refresh of the display
-                    self.on_game_select(mock_event)
+                    if hasattr(self, 'game_listbox'):
+                        # For listbox implementation, simply refresh using current_game
+                        self.display_game_info(self.current_game)
+                        
+                        # Make sure the correct item is still selected in listbox
+                        for i, (rom_name, _) in enumerate(self.game_list_data):
+                            if rom_name == self.current_game:
+                                self.game_listbox.selection_clear(0, tk.END)
+                                self.game_listbox.selection_set(i)
+                                self.game_listbox.see(i)
+                                break
+                    else:
+                        # Fall back to old approach with mock event
+                        class MockEvent:
+                            def __init__(self_mock, line_num):
+                                # Default position
+                                self_mock.x = 10
+                                self_mock.y = 10
+                                
+                                # Try to get better position if possible
+                                if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
+                                    # Calculate position to hit the middle of the line
+                                    bbox = self.game_list._textbox.bbox(f"{line_num}.0")
+                                    if bbox:
+                                        self_mock.x = bbox[0] + 5  # A bit to the right of line start
+                                        self_mock.y = bbox[1] + 5  # A bit below line top
+                        
+                        # Create the mock event targeting our current line
+                        mock_event = MockEvent(self.selected_line)
+                        
+                        # Force a full refresh of the display
+                        self.on_game_select(mock_event)
                     
                     # Restore scroll position if we saved it
                     if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
@@ -1740,7 +1753,7 @@ class MAMEControlConfig(ctk.CTk):
         self.update_idletasks()
 
     def create_game_list_panel(self, width=None):
-        """Create the game list panel with a virtual list for better performance and improved stability"""
+        """Create the game list panel with a virtual list for better performance with improved styling"""
         # Set default width if not provided
         if width is None:
             width = self.MIN_LEFT_PANEL_WIDTH
@@ -1772,6 +1785,7 @@ class MAMEControlConfig(ctk.CTk):
             list_header, 
             text="Available ROMs",
             font=("Arial", 14, "bold"),
+            text_color=self.theme_colors["text"],  # Match the text color
             anchor="w"
         )
         self.list_title_label.pack(side="left", padx=5)
@@ -1780,7 +1794,7 @@ class MAMEControlConfig(ctk.CTk):
         self.game_list_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         self.game_list_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         
-        # Use a tkinter Listbox with custom styling inside a Frame
+        # Use a tkinter Listbox with enhanced custom styling inside a Frame
         # Create a frame with the card_bg color
         list_container = tk.Frame(
             self.game_list_frame, 
@@ -1788,37 +1802,37 @@ class MAMEControlConfig(ctk.CTk):
         )
         list_container.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Create a Listbox with custom styling
+        # Create a Listbox with improved styling
         self.game_listbox = tk.Listbox(
             list_container,
-            background=self.theme_colors["card_bg"],  # Grey background like before
-            foreground=self.theme_colors["text"],
-            font=("Arial", 13),
-            activestyle="none",
-            selectbackground=self.theme_colors["primary"],  # Blue selection color
-            selectforeground="white",
-            relief="flat",
-            highlightthickness=0,
-            borderwidth=0,
-            exportselection=False  # IMPORTANT: Prevent external selection interference
+            background=self.theme_colors["card_bg"],     # Grey background
+            #foreground=self.theme_colors["text_grey"],                        # Softer grey text instead of bright white
+            foreground="white",                        # White text
+            font=("Arial", 12),                          # Smaller font (13 instead of 14, no bold)
+            activestyle="none",                     
+            selectbackground=self.theme_colors["primary"],  
+            selectforeground="white",               
+            relief="flat",                          
+            highlightthickness=0,                   
+            borderwidth=0,                          
+            exportselection=False                   
         )
-        # Add additional left padding to prevent text from being cut off
-        self.game_listbox.pack(side="left", fill="both", expand=True, padx=(5, 0))  # Add left padding
+        # Add left padding to prevent text from being cut off
+        self.game_listbox.pack(side="left", fill="both", expand=True, padx=(10, 0))
         
-        # Create a custom CTkScrollbar instead of ttk.Scrollbar
-        # Creating a bit of margin around the scrollbar with a frame
+        # Create a custom CTkScrollbar that matches the theme
         scrollbar_frame = ctk.CTkFrame(list_container, fg_color="transparent", width=22)
         scrollbar_frame.pack(side="right", fill="y", padx=(2, 4))
         
-        # Custom CTk scrollbar that matches your theme with curved edges
+        # Custom CTk scrollbar with improved styling
         game_scrollbar = ctk.CTkScrollbar(
             scrollbar_frame,
             orientation="vertical",
             button_color=self.theme_colors["primary"],         # Primary color for scrollbar thumb
             button_hover_color=self.theme_colors["secondary"], # Secondary color for hover
             fg_color=self.theme_colors["card_bg"],            # Background color matching panel
-            corner_radius=10,                                 # Enhanced rounded corners (was 5)
-            width=14                                          # Make it slightly narrower for more pronounced curves
+            corner_radius=10,                                 # Enhanced rounded corners
+            width=14                                          # Make it slightly narrower
         )
         game_scrollbar.pack(fill="y", expand=True)
         
@@ -1849,13 +1863,52 @@ class MAMEControlConfig(ctk.CTk):
         
         # Store the list data
         self.game_list_data = []  # Will hold (rom_name, display_text) tuples
-        
-        # Create a StringVar to hold list items for better performance
-        self.game_list_var = tk.StringVar()
-        self.game_list_var.set([])  # Empty list initially
 
+    def on_game_select_from_listbox(self, event):
+        """Handle game selection from listbox with improved stability"""
+        try:
+            # Check if selection is active
+            if not self.game_listbox.winfo_exists():
+                return
+                
+            # Get selected index - carefully handle empty selection
+            selected_indices = self.game_listbox.curselection()
+            if not selected_indices:
+                return
+                    
+            index = selected_indices[0]
+            
+            # Ensure index is valid for our data list
+            if index < len(self.game_list_data):
+                rom_name, display_text = self.game_list_data[index]
+                
+                # Check if this is actually a change in selection
+                if self.current_game == rom_name:
+                    return  # Skip processing if no change
+                    
+                # Store the selected ROM
+                self.current_game = rom_name
+                
+                # Store selected line (for compatibility)
+                self.selected_line = index + 1  # 1-indexed for compatibility
+                
+                # Update the display with a slight delay to prevent UI conflicts
+                self.after(10, lambda: self.display_game_info(rom_name))
+                
+                # Explicitly maintain selection (prevents flickering)
+                self.after(20, lambda idx=index: self.game_listbox.selection_set(idx))
+                
+                # Ensure listbox still has focus
+                self.after(30, lambda: self.game_listbox.focus_set())
+            
+        except Exception as e:
+            print(f"Error selecting game from listbox: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def on_game_double_click(self, event):
         """Handle double-click on game list item to preview controls"""
+        # Get the current selection
         selected_indices = self.game_listbox.curselection()
         if not selected_indices:
             return
@@ -2255,48 +2308,6 @@ class MAMEControlConfig(ctk.CTk):
                             child.configure(text=title_text)
                             return
     
-    def on_game_select_from_listbox(self, event):
-        """Handle game selection from listbox with improved stability"""
-        try:
-            # Check if selection is active
-            if not self.game_listbox.winfo_exists():
-                return
-                
-            # Get selected index - carefully handle empty selection
-            selected_indices = self.game_listbox.curselection()
-            if not selected_indices:
-                return
-                    
-            index = selected_indices[0]
-            
-            # Ensure index is valid for our data list
-            if index < len(self.game_list_data):
-                rom_name, display_text = self.game_list_data[index]
-                
-                # Check if this is actually a change in selection
-                if self.current_game == rom_name:
-                    return  # Skip processing if no change
-                    
-                # Store the selected ROM
-                self.current_game = rom_name
-                
-                # Store selected line (for compatibility)
-                self.selected_line = index + 1  # 1-indexed for compatibility
-                
-                # Update the display with a slight delay to prevent UI conflicts
-                self.after(10, lambda: self.display_game_info(rom_name))
-                
-                # Explicitly maintain selection (prevents flickering)
-                self.after(20, lambda idx=index: self.game_listbox.selection_set(idx))
-                
-                # Ensure listbox still has focus
-                self.after(30, lambda: self.game_listbox.focus_set())
-            
-        except Exception as e:
-            print(f"Error selecting game from listbox: {e}")
-            import traceback
-            traceback.print_exc()
-    
     def display_game_info(self, rom_name):
         """Display game information and controls"""
         try:
@@ -2399,12 +2410,11 @@ class MAMEControlConfig(ctk.CTk):
     def show_game_context_menu_listbox(self, event):
         """Show context menu on right-click for ROM entries in listbox"""
         try:
-            # Get the index at the event position
-            index = self.game_listbox.nearest(event.y)
+            # Get the index at the event position (CTkListbox may have a different method for this)
+            # You might need to adjust this based on CTkListbox's API
+            index = self.game_listbox.curselection()
             
             # Select the clicked item
-            self.game_listbox.selection_clear(0, tk.END)
-            self.game_listbox.selection_set(index)
             self.game_listbox.activate(index)
             
             # Get ROM name from our data list
@@ -2659,10 +2669,15 @@ class MAMEControlConfig(ctk.CTk):
     def on_game_select(self, event):
         """Compatibility method for handling game selection from the text widget"""
         if hasattr(self, 'game_listbox'):
-            # For listbox, we use on_game_select_from_listbox instead
-            # But we can directly call display_game_info for the current_game if it exists
-            if hasattr(self, 'current_game') and self.current_game:
-                self.display_game_info(self.current_game)
+            # For listbox, use the selected item if any
+            selected_indices = self.game_listbox.curselection()
+            if selected_indices:
+                index = selected_indices[0]
+                if index < len(self.game_list_data):
+                    rom_name, _ = self.game_list_data[index]
+                    self.current_game = rom_name
+                    self.selected_line = index + 1  # 1-indexed for compatibility
+                    self.display_game_info(rom_name)
         else:
             # Original implementation for text widget
             try:
