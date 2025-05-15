@@ -74,7 +74,6 @@ def get_mame_parent_dir(app_path=None):
         # We're already in the MAME directory
         return app_path
 
-
 def main():
     """Main entry point for the application with improved path handling and early cache check"""
     print("Starting MAME Controls application...")
@@ -254,7 +253,7 @@ def main():
                             import sqlite3
                             import types
                             
-                            # Define the database access method (code unchanged)
+                            # Define the database access method
                             def get_game_data_from_db(self, romname):
                                 # Existing database access code...
                                 """Get control data for a ROM from the SQLite database"""
@@ -659,8 +658,8 @@ def main():
                 ctk.set_appearance_mode("dark")
                 ctk.set_default_color_theme("dark-blue")
                 
-                # Create the Tkinter application
-                app = MAMEControlConfig()
+                # Create the Tkinter application with hidden window initially
+                app = MAMEControlConfig(initially_hidden=True)
                 
                 # Auto maximize
                 app.after(100, app.state, 'zoomed')
@@ -690,7 +689,7 @@ def main():
                 app.quit()
             except:
                 pass
-
+            
 def set_dark_theme(app):
     """Apply a dark theme to the PyQt application"""
     from PyQt5.QtGui import QPalette, QColor

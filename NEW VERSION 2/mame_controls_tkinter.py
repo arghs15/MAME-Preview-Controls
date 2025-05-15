@@ -331,7 +331,7 @@ class PositionManager:
 
 
 class MAMEControlConfig(ctk.CTk):
-    def __init__(self, preview_only=False):
+    def __init__(self, preview_only=False, initially_hidden=False):
         debug_print("Starting MAMEControlConfig initialization")
         debug_path_info()
 
@@ -342,6 +342,13 @@ class MAMEControlConfig(ctk.CTk):
         try:
             super().__init__()
             debug_print("Super initialization complete")
+
+            # If initially hidden, withdraw the window
+            if initially_hidden:
+                self.withdraw()
+                self._initially_hidden = True
+            else:
+                self._initially_hidden = False
 
             # Set theme colors and appearance
             self.theme_colors = THEME_COLORS["dark"]
@@ -402,28 +409,126 @@ class MAMEControlConfig(ctk.CTk):
             self.create_layout()
             debug_print("Layout created")
             
-            # Load essential data immediately
+            # Load data synchronously
             self.load_settings()
-            
-            # Load other data asynchronously 
-            self.after(100, self.load_essential_data)
-            
-            # Defer non-essential data loading
-            self.after(500, self.load_secondary_data)
-
-            # Add this near the end of __init__:
-            self.preview_processes = []  # Track any preview processes we launch
+            self.load_essential_data()
+            self.load_secondary_data()
             
             # Set the WM_DELETE_WINDOW protocol
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
-            # Add this line right here, before the final debug print:
-            self.after(200, self.after_init_setup)  # Slightly increased delay
 
             debug_print("Initialization complete")
         except Exception as e:
             debug_print(f"CRITICAL ERROR in initialization: {e}")
             traceback.print_exc()
             messagebox.showerror("Initialization Error", f"Failed to initialize: {e}")
+    
+    def create_splash_window(self):
+        """Create a simple splash window to show while loading"""
+        # Define colors directly for the splash window
+        bg_color = "#1e1e1e"  # Dark background
+        primary_color = "#1f538d"  # Blue accent
+
+        splash = ctk.CTkToplevel()
+        splash.title("Loading")
+        splash.geometry("400x200")
+        splash.resizable(False, False)
+        
+        # Set splash window position to center of screen
+        screen_width = splash.winfo_screenwidth()
+        screen_height = splash.winfo_screenheight()
+        x = (screen_width - 400) // 2
+        y = (screen_height - 200) // 2
+        splash.geometry(f"400x200+{x}+{y}")
+        
+        # Use direct color values instead of theme_colors
+        splash.configure(fg_color=bg_color)
+        
+        # Add a header
+        header = ctk.CTkLabel(
+            splash, 
+            text="MAME Controls Configuration",
+            font=("Arial", 20, "bold"),
+            text_color=primary_color
+        )
+        header.pack(pady=(30, 10))
+        
+        # Add loading message
+        message = ctk.CTkLabel(
+            splash, 
+            text="Loading application...",
+            font=("Arial", 14)
+        )
+        message.pack(pady=10)
+        
+        # Add loading progress bar
+        progress = ctk.CTkProgressBar(
+            splash,
+            width=300,
+            height=15,
+            corner_radius=5,
+            mode="indeterminate",
+            determinate_speed=1,
+            indeterminate_speed=1,
+            progress_color=primary_color
+        )
+        progress.pack(pady=20)
+        progress.start()
+        
+        # Ensure splash is on top
+        splash.attributes('-topmost', True)
+        splash.update()
+        
+        return splash
+
+    def show_application(self):
+        """Show the application window when everything is loaded"""
+        try:
+            if hasattr(self, '_initially_hidden') and self._initially_hidden:
+                debug_print("Preparing to show application window...")
+                
+                # Final layout adjustments before showing
+                self._apply_initial_panel_sizes()
+                if hasattr(self, 'after_init_setup'):
+                    self.after_init_setup()
+                    
+                # Force full UI update
+                self.update_idletasks()
+                
+                # Close splash window if it exists
+                if hasattr(self, 'splash_window') and self.splash_window:
+                    try:
+                        self.splash_window.destroy()
+                    except:
+                        pass
+                    self.splash_window = None
+                
+                # Show the main window
+                debug_print("Showing application window")
+                self.deiconify()
+                
+                # Auto maximize after showing
+                self.state('zoomed')
+                
+                # Force another update to ensure complete rendering
+                self.update_idletasks()
+                
+                # Mark window as shown
+                self._initially_hidden = False
+                
+            else:
+                debug_print("Window already visible, no action needed")
+                
+        except Exception as e:
+            debug_print(f"Error showing application: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Show window anyway in case of error to avoid being stuck
+            try:
+                self.deiconify()
+            except:
+                pass
     
     def load_essential_data(self):
         """Load only the essential data needed for initial display"""
