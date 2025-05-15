@@ -9,8 +9,7 @@ import os
 import signal
 import sys
 import argparse
-import traceback  # Add this import
-import time
+import traceback
 
 # Add this function somewhere in your mame_controls_main.py file
 def cleanup_on_exit():
@@ -106,10 +105,10 @@ def main():
         parser.add_argument('--screen', type=int, default=1, help='Screen number to display preview on (default: 1)')
         parser.add_argument('--auto-close', action='store_true', help='Automatically close preview when MAME exits')
         parser.add_argument('--no-buttons', action='store_true', help='Hide buttons in preview mode (overrides settings)')
-        parser.add_argument('--pyqt', action='store_true', help='Use the PyQt version of the main GUI (default: Tkinter)')
         parser.add_argument('--use-db', action='store_true', help='Force using SQLite database if available')
         # Add new precache argument
         parser.add_argument('--precache', action='store_true', help='Precache game data without showing the preview')
+        # Removed --pyqt argument as it's no longer needed
         args = parser.parse_args()
         print("Arguments parsed.")
         
@@ -125,6 +124,7 @@ def main():
         print(f"Script directory: {script_dir}")
         
         # Check for preview-only mode with a ROM specified - add early cache check
+        use_cache = False
         if args.game and args.preview_only:
             print(f"Mode: Preview-only for ROM: {args.game}")
             
@@ -237,7 +237,7 @@ def main():
                     print("Command line option forcing buttons to be hidden")
                 
                 # Set database usage flag, but only if we're not using cache
-                if 'use_cache' in locals() and use_cache:
+                if use_cache:
                     # When using cache, we don't need database
                     config.use_database = False
                     if hasattr(config, 'db_path'):
@@ -394,7 +394,6 @@ def main():
                     preview_dir = os.path.join(self.mame_dir, "preview")
                     cache_dir = os.path.join(preview_dir, "cache")
                     cache_file = os.path.join(cache_dir, f"{romname}_cache.json")
-                    
                     if os.path.exists(cache_file):
                         try:
                             import json
@@ -507,7 +506,7 @@ def main():
         if args.game and args.export_image:
             print(f"Mode: Export image for ROM: {args.game}")
             
-            if not args.output:
+            if not hasattr(args, 'output') or not args.output:
                 print("ERROR: --output parameter is required for export mode")
                 return 1
                 
@@ -599,78 +598,37 @@ def main():
                 traceback.print_exc()
                 return 1
         
-        # For the main application, check which UI to use - now defaulting to Tkinter
-        if args.pyqt:  # Changed condition to check for --pyqt flag
-            # Initialize PyQt application
+        # Initialize the Tkinter interface (this is now the only GUI mode)
+        try:
+            # Import the Tkinter version
+            import customtkinter as ctk
+            
+            # Import module with proper path handling
             try:
-                from PyQt5.QtWidgets import QApplication
-                
-                # Import module with proper path handling
-                try:
-                    # Try direct import first
-                    from mame_controls_pyqt import MAMEControlConfig
-                except ImportError:
-                    # If direct import fails, try using the module from the script directory
-                    sys.path.insert(0, script_dir)
-                    from mame_controls_pyqt import MAMEControlConfig
-                
-                # Create QApplication
-                app = QApplication(sys.argv)
-                app.setApplicationName("MAME Control Configuration (PyQt)")
-                app.setApplicationVersion("1.0")
-
-                # Apply dark theme
-                set_dark_theme(app)
-
-                # Create main window
-                window = MAMEControlConfig()
-
-                # First make window visible
-                window.show()
-
-                # Then maximize it - using multiple methods for redundancy
-                from PyQt5.QtCore import QTimer, Qt
-                window.setWindowState(Qt.WindowMaximized)
-                QTimer.singleShot(100, window.showMaximized)
-
-                # Run application
-                return app.exec_()
+                # Try direct import first
+                from mame_controls_tkinter import MAMEControlConfig
             except ImportError:
-                print("PyQt5 not found, falling back to Tkinter version.")
-                args.pyqt = False  # Fall back to Tkinter if PyQt fails
-        
-        # If not using PyQt (either by default or PyQt failure)
-        if not args.pyqt:
-            try:
-                # Import the Tkinter version
-                import customtkinter as ctk
-                
-                # Import module with proper path handling
-                try:
-                    # Try direct import first
-                    from mame_controls_tkinter import MAMEControlConfig
-                except ImportError:
-                    # If direct import fails, try using the module from the script directory
-                    sys.path.insert(0, script_dir)
-                    from mame_controls_tkinter import MAMEControlConfig
-                
-                # Set appearance mode and theme
-                ctk.set_appearance_mode("dark")
-                ctk.set_default_color_theme("dark-blue")
-                
-                # Create the Tkinter application with hidden window initially
-                app = MAMEControlConfig(initially_hidden=True)
-                
-                # Auto maximize
-                app.after(100, app.state, 'zoomed')
-                
-                # Run the application
-                app.mainloop()
-                return 0
-            except ImportError:
-                print("CustomTkinter or required modules not found. Please install with:")
-                print("pip install customtkinter")
-                return 1
+                # If direct import fails, try using the module from the script directory
+                sys.path.insert(0, script_dir)
+                from mame_controls_tkinter import MAMEControlConfig
+            
+            # Set appearance mode and theme
+            ctk.set_appearance_mode("dark")
+            ctk.set_default_color_theme("dark-blue")
+            
+            # Create the Tkinter application with hidden window initially
+            app = MAMEControlConfig(initially_hidden=True)
+            
+            # Auto maximize
+            app.after(100, app.state, 'zoomed')
+            
+            # Run the application
+            app.mainloop()
+            return 0
+        except ImportError:
+            print("CustomTkinter or required modules not found. Please install with:")
+            print("pip install customtkinter")
+            return 1
         
         return 0  # Return successful exit code
         

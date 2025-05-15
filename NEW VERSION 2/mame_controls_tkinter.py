@@ -340,16 +340,16 @@ class MAMEControlConfig(ctk.CTk):
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
         
         try:
+            # Initialize with super().__init__ but don't show the window yet
             super().__init__()
             debug_print("Super initialization complete")
 
-            # If initially hidden, withdraw the window
-            if initially_hidden:
-                self.withdraw()
-                self._initially_hidden = True
-            else:
-                self._initially_hidden = False
-
+            # Always withdraw the main window until loading is complete
+            self.withdraw()
+            
+            # Create a separate splash window
+            self.splash_window = self.create_splash_window()
+            
             # Set theme colors and appearance
             self.theme_colors = THEME_COLORS["dark"]
             self.configure(fg_color=self.theme_colors["background"])
@@ -373,7 +373,7 @@ class MAMEControlConfig(ctk.CTk):
             self.logo_width_percentage = 15
             self.logo_height_percentage = 15
 
-            # NEW CODE: Replace individual directory setup with the centralized method
+            # Initialize directory structure
             self.initialize_directory_structure()
             
             # Add ROM data cache to improve performance
@@ -394,25 +394,21 @@ class MAMEControlConfig(ctk.CTk):
             self.selected_line = None
             self.highlight_tag = "highlight"
             
-            # Set initial fullscreen state
-            self.after(100, self.state, 'zoomed')  # Use zoomed for Windows
-            debug_print("Fullscreen state set")
-            
             if not self.mame_dir:
                 debug_print("ERROR: MAME directory not found!")
+                if hasattr(self, 'splash_window') and self.splash_window:
+                    self.splash_window.destroy()
                 messagebox.showerror("Error", "MAME directory not found!")
                 self.quit()
                 return
 
-            # Create the interface
+            # Create the layout (still hidden)
             debug_print("Creating layout...")
             self.create_layout()
             debug_print("Layout created")
             
-            # Load data synchronously
-            self.load_settings()
-            self.load_essential_data()
-            self.load_secondary_data()
+            # Start loading process with slight delay to ensure splash is shown
+            self.after(100, self._start_loading_process)
             
             # Set the WM_DELETE_WINDOW protocol
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -421,103 +417,173 @@ class MAMEControlConfig(ctk.CTk):
         except Exception as e:
             debug_print(f"CRITICAL ERROR in initialization: {e}")
             traceback.print_exc()
+            if hasattr(self, 'splash_window') and self.splash_window:
+                self.splash_window.destroy()
             messagebox.showerror("Initialization Error", f"Failed to initialize: {e}")
     
-    def create_splash_window(self):
-        """Create a simple splash window to show while loading"""
-        # Define colors directly for the splash window
-        bg_color = "#1e1e1e"  # Dark background
-        primary_color = "#1f538d"  # Blue accent
-
-        splash = ctk.CTkToplevel()
-        splash.title("Loading")
-        splash.geometry("400x200")
-        splash.resizable(False, False)
+    def create_loading_overlay(self):
+        """Create a loading overlay that covers the entire window"""
+        debug_print("Creating loading overlay")
         
-        # Set splash window position to center of screen
-        screen_width = splash.winfo_screenwidth()
-        screen_height = splash.winfo_screenheight()
-        x = (screen_width - 400) // 2
-        y = (screen_height - 200) // 2
-        splash.geometry(f"400x200+{x}+{y}")
+        # Create the overlay frame
+        self.loading_overlay = ctk.CTkFrame(self, fg_color=self.theme_colors["background"])
+        self.loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         
-        # Use direct color values instead of theme_colors
-        splash.configure(fg_color=bg_color)
+        # Create a more visually appealing loading indicator
+        loading_container = ctk.CTkFrame(
+            self.loading_overlay,
+            fg_color=self.theme_colors["card_bg"],
+            width=400,
+            height=200,
+            corner_radius=10
+        )
+        loading_container.place(relx=0.5, rely=0.45, anchor="center")
         
-        # Add a header
-        header = ctk.CTkLabel(
-            splash, 
+        # Program title
+        ctk.CTkLabel(
+            loading_container,
             text="MAME Controls Configuration",
             font=("Arial", 20, "bold"),
-            text_color=primary_color
-        )
-        header.pack(pady=(30, 10))
+            text_color=self.theme_colors["primary"]
+        ).pack(pady=(30, 10))
         
-        # Add loading message
-        message = ctk.CTkLabel(
-            splash, 
+        # Loading message
+        self.loading_message = ctk.CTkLabel(
+            loading_container,
             text="Loading application...",
             font=("Arial", 14)
         )
-        message.pack(pady=10)
+        self.loading_message.pack(pady=10)
         
-        # Add loading progress bar
-        progress = ctk.CTkProgressBar(
-            splash,
+        # Progress bar
+        self.loading_progress = ctk.CTkProgressBar(
+            loading_container,
             width=300,
             height=15,
             corner_radius=5,
-            mode="indeterminate",
-            determinate_speed=1,
-            indeterminate_speed=1,
-            progress_color=primary_color
+            mode="indeterminate"
         )
-        progress.pack(pady=20)
-        progress.start()
+        self.loading_progress.pack(pady=20)
+        self.loading_progress.start()
         
-        # Ensure splash is on top
-        splash.attributes('-topmost', True)
-        splash.update()
+        # Force update to ensure overlay is rendered
+        self.update_idletasks()
+        debug_print("Loading overlay created")
+
+    def _start_loading_process(self):
+        """Begin the sequential loading process with separate splash window"""
+        debug_print("Starting loading process")
         
-        return splash
+        # Update splash message
+        self.update_splash_message("Loading settings...")
+        
+        # Load settings first (synchronous)
+        self.load_settings()
+        
+        # Schedule the next step
+        self.after(100, self._load_essential_data)
+
+    def _load_essential_data(self):
+        """Load essential data synchronously"""
+        try:
+            # Update message
+            self.update_splash_message("Scanning ROMs directory...")
+            
+            # Scan ROMs directory
+            self.scan_roms_directory()
+            
+            # Update message
+            self.update_splash_message("Updating game list...")
+            
+            # Update the game list
+            if hasattr(self, 'game_listbox'):
+                self.update_game_list_by_category()
+            
+            # Update stats
+            self.update_stats_label()
+            
+            # Select first ROM
+            self.select_first_rom()
+            
+            # Schedule secondary data loading
+            self.after(100, self._load_secondary_data)
+        except Exception as e:
+            debug_print(f"Error loading essential data: {e}")
+            traceback.print_exc()
+            self.update_splash_message(f"Error: {str(e)}")
+            
+            # Still try to continue
+            self.after(1000, self._load_secondary_data)
+
+    def _load_secondary_data(self):
+        """Start asynchronous loading of secondary data"""
+        self.update_splash_message("Loading additional data...")
+        
+        # Add tasks to async loader
+        self.async_loader.add_task(self.load_default_config)
+        self.async_loader.add_task(self.load_custom_configs)
+        
+        # Check if database needs to be built/updated
+        self.async_loader.add_task(self.check_and_build_db_if_needed)
+        
+        # Process results and check if loading is complete
+        self.after(100, self._check_loading_progress)
+
+    def _check_loading_progress(self):
+        """Check if async loading is complete"""
+        # Process any completed tasks
+        self.async_loader.process_results()
+        
+        # Check if all tasks are complete
+        if self.async_loader.task_queue.empty() and self.async_loader.result_queue.empty():
+            debug_print("All async tasks completed")
+            self.after(500, self._finish_loading)
+        else:
+            # Not done yet, check again soon
+            self.after(100, self._check_loading_progress)
+
+    def _finish_loading(self):
+        """Finish loading and show the main application"""
+        debug_print("Finishing loading process")
+        
+        # Update message for the final step
+        self.update_splash_message("Starting application...")
+        
+        # Apply any final configurations
+        self._apply_initial_panel_sizes()
+        if hasattr(self, 'after_init_setup'):
+            self.after_init_setup()
+        
+        # Schedule showing the main window
+        self.after(500, self.show_application)
 
     def show_application(self):
         """Show the application window when everything is loaded"""
         try:
-            if hasattr(self, '_initially_hidden') and self._initially_hidden:
-                debug_print("Preparing to show application window...")
-                
-                # Final layout adjustments before showing
-                self._apply_initial_panel_sizes()
-                if hasattr(self, 'after_init_setup'):
-                    self.after_init_setup()
-                    
-                # Force full UI update
-                self.update_idletasks()
-                
-                # Close splash window if it exists
-                if hasattr(self, 'splash_window') and self.splash_window:
-                    try:
-                        self.splash_window.destroy()
-                    except:
-                        pass
-                    self.splash_window = None
-                
-                # Show the main window
-                debug_print("Showing application window")
-                self.deiconify()
-                
-                # Auto maximize after showing
-                self.state('zoomed')
-                
-                # Force another update to ensure complete rendering
-                self.update_idletasks()
-                
-                # Mark window as shown
-                self._initially_hidden = False
-                
-            else:
-                debug_print("Window already visible, no action needed")
+            debug_print("Preparing to show application window...")
+            
+            # Close splash window
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+            
+            # Force full UI update
+            self.update_idletasks()
+            
+            # Show the main window
+            debug_print("Showing application window")
+            self.deiconify()
+            
+            # Auto maximize after showing
+            self.state('zoomed')
+            
+            # Force another update to ensure complete rendering
+            self.update_idletasks()
+            
+            debug_print("Application fully loaded and visible")
                 
         except Exception as e:
             debug_print(f"Error showing application: {e}")
@@ -529,6 +595,122 @@ class MAMEControlConfig(ctk.CTk):
                 self.deiconify()
             except:
                 pass
+
+    def _remove_loading_overlay(self):
+        """Remove the loading overlay to reveal the fully loaded application"""
+        debug_print("Removing loading overlay")
+        
+        if hasattr(self, 'loading_overlay') and self.loading_overlay.winfo_exists():
+            self.loading_overlay.destroy()
+        
+        self._loading = False
+        
+        # Force update to ensure the application is fully visible
+        self.update_idletasks()
+        
+        # Ensure window is maximized
+        self.state('zoomed')
+        
+        debug_print("Application fully loaded and visible")
+
+    def update_loading_message(self, message):
+        """Update the loading message text"""
+        if hasattr(self, 'loading_message') and self.loading_message.winfo_exists():
+            self.loading_message.configure(text=message)
+            self.update_idletasks()
+            debug_print(f"Loading message: {message}")
+    
+    def create_splash_window(self):
+        """Create a separate splash window that shows while loading"""
+        try:
+            # Create a toplevel window for splash
+            splash = tk.Toplevel()
+            splash.title("Loading")
+            splash.geometry("400x200")
+            splash.resizable(False, False)
+            
+            # Center the splash on screen
+            screen_width = splash.winfo_screenwidth()
+            screen_height = splash.winfo_screenheight()
+            x = (screen_width - 400) // 2
+            y = (screen_height - 200) // 2
+            splash.geometry(f"400x200+{x}+{y}")
+            
+            # Configure appearance
+            splash.configure(bg="#1e1e1e")  # Dark background
+            
+            # Frame with border
+            frame = tk.Frame(
+                splash, 
+                bg="#1e1e1e",  # Dark background
+                highlightbackground="#1f538d",  # Blue border
+                highlightthickness=2
+            )
+            frame.pack(fill="both", expand=True, padx=2, pady=2)
+            
+            # Add a title
+            title_label = tk.Label(
+                frame,
+                text="MAME Controls Configuration",
+                font=("Arial", 16, "bold"),
+                fg="white",
+                bg="#1e1e1e"
+            )
+            title_label.pack(pady=(20, 10))
+            
+            # Add loading message
+            self.splash_message = tk.StringVar(value="Starting...")
+            message_label = tk.Label(
+                frame,
+                textvariable=self.splash_message,
+                font=("Arial", 12),
+                fg="white",
+                bg="#1e1e1e"
+            )
+            message_label.pack(pady=(10, 20))
+            
+            # Add progress bar
+            style = ttk.Style()
+            style.theme_use('default')
+            style.configure(
+                "Blue.Horizontal.TProgressbar",
+                troughcolor="#2d2d2d",
+                background="#1f538d",  # Blue color
+                borderwidth=0
+            )
+            
+            self.splash_progress = ttk.Progressbar(
+                frame,
+                orient="horizontal",
+                length=300,
+                mode="indeterminate",
+                style="Blue.Horizontal.TProgressbar"
+            )
+            self.splash_progress.pack(pady=10)
+            self.splash_progress.start(15)  # Start animation
+            
+            # Ensure it stays on top
+            splash.attributes('-topmost', True)
+            splash.focus_force()
+            
+            # Disable closing with X button
+            splash.protocol("WM_DELETE_WINDOW", lambda: None)
+            
+            # Update to ensure it's rendered
+            splash.update()
+            
+            return splash
+            
+        except Exception as e:
+            debug_print(f"Error creating splash window: {e}")
+            return None
+
+    def update_splash_message(self, message):
+        """Update the splash window message"""
+        if hasattr(self, 'splash_message'):
+            self.splash_message.set(message)
+            if hasattr(self, 'splash_window') and self.splash_window:
+                self.splash_window.update_idletasks()
     
     def load_essential_data(self):
         """Load only the essential data needed for initial display"""
