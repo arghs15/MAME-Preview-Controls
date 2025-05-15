@@ -355,7 +355,7 @@ class MAMEControlConfig(ctk.CTk):
             self.configure(fg_color=self.theme_colors["background"])
             
             # Initialize core attributes needed for both modes
-            self.visible_control_types = ["BUTTON", "JOYSTICK"]
+            self.visible_control_types = ["BUTTON", "JOYSTICK", "DIAL", "PEDAL"]
             self.default_controls = {}
             self.gamedata_json = {}
             self.available_roms = set()
@@ -6821,9 +6821,20 @@ controller xbox t		= """
         
         # Collect only Player 1 controls
         all_controls = []
+
+        # Debug print to see what's in game_data
+        print(f"DEBUG: Game data for {romname}: {game_data.keys()}")
+        print(f"DEBUG: Players in game data: {len(game_data.get('players', []))}")
+
         for player in game_data.get('players', []):
+            player_num = player.get('number')
+            print(f"DEBUG: Processing player {player_num} with {len(player.get('labels', []))} controls")
+            
             if player.get('number') == 1:  # Only include Player 1
                 for label in player.get('labels', []):
+                    # Debug print to see each control being processed
+                    print(f"DEBUG: Found P1 control: {label.get('name', '?')}: {label.get('value', '?')}")
+                    
                     # Add control to our list
                     control_name = label['name']
                     action = label['value']
