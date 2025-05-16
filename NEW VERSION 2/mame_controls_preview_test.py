@@ -109,11 +109,15 @@ class PreviewWindow(QMainWindow):
                 for control in player.get('labels', []):
                     control_name = control['name']
                     
-                    # Count directional controls
-                    if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
+                    # Count directional controls - EXPANDED LIST
+                    if any(control_type in control_name for control_type in [
+                        "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                        "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                        "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+                    ]):
                         directional_count += 1
                     # Count button controls (excluding directional inputs)
-                    elif any(control_type in control_name for control_type in ["BUTTON", "START", "SELECT"]):
+                    elif any(control_type in control_name for control_type in ["BUTTON", "START", "SELECT", "GAMBLE"]):
                         button_count += 1
             
             # Determine if this is a directional-only game
@@ -3331,8 +3335,12 @@ class PreviewWindow(QMainWindow):
             if 'label' not in control_data or not control_data['label']:
                 continue
                 
-            # Check for all types of directional controls
-            if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
+            # Check for all types of directional controls - EXPANDED LIST
+            if any(control_type in control_name for control_type in [
+                "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+            ]):
                 # Default visibility based on joystick_visible
                 is_visible = self.texts_visible and self.joystick_visible
                 
@@ -6073,8 +6081,12 @@ class PreviewWindow(QMainWindow):
                 
                 # Determine visibility based on control type
                 is_visible = True
-                is_directional = any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"])
-                
+                is_directional = any(control_type in control_name for control_type in [
+                    "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                    "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                    "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+                ])
+
                 if is_directional:
                     # Use the pre-determined directional visibility
                     is_visible = self.texts_visible and self.should_show_directional
