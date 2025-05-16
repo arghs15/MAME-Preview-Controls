@@ -2157,12 +2157,12 @@ class MAMEControlConfig(ctk.CTk):
             # Check if selection is active
             if not self.game_listbox.winfo_exists():
                 return
-                
+                    
             # Get selected index - carefully handle empty selection
             selected_indices = self.game_listbox.curselection()
             if not selected_indices:
                 return
-                    
+                        
             index = selected_indices[0]
             
             # Ensure index is valid for our data list
@@ -2172,14 +2172,19 @@ class MAMEControlConfig(ctk.CTk):
                 # Check if this is actually a change in selection
                 if self.current_game == rom_name:
                     return  # Skip processing if no change
-                    
+                        
                 # Store the selected ROM
                 self.current_game = rom_name
                 
                 # Store selected line (for compatibility)
-                self.selected_line = index + 1  # 1-indexed for compatibility
+                self.selected_line = index + 1  # 1-indexed for backward compatibility
+                
+                # Clear cache entry to force refresh with current input mode
+                if hasattr(self, 'rom_data_cache') and rom_name in self.rom_data_cache:
+                    del self.rom_data_cache[rom_name]
                 
                 # Update the display with a slight delay to prevent UI conflicts
+                # Use the current input mode
                 self.after(10, lambda: self.display_game_info(rom_name))
                 
                 # Explicitly maintain selection (prevents flickering)
@@ -2660,18 +2665,20 @@ class MAMEControlConfig(ctk.CTk):
                 
                 return
 
+            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            print(f"Display game info using input mode: {current_mode}")
+
             # IMPORTANT: Get custom control configuration if it exists
             cfg_controls = {}
             if rom_name in self.custom_configs:
                 # Parse the custom config
                 cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
                 
-                # Convert if XInput is enabled
-                if self.use_xinput:
-                    cfg_controls = {
-                        control: self.convert_mapping(mapping, True)
-                        for control, mapping in cfg_controls.items()
-                    }
+                # Convert using current mode
+                cfg_controls = {
+                    control: self.convert_mapping(mapping, current_mode)
+                    for control, mapping in cfg_controls.items()
+                }
                 
                 # Update game_data with custom mappings
                 self.update_game_data_with_custom_mappings(game_data, cfg_controls)
@@ -6750,7 +6757,7 @@ controller xbox t		= """
                 self.game_list.see(f"{line_index}.0")
 
     def toggle_input_mode(self):
-        """Cycle between input modes: XInput → JOYCODE → Keyboard → XInput"""
+        """Cycle between input modes: XInput → JOYCODE → Keyboard → XInput with enforced refresh"""
         # Get current mode with explicit default
         current_mode = getattr(self, 'input_mode', 'xinput')
         print(f"Current input mode before toggle: {current_mode}")
@@ -6787,65 +6794,82 @@ controller xbox t		= """
             )
             print(f"Updated input mode button: {mode_text}")
         
-        # Save setting to config file
+        # Save setting to config file immediately
         self.save_settings()
         
-        # Completely clear the cache to ensure fresh data with new mapping type
+        # COMPLETE DISPLAY REFRESH
+        # First, clear the entire cache to ensure fresh data with new mapping type
         if hasattr(self, 'rom_data_cache'):
-            print(f"Clearing ROM data cache due to Input Mode change: {new_mode}")
             self.rom_data_cache = {}
+            print(f"Cleared entire ROM data cache due to Input Mode change: {new_mode}")
         
-        # Force reloading of current game data from scratch
-        current_game = self.current_game
-        if current_game:
-            # Force reload from source by clearing any cached data for this ROM
-            if hasattr(self, 'rom_data_cache') and current_game in self.rom_data_cache:
-                del self.rom_data_cache[current_game]
-                
+        # Get the currently selected item regardless of how it was selected
+        current_rom = self.current_game
+        if current_rom:
+            print(f"Forcing complete refresh for current ROM: {current_rom}")
+            
             # Clear existing controls
             if hasattr(self, 'control_frame'):
                 for widget in self.control_frame.winfo_children():
                     widget.destroy()
+            
+            # Force complete reload with explicit mode
+            # This bypasses caching mechanisms
+            try:
+                # Get fresh game data
+                game_data = None
                 
-            # Force reload with explicit conversion mode
-            print(f"Reloading game data for {current_game} with mode {new_mode}")
-            
-            # Get data directly, bypass cache
-            game_data = None
-            if hasattr(self, 'gamedata_json') and current_game in self.gamedata_json:
-                # Load fresh from source
-                print(f"Loading fresh game data for {current_game}")
-                if hasattr(self, 'get_game_data'):
-                    # Clear from cache first
-                    if hasattr(self, 'rom_data_cache') and current_game in self.rom_data_cache:
-                        del self.rom_data_cache[current_game]
-                    # Get fresh data
-                    game_data = self.get_game_data(current_game)
-            
-            # Force update display
-            if game_data:
-                # Update cfg_controls with the current mode
-                cfg_controls = {}
-                if current_game in self.custom_configs:
-                    # Parse the custom config
-                    cfg_controls = self.parse_cfg_controls(self.custom_configs[current_game])
+                # Use database if available
+                if os.path.exists(self.db_path):
+                    game_data = self.get_game_data_from_db(current_rom)
+                
+                # Fall back to JSON lookup
+                if not game_data and hasattr(self, 'gamedata_json') and self.gamedata_json:
+                    # Check direct match
+                    if current_rom in self.gamedata_json:
+                        game_data = self.get_game_data(current_rom)
+                    # Check clone
+                    elif hasattr(self, 'parent_lookup') and current_rom in self.parent_lookup:
+                        parent_rom = self.parent_lookup[current_rom]
+                        if parent_rom in self.gamedata_json:
+                            game_data = self.get_game_data(current_rom)
+                
+                if game_data:
+                    # Process with custom mappings
+                    cfg_controls = {}
+                    if current_rom in self.custom_configs:
+                        # Parse the custom config
+                        cfg_controls = self.parse_cfg_controls(self.custom_configs[current_rom])
+                        
+                        # Convert to current mode explicitly
+                        cfg_controls = {
+                            control: self.convert_mapping(mapping, new_mode)
+                            for control, mapping in cfg_controls.items()
+                        }
+                        
+                        # Update game_data with custom mappings
+                        self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                
+                # Force display update
+                self.display_game_info(current_rom)
+                
+                # Re-select in listbox
+                if hasattr(self, 'game_listbox') and hasattr(self, 'game_list_data'):
+                    for i, (rom_name, _) in enumerate(self.game_list_data):
+                        if rom_name == current_rom:
+                            self.game_listbox.selection_clear(0, tk.END)
+                            self.game_listbox.selection_set(i)
+                            self.game_listbox.see(i)
+                            break
                     
-                    # Convert to specified mode 
-                    for control_name, mapping in cfg_controls.items():
-                        cfg_controls[control_name] = self.convert_mapping(mapping, new_mode)
-                    
-                    # Update game_data with custom mappings
-                    self.update_game_data_with_custom_mappings(game_data, cfg_controls)
-            
-            # Completely refresh the display
-            self.display_game_info(current_game)
-        
-        # Make sure the toggle effect is saved
-        self.after(100, lambda: self.save_settings())
+            except Exception as e:
+                print(f"Error refreshing display after mode toggle: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Return the new mode for confirmation
         return new_mode
-    
+
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """Display controls using a canvas-based approach for significantly better performance"""
         row = start_row
@@ -7842,6 +7866,11 @@ controller xbox t		= """
                 self.game_list_data.append((rom, display_text))
                 list_display_items.append(display_text)
             
+            # Remember current selection if any
+            current_selection = None
+            if hasattr(self, 'current_game') and self.current_game:
+                current_selection = self.current_game
+            
             # Update the listbox
             self.game_listbox.delete(0, tk.END)
             for item in list_display_items:
@@ -7859,11 +7888,39 @@ controller xbox t		= """
             title = f"{view_titles.get(self.current_view, 'ROMs')} (filtered: {len(filtered_roms)})"
             self.update_list_title(title)
             
+            # Try to re-select previously selected ROM if it's in the filtered results
+            if current_selection:
+                found_index = None
+                for i, (rom_name, _) in enumerate(self.game_list_data):
+                    if rom_name == current_selection:
+                        found_index = i
+                        break
+                
+                if found_index is not None:
+                    # Clear any existing selection
+                    self.game_listbox.selection_clear(0, tk.END)
+                    
+                    # Select the item
+                    self.game_listbox.selection_set(found_index)
+                    self.game_listbox.see(found_index)
+                    self.game_listbox.activate(found_index)
+                    
+                    # Force refresh with current input mode
+                    rom_name = self.game_list_data[found_index][0]
+                    
+                    # Clear cache to force refresh with current input mode
+                    if hasattr(self, 'rom_data_cache') and rom_name in self.rom_data_cache:
+                        print(f"Clearing cache for {rom_name} to ensure refresh with current input mode")
+                        del self.rom_data_cache[rom_name]
+                    
+                    # Update the display with current input mode
+                    self.after(50, lambda: self.display_game_info(rom_name))
+                
         except Exception as e:
             print(f"Error in search filtering: {e}")
             import traceback
             traceback.print_exc()
-    
+
     # Update scan_roms_directory method 
     def scan_roms_directory(self):
         """Scan the roms directory for available games with improved path handling"""
