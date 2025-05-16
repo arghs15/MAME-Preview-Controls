@@ -1283,11 +1283,12 @@ class MAMEControlConfig(ctk.CTk):
         print(f"Loaded {len(self.custom_configs)} custom configurations")
     
     def parse_cfg_controls(self, cfg_content: str) -> Dict[str, str]:
-        """Parse MAME cfg file to extract control mappings with better error handling"""
+        """Parse MAME cfg file to extract control mappings with better handling of analog controls"""
         controls = {}
         try:
             import xml.etree.ElementTree as ET
             from io import StringIO
+            import re
             
             print(f"Parsing CFG content of length: {len(cfg_content)}")
             
@@ -1306,13 +1307,70 @@ class MAMEControlConfig(ctk.CTk):
                 # Process all port elements regardless of type
                 for port in all_ports:
                     control_type = port.get('type')
-                    if control_type:  # Any control type
-                        # Find the newseq element for the mapping
-                        newseq = port.find('.//newseq')
-                        if newseq is not None and newseq.text:
+                    if not control_type:
+                        continue
+                        
+                    # CRITICAL FIX: Special direct handling for AD_STICK controls
+                    if control_type in ["P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z"]:
+                        # These controls typically only have increment/decrement sequences
+                        increment_seq = port.find('./newseq[@type="increment"]')
+                        decrement_seq = port.find('./newseq[@type="decrement"]')
+                        
+                        inc_val = increment_seq.text.strip() if increment_seq is not None and increment_seq.text else "NONE"
+                        dec_val = decrement_seq.text.strip() if decrement_seq is not None and decrement_seq.text else "NONE"
+                        
+                        print(f"AD_STICK control {control_type}: inc={inc_val}, dec={dec_val}")
+                        
+                        # Create combined mapping
+                        parts = []
+                        if inc_val != "NONE":
+                            parts.append(f"INC:{inc_val}")
+                        if dec_val != "NONE":
+                            parts.append(f"DEC:{dec_val}")
+                            
+                        if parts:  # Only add if we have mappings
+                            mapping = " | ".join(parts)
+                            print(f"AD_STICK mapping for {control_type}: {mapping}")
+                            controls[control_type] = mapping
+                        continue  # Skip the rest of the loop for these controls
+                    
+                    # Special handling for other analog controls
+                    if control_type in ["P1_PEDAL", "P1_PEDAL2", "P1_DIAL", "P1_TRACKBALL_X", "P1_TRACKBALL_Y"]:
+                        # Find all newseq elements for different types
+                        standard_seq = port.find('./newseq[@type="standard"]')
+                        increment_seq = port.find('./newseq[@type="increment"]')
+                        decrement_seq = port.find('./newseq[@type="decrement"]')
+                        
+                        # Get all sequence values
+                        standard_val = standard_seq.text.strip() if standard_seq is not None and standard_seq.text else "NONE"
+                        inc_val = increment_seq.text.strip() if increment_seq is not None and increment_seq.text else "NONE"
+                        dec_val = decrement_seq.text.strip() if decrement_seq is not None and decrement_seq.text else "NONE"
+                        
+                        print(f"Analog control {control_type}: standard={standard_val}, inc={inc_val}, dec={dec_val}")
+                        
+                        # For analog controls, prefer using increment/decrement for better control
+                        if inc_val != "NONE" or dec_val != "NONE":
+                            # Create a combined mapping
+                            parts = []
+                            if inc_val != "NONE":
+                                parts.append(f"INC:{inc_val}")
+                            if dec_val != "NONE":
+                                parts.append(f"DEC:{dec_val}")
+                            
+                            mapping = " | ".join(parts)
+                            print(f"Using combined inc/dec for {control_type}: {mapping}")
+                            controls[control_type] = mapping
+                        # If no inc/dec, fall back to standard
+                        elif standard_val != "NONE":
+                            controls[control_type] = standard_val
+                            print(f"Using standard for {control_type}: {standard_val}")
+                    else:
+                        # Regular controls just use the standard mapping
+                        newseq = port.find('./newseq[@type="standard"]')
+                        if newseq is not None and newseq.text and newseq.text.strip() != "NONE":
                             mapping = newseq.text.strip()
                             controls[control_type] = mapping
-                            print(f"Found mapping: {control_type} -> {mapping}")
+                            print(f"Found standard mapping for {control_type}: {mapping}")
             else:
                 print("No input element found in XML")
                     
@@ -1321,6 +1379,8 @@ class MAMEControlConfig(ctk.CTk):
             print("First 100 chars of content:", repr(cfg_content[:100]))
         except Exception as e:
             print(f"Unexpected error parsing cfg: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
         print(f"Found {len(controls)} control mappings")
         if controls:
@@ -5882,9 +5942,75 @@ controller xbox t		= """
                     
                     # Add debug output
                     print(f"Applied mapping for {control_name}: {label['mapping']} from {label['mapping_source']}")
-                else:
-                    label['is_custom'] = False
-                    
+
+                    # NEW CODE: Add this right here - special handling for analog controls
+                    if control_name in ["P1_PEDAL", "P1_DIAL", "P1_TRACKBALL_X", "P1_TRACKBALL_Y"] and \
+                    (" | " in mapping_info['mapping'] or "|" in mapping_info['mapping']):
+                        # For analog controls with combined mappings, create a special display
+                        separator = " | " if " | " in mapping_info['mapping'] else "|"
+                        
+                        if "INC:" in mapping_info['mapping'] or "DEC:" in mapping_info['mapping']:
+                            label['analog_control'] = True
+                            
+                            # Create display_name if it doesn't exist yet
+                            if 'display_name' not in label:
+                                # Create a default display name based on control type
+                                control_parts = control_name.split('_')
+                                if len(control_parts) > 1:
+                                    control_type = control_parts[-1].capitalize()
+                                    label['display_name'] = f"P1 {control_type} (Two-Way)"
+                                else:
+                                    label['display_name'] = f"{control_name} (Two-Way)"
+                            else:
+                                # Append "(Two-Way)" if it doesn't already have it
+                                if "(Two-Way)" not in label['display_name']:
+                                    label['display_name'] = f"{label['display_name']} (Two-Way)"
+                            
+                            # Extract and format the increment/decrement parts for display
+                            parts = mapping_info['mapping'].split(separator)
+                            inc_part = next((p for p in parts if p.startswith("INC:")), "")
+                            dec_part = next((p for p in parts if p.startswith("DEC:")), "")
+                            
+                            if inc_part or dec_part:
+                                # Store the parts with proper conversion if in XInput mode
+                                current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+                                
+                                if inc_part:
+                                    inc_mapping = inc_part[4:]  # Remove "INC:" prefix
+                                    # Convert to current input mode
+                                    inc_mapping_converted = self.convert_mapping(inc_mapping, current_mode)
+                                    label['inc_mapping'] = inc_mapping_converted
+                                    print(f"Converted INC mapping: {inc_mapping} -> {inc_mapping_converted}")
+                                
+                                if dec_part:
+                                    dec_mapping = dec_part[4:]  # Remove "DEC:" prefix
+                                    # Convert to current input mode
+                                    dec_mapping_converted = self.convert_mapping(dec_mapping, current_mode)
+                                    label['dec_mapping'] = dec_mapping_converted
+                                    print(f"Converted DEC mapping: {dec_mapping} -> {dec_mapping_converted}")
+                                
+                                # Use a more detailed target button description
+                                control_type = control_name.split('_')[-1].capitalize()
+                                
+                                # Add button names to target description for better clarity
+                                inc_btn = ""
+                                dec_btn = ""
+                                
+                                if 'inc_mapping' in label and "BUTTON" in label['inc_mapping']:
+                                    btn_match = re.search(r'BUTTON(\d+)', label['inc_mapping'])
+                                    if btn_match:
+                                        inc_btn = f" (Button {btn_match.group(1)})"
+                                        
+                                if 'dec_mapping' in label and "BUTTON" in label['dec_mapping']:
+                                    btn_match = re.search(r'BUTTON(\d+)', label['dec_mapping'])
+                                    if btn_match:
+                                        dec_btn = f" (Button {btn_match.group(1)})"
+                                
+                                label['target_button'] = f"{control_type}: Inc{inc_btn}/Dec{dec_btn}"
+                                print(f"Processed analog control {control_name} with inc/dec mappings")
+
+                    else:
+                        label['is_custom'] = False
                 # Set appropriate display style based on function
                 if func_category == 'move_horizontal':
                     label['display_style'] = 'horizontal'
@@ -6322,11 +6448,71 @@ controller xbox t		= """
             traceback.print_exc()
             return False
     
+    def get_analog_control_name(self, control_mapping):
+        """Get friendly name for special analog control mappings"""
+        # Get current input mode
+        current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+        
+        # Handle XInput mode
+        if current_mode == 'xinput':
+            # Direct mapping for known controls
+            if 'ZAXIS_NEG_SWITCH' in control_mapping:
+                return "LT (Left Trigger)"
+            elif 'RZAXIS_NEG_SWITCH' in control_mapping:
+                return "RT (Right Trigger)"
+            elif 'ZAXIS' in control_mapping:
+                return "LT (Left Trigger)"
+            elif 'RZAXIS' in control_mapping:
+                return "RT (Right Trigger)"
+            elif 'BUTTON5' in control_mapping:
+                return "LB (Left Bumper)"
+            elif 'BUTTON6' in control_mapping:
+                return "RB (Right Bumper)"
+            elif 'BUTTON1' in control_mapping:
+                return "A Button"
+            elif 'BUTTON2' in control_mapping:
+                return "B Button"
+            elif 'BUTTON3' in control_mapping:
+                return "X Button"
+            elif 'BUTTON4' in control_mapping:
+                return "Y Button"
+            elif 'DPADLEFT' in control_mapping:
+                return "D-Pad Left"
+            elif 'DPADRIGHT' in control_mapping:
+                return "D-Pad Right"
+            elif 'DPADUP' in control_mapping:
+                return "D-Pad Up"
+            elif 'DPADDOWN' in control_mapping:
+                return "D-Pad Down"
+        
+        # For JOYCODE mode or unknown controls
+        if "BUTTON" in control_mapping:
+            button_match = re.search(r'BUTTON(\d+)', control_mapping)
+            if button_match:
+                return f"Button {button_match.group(1)}"
+        
+        # For D-pad in JOYCODE mode
+        if 'DPADLEFT' in control_mapping:
+            return "D-Pad Left"
+        elif 'DPADRIGHT' in control_mapping:
+            return "D-Pad Right"
+        elif 'DPADUP' in control_mapping:
+            return "D-Pad Up"
+        elif 'DPADDOWN' in control_mapping:
+            return "D-Pad Down"
+        
+        # If nothing matched, don't show "NONE" but use a more descriptive fallback
+        if control_mapping == "NONE":
+            return "Not Mapped"
+            
+        # Try regular conversion as fallback
+        return self.format_mapping_display(control_mapping)
+    
     def convert_mapping(self, mapping: str, to_mode: str = None) -> str:
         """Convert between JOYCODE, XInput, and Keyboard mappings"""
         if not mapping:
             return mapping
-            
+                
         # Determine target mode if not explicitly specified
         if to_mode is None:
             to_mode = getattr(self, 'input_mode', 'xinput')
@@ -6351,7 +6537,7 @@ controller xbox t		= """
             'JOYCODE_1_HATLEFT': 'XINPUT_1_DPAD_LEFT',   # D-Pad Left
             'JOYCODE_1_HATRIGHT': 'XINPUT_1_DPAD_RIGHT', # D-Pad Right
             
-            # Analog stick directions with _SWITCH suffix
+            # Analog stick directions
             'JOYCODE_1_YAXIS_UP_SWITCH': 'XINPUT_1_LEFTY_NEG',       # Left Stick Up
             'JOYCODE_1_YAXIS_DOWN_SWITCH': 'XINPUT_1_LEFTY_POS',     # Left Stick Down
             'JOYCODE_1_XAXIS_LEFT_SWITCH': 'XINPUT_1_LEFTX_NEG',     # Left Stick Left
@@ -6362,6 +6548,14 @@ controller xbox t		= """
             'JOYCODE_1_RYAXIS_POS_SWITCH': 'XINPUT_1_RIGHTY_POS',    # Right Stick Down
             'JOYCODE_1_RXAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTX_NEG',    # Right Stick Left
             'JOYCODE_1_RXAXIS_POS_SWITCH': 'XINPUT_1_RIGHTX_POS',    # Right Stick Right
+            
+            # ADD THESE NEW MAPPINGS:
+            'JOYCODE_1_DPADLEFT': 'XINPUT_1_DPAD_LEFT',              # DPad Left
+            'JOYCODE_1_DPADRIGHT': 'XINPUT_1_DPAD_RIGHT',            # DPad Right
+            'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L',      # Left Trigger (Z-axis)
+            'JOYCODE_1_RZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_R',     # Right Trigger (RZ-axis)
+            'JOYCODE_1_ZAXIS': 'XINPUT_1_TRIGGER_L',                 # Left Trigger (full axis)
+            'JOYCODE_1_RZAXIS': 'XINPUT_1_TRIGGER_R',                # Right Trigger (full axis)
             
             # Same for P2
             'JOYCODE_2_BUTTON1': 'XINPUT_2_A',           # A Button
@@ -6632,6 +6826,71 @@ controller xbox t		= """
     def format_mapping_display(self, mapping: str) -> str:
         """Format the mapping string for display using friendly names when available."""
         
+        # Handle empty or None mappings
+        if not mapping:
+            return "Not mapped"
+        
+        # Get current input mode
+        current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+        
+        # Check for combined increment/decrement mappings with INC: and DEC: prefixes
+        if (" | " in mapping or "|" in mapping) and ("INC:" in mapping or "DEC:" in mapping):
+            separator = " | " if " | " in mapping else "|"
+            parts = mapping.split(separator)
+            formatted_parts = []
+            
+            for part in parts:
+                if part.startswith("INC:"):
+                    # Get the actual mapping after the prefix
+                    inc_mapping = part[4:]
+                    
+                    # For XInput mode, convert to XInput button name without "Increase:" prefix
+                    if current_mode == 'xinput':
+                        # Convert JOYCODE to XINPUT if needed
+                        if not inc_mapping.startswith("XINPUT"):
+                            inc_mapping = self.convert_mapping(inc_mapping, 'xinput')
+                        
+                        # Get friendly name without prefix
+                        if inc_mapping.startswith("XINPUT"):
+                            formatted_parts.append(self.get_friendly_xinput_name(inc_mapping))
+                        else:
+                            formatted_parts.append(f"Increase: {inc_mapping}")
+                    else:
+                        # For JOYCODE mode, keep the "Increase:" prefix
+                        formatted_parts.append(f"Increase: {self.format_simple_mapping(inc_mapping)}")
+                        
+                elif part.startswith("DEC:"):
+                    # Get the actual mapping after the prefix
+                    dec_mapping = part[4:]
+                    
+                    # For XInput mode, convert to XInput button name without "Decrease:" prefix
+                    if current_mode == 'xinput':
+                        # Convert JOYCODE to XINPUT if needed
+                        if not dec_mapping.startswith("XINPUT"):
+                            dec_mapping = self.convert_mapping(dec_mapping, 'xinput')
+                        
+                        # Get friendly name without prefix
+                        if dec_mapping.startswith("XINPUT"):
+                            formatted_parts.append(self.get_friendly_xinput_name(dec_mapping))
+                        else:
+                            formatted_parts.append(f"Decrease: {dec_mapping}")
+                    else:
+                        # For JOYCODE mode, keep the "Decrease:" prefix
+                        formatted_parts.append(f"Decrease: {self.format_simple_mapping(dec_mapping)}")
+                else:
+                    formatted_parts.append(self.format_simple_mapping(part))
+            
+            # For XInput mode, format the display differently to show both controls clearly
+            if current_mode == 'xinput':
+                return " / ".join(formatted_parts)
+            else:
+                return " / ".join(formatted_parts)
+        
+        # For standard non-INC/DEC mappings, use the existing logic
+        return self.format_simple_mapping(mapping)
+
+    def format_simple_mapping(self, mapping: str) -> str:
+        """Format a simple mapping string (no INC/DEC prefixes)"""
         # Handle Keyboard mappings
         if mapping.startswith("KEYCODE"):
             key_name = mapping.replace("KEYCODE_", "")
@@ -6651,7 +6910,7 @@ controller xbox t		= """
         elif mapping.startswith("XINPUT"):
             return self.get_friendly_xinput_name(mapping)
 
-        # Handle JOYCODE mappings (your existing logic, preserved)
+        # Handle JOYCODE mappings
         elif "JOYCODE" in mapping:
             if "YAXIS_UP" in mapping or "DPADUP" in mapping:
                 return "Joy Stick Up"
@@ -6682,7 +6941,7 @@ controller xbox t		= """
                 else:
                     remainder = '_'.join(parts[3:])
                     return f"Joy {joy_num} {control_type} {remainder}"
-
+        
         # Fallback
         return mapping
 
@@ -7249,8 +7508,42 @@ controller xbox t		= """
                 mapping_value = control.get('mapping', '')
                 primary_mapping = ""
                 all_mappings = []
-                
-                if " OR " in mapping_value:
+
+                # Special handling for analog controls
+                if control_name in ["P1_PEDAL", "P1_PEDAL2", "P1_DIAL", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
+                                "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z"] and \
+                (" | " in mapping_value or "|" in mapping_value or "INC:" in mapping_value or "DEC:" in mapping_value):
+                    
+                    # Get current input mode
+                    current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+                    
+                    # Parse the parts
+                    separator = " | " if " | " in mapping_value else "|"
+                    parts = mapping_value.split(separator)
+                    
+                    # Extract increment/decrement parts
+                    inc_part = next((p for p in parts if p.startswith("INC:")), "")
+                    dec_part = next((p for p in parts if p.startswith("DEC:")), "")
+                    
+                    formatted_parts = []
+                    
+                    if inc_part:
+                        inc_mapping = inc_part[4:]  # Remove "INC:" prefix
+                        # Use the specialized helper
+                        friendly_name = self.get_analog_control_name(inc_mapping)
+                        formatted_parts.append(f"+ {friendly_name}")
+                        
+                    if dec_part:
+                        dec_mapping = dec_part[4:]  # Remove "DEC:" prefix
+                        # Use the specialized helper
+                        friendly_name = self.get_analog_control_name(dec_mapping)
+                        formatted_parts.append(f"- {friendly_name}")
+                    
+                    # Use this special formatted display for analog controls
+                    display_text = " / ".join(formatted_parts)
+
+                # Standard processing for non-analog controls
+                elif " OR " in mapping_value:
                     mapping_parts = mapping_value.split(" OR ")
                     
                     # Get all formatted mappings for tooltip
@@ -7528,6 +7821,11 @@ controller xbox t		= """
                 'JOYCODE_1_DPADDOWN': 'XINPUT_1_DPAD_DOWN',
                 'JOYCODE_1_DPADLEFT': 'XINPUT_1_DPAD_LEFT',
                 'JOYCODE_1_DPADRIGHT': 'XINPUT_1_DPAD_RIGHT',
+                # ADD THESE NEW MAPPINGS:
+                'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L',   # Left Trigger (Z-axis)
+                'JOYCODE_1_RZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_R',  # Right Trigger (RZ-axis)
+                'JOYCODE_1_ZAXIS': 'XINPUT_1_TRIGGER_L',              # Left Trigger (full axis)
+                'JOYCODE_1_RZAXIS': 'XINPUT_1_TRIGGER_R',             # Right Trigger (full axis)
                 'JOYCODE_2_BUTTON1': 'XINPUT_2_A',
                 'JOYCODE_2_BUTTON2': 'XINPUT_2_B',
                 'JOYCODE_2_BUTTON3': 'XINPUT_2_X',
@@ -7578,6 +7876,103 @@ controller xbox t		= """
         
         return comparisons
         
+    def get_special_analog_display(self, control_name, mapping_value):
+        """Special handler for analog controls display"""
+        # Check if this is an analog control with special mappings
+        if not control_name in ["P1_PEDAL", "P1_DIAL", "P1_TRACKBALL_X", "P1_TRACKBALL_Y"]:
+            return None
+            
+        # Check if it has the special format we're looking for
+        if not ("|" in mapping_value or "INC:" in mapping_value or "DEC:" in mapping_value):
+            return None
+        
+        # Get current input mode
+        current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+        
+        # Parse parts
+        separator = " | " if " | " in mapping_value else "|"
+        parts = mapping_value.split(separator)
+        
+        # Extract inc/dec parts
+        inc_part = next((p for p in parts if p.startswith("INC:")), "")
+        dec_part = next((p for p in parts if p.startswith("DEC:")), "")
+        
+        # Build display parts
+        display_parts = []
+        
+        if inc_part:
+            inc_mapping = inc_part[4:]  # Remove "INC:" prefix
+            if current_mode == 'xinput':
+                # Directly map known controls
+                if "ZAXIS_NEG_SWITCH" in inc_mapping:
+                    display_parts.append("+ LT (Left Trigger)")
+                elif "RZAXIS_NEG_SWITCH" in inc_mapping:
+                    display_parts.append("+ RT (Right Trigger)")
+                elif "BUTTON5" in inc_mapping or "BUTTON_5" in inc_mapping:
+                    display_parts.append("+ LB (Left Bumper)")
+                elif "BUTTON6" in inc_mapping or "BUTTON_6" in inc_mapping:
+                    display_parts.append("+ RB (Right Bumper)")
+                elif "DPADLEFT" in inc_mapping:
+                    display_parts.append("+ D-Pad Left")
+                elif "DPADRIGHT" in inc_mapping:
+                    display_parts.append("+ D-Pad Right")
+                else:
+                    # Try standard conversion
+                    xinput = self.convert_mapping(inc_mapping, 'xinput')
+                    if xinput != inc_mapping:  # If converted
+                        display_parts.append(f"+ {self.get_friendly_xinput_name(xinput)}")
+                    else:
+                        # Fallback
+                        display_parts.append(f"+ {inc_mapping}")
+            else:
+                # JOYCODE mode - simpler display
+                if "BUTTON" in inc_mapping:
+                    button_match = re.search(r'BUTTON(\d+)', inc_mapping)
+                    if button_match:
+                        display_parts.append(f"+ Button {button_match.group(1)}")
+                    else:
+                        display_parts.append(f"+ {inc_mapping}")
+                else:
+                    display_parts.append(f"+ {inc_mapping}")
+        
+        if dec_part:
+            dec_mapping = dec_part[4:]  # Remove "DEC:" prefix
+            if current_mode == 'xinput':
+                # Directly map known controls
+                if "ZAXIS_NEG_SWITCH" in dec_mapping:
+                    display_parts.append("- LT (Left Trigger)")
+                elif "RZAXIS_NEG_SWITCH" in dec_mapping:
+                    display_parts.append("- RT (Right Trigger)")
+                elif "BUTTON5" in dec_mapping or "BUTTON_5" in dec_mapping:
+                    display_parts.append("- LB (Left Bumper)")
+                elif "BUTTON6" in dec_mapping or "BUTTON_6" in dec_mapping:
+                    display_parts.append("- RB (Right Bumper)")
+                elif "DPADLEFT" in dec_mapping:
+                    display_parts.append("- D-Pad Left")
+                elif "DPADRIGHT" in dec_mapping:
+                    display_parts.append("- D-Pad Right")
+                else:
+                    # Try standard conversion
+                    xinput = self.convert_mapping(dec_mapping, 'xinput')
+                    if xinput != dec_mapping:  # If converted
+                        display_parts.append(f"- {self.get_friendly_xinput_name(xinput)}")
+                    else:
+                        # Fallback
+                        display_parts.append(f"- {dec_mapping}")
+            else:
+                # JOYCODE mode - simpler display
+                if "BUTTON" in dec_mapping:
+                    button_match = re.search(r'BUTTON(\d+)', dec_mapping)
+                    if button_match:
+                        display_parts.append(f"- Button {button_match.group(1)}")
+                    else:
+                        display_parts.append(f"- {dec_mapping}")
+                else:
+                    display_parts.append(f"- {dec_mapping}")
+        
+        # Join parts for final display
+        return " / ".join(display_parts)
+    
     def update_stats_label(self):
         """Update the statistics label with enhanced formatting including clone stats"""
         try:
