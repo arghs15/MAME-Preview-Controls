@@ -5562,12 +5562,12 @@ controller xbox t		= """
             # Parse the custom config
             cfg_controls = self.parse_cfg_controls(self.custom_configs[self.current_game])
             
-            # Convert if XInput is enabled
-            if self.use_xinput:
-                cfg_controls = {
-                    control: self.convert_mapping(mapping, True)
-                    for control, mapping in cfg_controls.items()
-                }
+            # Convert based on current input mode
+            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            cfg_controls = {
+                control: self.convert_mapping(mapping, current_mode)
+                for control, mapping in cfg_controls.items()
+            }
             
             # Modify game_data to include custom mappings
             self.update_game_data_with_custom_mappings(game_data, cfg_controls)
