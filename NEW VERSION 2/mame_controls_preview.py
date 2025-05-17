@@ -95,6 +95,53 @@ class PreviewWindow(QMainWindow):
             # Load settings
             self.text_settings = self.load_text_settings()
             self.logo_settings = self.load_logo_settings()
+            bezel_settings = self.load_bezel_settings()
+
+            # NEW: Pre-analyze the game for directional-only status
+            directional_count = 0
+            button_count = 0
+            
+            # Scan game data to identify control types
+            for player in self.game_data.get('players', []):
+                if player['number'] != 1:  # Only analyze Player 1 controls
+                    continue
+                
+                for control in player.get('labels', []):
+                    control_name = control['name']
+                    
+                    # Count directional controls - EXPANDED LIST
+                    if any(control_type in control_name for control_type in [
+                        "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                        "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                        "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+                    ]):
+                        directional_count += 1
+                    # Count button controls (excluding directional inputs)
+                    elif any(control_type in control_name for control_type in ["BUTTON", "START", "SELECT", "GAMBLE"]):
+                        button_count += 1
+            
+            # Determine if this is a directional-only game
+            self.is_directional_only_game = directional_count > 0 and button_count == 0
+            print(f"Early game control analysis: {directional_count} directional, {button_count} buttons")
+            print(f"Is directional-only game: {self.is_directional_only_game}")
+            
+            # Get the auto-show setting
+            self.auto_show_directionals_for_directional_only = bezel_settings.get("auto_show_directionals_for_directional_only", True)
+            
+            # Set joystick visibility - critical to do this before any UI elements are created
+            self.joystick_visible = bezel_settings.get("joystick_visible", True)
+            
+            # IMPORTANT: Pre-determine whether directional controls should be visible
+            # This prevents the brief flash of visibility for directional-only games
+            self.should_show_directional = self.joystick_visible
+            if self.is_directional_only_game and self.auto_show_directionals_for_directional_only:
+                self.should_show_directional = True
+                print("Auto-showing directional controls for directional-only game")
+            else:
+                print(f"Using standard joystick visibility: {self.joystick_visible}")
+            
+            # Initialize texts_visible BEFORE creating controls (fix for the error)
+            self.texts_visible = True
 
             # Check if button prefix setting is initialized
             if "show_button_prefix" not in self.text_settings:
@@ -174,9 +221,6 @@ class PreviewWindow(QMainWindow):
             # Track whether texts are visible
             self.texts_visible = True
             
-            # Joystick controls visibility
-            self.joystick_visible = True
-            
             # Track current screen
             self.current_screen = self.load_screen_setting_from_config()
 
@@ -219,60 +263,6 @@ class PreviewWindow(QMainWindow):
 
             print(f"Window size: {self.width()}x{self.height()}")
             print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
-            
-        except Exception as e:
-            print(f"Error in PreviewWindow initialization: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
-            self.close()
-            
-            # Create button frame as a FLOATING OVERLAY
-            if not self.hide_buttons and not self.clean_mode:
-                self.create_floating_button_frame()
-            
-            # Track whether texts are visible
-            self.texts_visible = True
-            
-            # Joystick controls visibility
-            self.joystick_visible = True
-            
-            # Track current screen
-            self.current_screen = self.load_screen_setting_from_config()
-
-            # Now move to that screen
-            self.initializing_screen = True
-            self.current_screen = self.load_screen_setting_from_config()
-            self.move_to_screen(self.current_screen)
-            self.initializing_screen = False
-            
-            # Bind ESC key to close
-            self.keyPressEvent = self.handle_key_press
-            
-            # Move to primary screen first
-            #self.move_to_screen(1)  # Start with primary screen
-            self.layering_for_bezel()
-            self.integrate_bezel_support()
-            self.canvas.resizeEvent = self.on_canvas_resize_with_background
-        
-            # Add this line to initialize bezel state after a short delay
-            QTimer.singleShot(500, self.ensure_bezel_state)
-            
-            print("PreviewWindow initialization complete")
-            
-            QTimer.singleShot(600, self.apply_joystick_visibility)
-            #QTimer.singleShot(200, self.load_and_register_fonts)
-            QTimer.singleShot(300, self.force_resize_all_labels)
-            QTimer.singleShot(1000, self.detect_screen_after_startup)
-            
-            # Add this line at the end of __init__, just before self.setVisible(True)
-            self.enhance_preview_window_init()
-            
-            self.setVisible(True)  # Now show the fully prepared window
-
-            print(f"Window size: {self.width()}x{self.height()}")
-            print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
-
             
         except Exception as e:
             print(f"Error in PreviewWindow initialization: {e}")
@@ -1878,6 +1868,13 @@ class PreviewWindow(QMainWindow):
         self.joystick_button.setStyleSheet(button_style)
         self.bottom_row.addWidget(self.joystick_button)
         
+        # Add a settings button if it doesn't exist
+        if not hasattr(self, 'settings_button'):
+            self.settings_button = QPushButton("Settings")
+            self.settings_button.clicked.connect(self.show_settings_dialog)
+            self.settings_button.setStyleSheet(button_style)
+            self.bottom_row.addWidget(self.settings_button)
+        
         # Add button prefix toggle button
         prefix_text = "Hide Prefixes" if self.text_settings.get("show_button_prefix", True) else "Show Prefixes"
         self.prefix_button = QPushButton(prefix_text)
@@ -1960,6 +1957,97 @@ class PreviewWindow(QMainWindow):
         # After creating the button frame and all standard buttons, call the enhance method
         self.enhance_preview_window_init()
 
+    def show_settings_dialog(self):
+        """Show a dialog for various settings"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QPushButton, QLabel, QGroupBox, QHBoxLayout
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Preview Settings")
+        dialog.resize(400, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Directional controls settings group
+        directional_group = QGroupBox("Directional Controls")
+        directional_layout = QVBoxLayout(directional_group)
+        
+        # Get the current setting (default to True if not set)
+        auto_show_directionals = getattr(self, 'auto_show_directionals_for_directional_only', True)
+        print(f"Current auto-show setting: {auto_show_directionals}")
+        
+        # Create the checkbox with EXPLICIT initial state
+        checkbox = QCheckBox("Auto-show directional controls for directional-only games")
+        checkbox.setChecked(auto_show_directionals)  # Set the initial state
+        checkbox.setToolTip("When enabled, games with only directional controls will always show those controls")
+        directional_layout.addWidget(checkbox)
+        
+        # Add explanation text
+        explanation = QLabel("This setting keeps directional controls visible for games that only have directional inputs, even when 'Hide Directional' is active.")
+        explanation.setWordWrap(True)
+        explanation.setStyleSheet("color: #666; font-style: italic;")
+        directional_layout.addWidget(explanation)
+        
+        # Add to main layout
+        layout.addWidget(directional_group)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(ok_button)
+        buttons_layout.addWidget(cancel_button)
+        
+        layout.addLayout(buttons_layout)
+        
+        # Define the save function inside this method for better closure
+        def save_settings():
+            # Get the checkbox state directly
+            new_value = checkbox.isChecked()
+            print(f"New auto-show setting from checkbox: {new_value}")
+            
+            # Explicitly update the instance variable
+            self.auto_show_directionals_for_directional_only = new_value
+            
+            # Save to bezel settings file
+            try:
+                # Load existing settings first
+                settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+                settings = {}
+                
+                if os.path.exists(settings_file):
+                    with open(settings_file, 'r') as f:
+                        settings = json.load(f)
+                
+                # Update with the new setting
+                settings['auto_show_directionals_for_directional_only'] = new_value
+                
+                # Write back to file
+                with open(settings_file, 'w') as f:
+                    json.dump(settings, f)
+                
+                print(f"Saved auto_show_directionals setting: {new_value}")
+                
+                # Immediately reapply visibility to see the change
+                self.apply_joystick_visibility()
+                
+            except Exception as e:
+                print(f"Error saving settings: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Close the dialog
+            dialog.accept()
+        
+        # Connect buttons
+        ok_button.clicked.connect(save_settings)
+        cancel_button.clicked.connect(dialog.reject)
+        
+        # Show the dialog
+        dialog.exec_()
+    
     # 2. Now, update the drag handle event handlers
     # Fix the drag handling to prevent jittering
     def handle_drag_press(self, event):
@@ -2545,122 +2633,117 @@ class PreviewWindow(QMainWindow):
 
     # 4. Updated function categorization for specialized controls
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
-        """Update game_data to include the custom control mappings with function-based organization"""
-        if not cfg_controls:
+        """Update game_data to include custom mappings with improved specialized control handling"""
+        if not cfg_controls and not hasattr(self, 'default_controls'):
             return
             
-        # Add a flag to the game_data to indicate it uses ROM CFG
-        game_data['has_rom_cfg'] = True
-        game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
-        
-        # Define the functional categories for organizing controls
-        functional_categories = {
-            'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL', 'P1_TRACKBALL_X', 'P1_MOUSE_X', 'P1_LIGHTGUN_X'],
-            'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V', 'P1_TRACKBALL_Y', 'P1_MOUSE_Y', 'P1_LIGHTGUN_Y'],
-            'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
-            'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
-            'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
-            'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
-            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z', 'P1_POSITIONAL'],  # Added POSITIONAL here
-            'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
-            'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
+        # Define ALL specialized controls with their proper prefixes and display names
+        specialized_controls = {
+            # Rotary controls
+            'P1_DIAL': {'prefix': 'DIAL', 'display_name': 'Rotary Dial (H)'},
+            'P1_DIAL_V': {'prefix': 'DIAL↕', 'display_name': 'Vertical Dial'},
+            'P1_PADDLE': {'prefix': 'PDL', 'display_name': 'Paddle Control'},
+            
+            # Trackball controls
+            'P1_TRACKBALL_X': {'prefix': 'TRK←→', 'display_name': 'Trackball X-Axis'},
+            'P1_TRACKBALL_Y': {'prefix': 'TRK↑↓', 'display_name': 'Trackball Y-Axis'},
+            
+            # Mouse controls
+            'P1_MOUSE_X': {'prefix': 'MSE←→', 'display_name': 'Mouse X-Axis'},
+            'P1_MOUSE_Y': {'prefix': 'MSE↑↓', 'display_name': 'Mouse Y-Axis'},
+            
+            # Light gun controls
+            'P1_LIGHTGUN_X': {'prefix': 'GUN←→', 'display_name': 'Lightgun X-Axis'},
+            'P1_LIGHTGUN_Y': {'prefix': 'GUN↑↓', 'display_name': 'Lightgun Y-Axis'},
+            
+            # Analog stick controls
+            'P1_AD_STICK_X': {'prefix': 'ASX', 'display_name': 'Analog Stick X'},
+            'P1_AD_STICK_Y': {'prefix': 'ASY', 'display_name': 'Analog Stick Y'},
+            'P1_AD_STICK_Z': {'prefix': 'ASZ', 'display_name': 'Analog Stick Z'},
+            
+            # Pedal inputs
+            'P1_PEDAL': {'prefix': 'PED1', 'display_name': 'Pedal 1'},
+            'P1_PEDAL2': {'prefix': 'PED2', 'display_name': 'Pedal 2'},
+            
+            # Positional control
+            'P1_POSITIONAL': {'prefix': 'POS', 'display_name': 'Positional Ctrl'},
+            
+            # Gambling controls
+            'P1_GAMBLE_HIGH': {'prefix': 'HIGH', 'display_name': 'Gamble High'},
+            'P1_GAMBLE_LOW': {'prefix': 'LOW', 'display_name': 'Gamble Low'},
         }
+        
+        # Add flag to game_data for custom config
+        if game_data['romname'] in self.custom_configs:
+            game_data['has_rom_cfg'] = True
+            game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
+        
+        # Add flag for default cfg if available
+        if hasattr(self, 'default_controls') and self.default_controls:
+            game_data['has_default_cfg'] = True
         
         # Process each control in the game data
         for player in game_data.get('players', []):
             for label in player.get('labels', []):
                 control_name = label['name']
                 
-                # Get the functional category for this control
-                func_category = 'other'  # Default to 'other' if no match found
-                for category, controls in functional_categories.items():
-                    if control_name in controls:
-                        func_category = category
-                        break
-                        
-                # Additional catch-all logic for controls not explicitly listed
-                if func_category == 'other' and control_name.startswith('P1_'):
-                    # Generic category assignment based on control name patterns
-                    if 'BUTTON' in control_name:
-                        # Try to determine which button category based on the button number
-                        try:
-                            button_num = int(control_name.replace('P1_BUTTON', ''))
-                            if button_num <= 2:
-                                func_category = 'action_primary'
-                            elif button_num <= 4:
-                                func_category = 'action_secondary'
-                            else:
-                                func_category = 'action_special'
-                        except ValueError:
-                            # If we can't parse a button number, keep as 'other'
-                            pass
-                    elif 'JOYSTICK' in control_name:
-                        if 'LEFT' in control_name or 'RIGHT' in control_name:
-                            func_category = 'move_horizontal'
-                        elif 'UP' in control_name or 'DOWN' in control_name:
-                            func_category = 'move_vertical'
-                    elif any(axis in control_name for axis in ['DIAL', 'TRACKBALL', 'MOUSE', 'LIGHTGUN']):
-                        if '_X' in control_name:
-                            func_category = 'move_horizontal'
-                        elif '_Y' in control_name:
-                            func_category = 'move_vertical'
-                    elif 'AD_STICK_X' in control_name:
-                        func_category = 'move_horizontal'
-                    elif 'AD_STICK_Y' in control_name:
-                        func_category = 'move_vertical'
-                    elif 'AD_STICK_Z' in control_name:
-                        func_category = 'analog_input'
-                    elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
-                        func_category = 'system_control'
-                    elif 'PEDAL' in control_name or 'POSITIONAL' in control_name:
-                        func_category = 'analog_input'
-                    elif 'GAMBLE' in control_name:
-                        func_category = 'special_function'
-                
-                # Store the functional category
+                # Get the functional category for this control (for positioning)
+                func_category = self.get_functional_category(control_name)
                 label['func_category'] = func_category
                 
-                # If this control has a custom mapping in the cfg file, store it
-                if control_name in cfg_controls:
+                # Check if this is a specialized control
+                is_specialized = control_name in specialized_controls
+                
+                # Check for mapping information
+                has_custom_mapping = control_name in cfg_controls
+                mapping = None
+                xinput_prefix = None
+                
+                if has_custom_mapping:
+                    mapping = cfg_controls[control_name]
+                    # Check if it has an XINPUT mapping when in XINPUT mode
+                    if self.use_xinput and "XINPUT" in mapping:
+                        xinput_prefix = self.get_button_prefix_from_mapping(mapping)
+                    
                     # Add or update a 'mapping' key to store the current mapping
-                    label['mapping'] = cfg_controls[control_name]
+                    label['mapping'] = mapping
                     label['is_custom'] = True
-                    
-                    # Make sure the source format matches exactly what other sources use
                     label['mapping_source'] = f"ROM CFG ({game_data['romname']}.cfg)"
+                    label['cfg_mapping'] = True
+                elif hasattr(self, 'default_controls') and control_name in self.default_controls:
+                    default_mapping = self.default_controls[control_name]
+                    if self.use_xinput:
+                        mapping = self.convert_mapping(default_mapping, True)
+                        if "XINPUT" in mapping:
+                            xinput_prefix = self.get_button_prefix_from_mapping(mapping)
+                    else:
+                        mapping = default_mapping
                     
-                    # Add these additional fields that might be checked in the preview
+                    label['mapping'] = mapping
+                    label['is_custom'] = False
+                    label['mapping_source'] = "Default CFG"
                     label['cfg_mapping'] = True
                 else:
                     label['is_custom'] = False
-                    
-                # Set appropriate display style based on function
-                if func_category == 'move_horizontal':
-                    label['display_style'] = 'horizontal'
-                elif func_category == 'move_vertical':
-                    label['display_style'] = 'vertical'
-                elif func_category == 'action_primary':
-                    label['display_style'] = 'primary_button'
-                elif func_category == 'action_secondary':
-                    label['display_style'] = 'secondary_button'
-                elif func_category == 'system_control':
-                    label['display_style'] = 'system_button'
-                elif func_category == 'analog_input':
-                    label['display_style'] = 'analog_control'
-                elif func_category == 'precision_aim':
-                    label['display_style'] = 'precision_control'
-                elif func_category == 'special_function':
-                    label['display_style'] = 'special_button'
-                else:
-                    label['display_style'] = 'standard'  # Default style for 'other' controls
-                    
-                # Set display name based on control type for XInput mode
+                
+                # Apply display styles based on function category
+                self.set_display_style(label, func_category)
+                
+                # Set display name based on control type
                 if self.use_xinput:
-                    # Reuse existing standard button mappings
-                    if control_name in ['P1_BUTTON1', 'P1_BUTTON2', 'P1_BUTTON3', 'P1_BUTTON4',
-                                        'P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8',
-                                        'P1_BUTTON9', 'P1_BUTTON10', 'P1_START', 'P1_SELECT']:
-                        # These are already handled well
+                    if is_specialized:
+                        # For specialized controls, use their proper prefix but include XINPUT mapping
+                        special_data = specialized_controls[control_name]
+                        label['prefix'] = special_data['prefix']
+                        
+                        # Combine specialized prefix with XINPUT mapping for clarity
+                        if xinput_prefix:
+                            label['display_name'] = f"{special_data['display_name']} ({xinput_prefix})"
+                            label['target_button'] = xinput_prefix
+                        else:
+                            label['display_name'] = special_data['display_name']
+                    else:
+                        # Regular buttons use standard XINPUT display names
                         standard_display_names = {
                             'P1_BUTTON1': 'P1 A Button',
                             'P1_BUTTON2': 'P1 B Button',
@@ -2675,51 +2758,46 @@ class PreviewWindow(QMainWindow):
                             'P1_START': 'P1 Start Button',
                             'P1_SELECT': 'P1 Select Button'
                         }
-                        label['display_name'] = standard_display_names.get(control_name, control_name)
-                    # Enhanced display names for specialized controls
-                    elif control_name == 'P1_DIAL':
-                        label['display_name'] = 'Rotary Dial (H)'
-                    elif control_name == 'P1_DIAL_V':
-                        label['display_name'] = 'Rotary Dial (V)'
-                    elif control_name == 'P1_PADDLE':
-                        label['display_name'] = 'Paddle Control'
-                    elif control_name == 'P1_TRACKBALL_X':
-                        label['display_name'] = 'Trackball X-Axis'
-                    elif control_name == 'P1_TRACKBALL_Y':
-                        label['display_name'] = 'Trackball Y-Axis'
-                    elif control_name == 'P1_MOUSE_X':
-                        label['display_name'] = 'Mouse X-Axis'
-                    elif control_name == 'P1_MOUSE_Y':
-                        label['display_name'] = 'Mouse Y-Axis'
-                    elif control_name == 'P1_LIGHTGUN_X':
-                        label['display_name'] = 'Lightgun X-Axis'
-                    elif control_name == 'P1_LIGHTGUN_Y':
-                        label['display_name'] = 'Lightgun Y-Axis'
-                    elif control_name == 'P1_AD_STICK_X':
-                        label['display_name'] = 'Analog Stick X'
-                    elif control_name == 'P1_AD_STICK_Y':
-                        label['display_name'] = 'Analog Stick Y'
-                    elif control_name == 'P1_AD_STICK_Z':
-                        label['display_name'] = 'Analog Stick Z'
-                    elif control_name == 'P1_PEDAL':
-                        label['display_name'] = 'Pedal 1'
-                    elif control_name == 'P1_PEDAL2':
-                        label['display_name'] = 'Pedal 2'
-                    elif control_name == 'P1_POSITIONAL':
-                        label['display_name'] = 'Positional Ctrl'
-                    elif control_name == 'P1_GAMBLE_HIGH':
-                        label['display_name'] = 'Gamble High'
-                    elif control_name == 'P1_GAMBLE_LOW':
-                        label['display_name'] = 'Gamble Low'
-                    elif func_category == 'move_horizontal':
-                        label['display_name'] = 'Horizontal Movement'
-                    elif func_category == 'move_vertical':
-                        label['display_name'] = 'Vertical Movement'
-                    else:
-                        label['display_name'] = self.format_control_name(control_name)
+                        label['display_name'] = standard_display_names.get(control_name, self.format_control_name(control_name))
+                        
+                        # For XINPUT mappings, extract target button
+                        if mapping and "XINPUT" in mapping:
+                            label['target_button'] = self.get_friendly_xinput_name(mapping)
                 else:
                     # JOYCODE mode - use traditional names
-                    label['display_name'] = self.format_control_name(control_name)
+                    if is_specialized:
+                        special_data = specialized_controls[control_name]
+                        label['prefix'] = special_data['prefix']
+                        label['display_name'] = special_data['display_name']
+                    else:
+                        label['display_name'] = self.format_control_name(control_name)
+                        
+                    # For JOYCODE mappings, extract button info
+                    if mapping and "JOYCODE" in mapping:
+                        self.extract_joycode_button_info(label, mapping)
+
+        def get_functional_category(self, control_name):
+            """Get the functional category for a control to ensure consistent positioning"""
+            # Define the functional categories for organizing controls
+            functional_categories = {
+                'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL'],
+                'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
+                'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
+                'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
+                'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
+                'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
+                'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z', 'P1_POSITIONAL'],
+                'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
+                'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
+            }
+            
+            # Find which category contains this control
+            for category, controls in functional_categories.items():
+                if control_name in controls:
+                    return category
+                    
+            # Default to 'other' if not found in any category
+            return 'other'
 
     # 5. Updated format_control_name method to produce more readable control names
     def format_control_name(self, control_name):
@@ -3242,23 +3320,42 @@ class PreviewWindow(QMainWindow):
             if hasattr(self, 'specialized_controls_button'):
                 self.specialized_controls_button.setText("Specialized Controls")
 
-    # 15. Modify apply_joystick_visibility to not update shadows
-    # Enhanced apply_joystick_visibility to handle left joystick, right joystick, and D-pad
     def apply_joystick_visibility(self):
-        """Force apply joystick visibility settings to all directional controls (joysticks and D-pad)"""
+        """Force apply joystick visibility settings to all directional controls"""
         controls_updated = 0
         
+        # Get the auto-show directionals setting
+        auto_show_directionals = getattr(self, 'auto_show_directionals_for_directional_only', True)
+        
+        # Check if this is a directional-only game
+        is_directional_only = getattr(self, 'is_directional_only_game', False)
+        
         for control_name, control_data in self.control_labels.items():
-            # Check for all types of directional controls
-            if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
+            # Skip if label doesn't exist
+            if 'label' not in control_data or not control_data['label']:
+                continue
+                
+            # Check for all types of directional controls - EXPANDED LIST
+            if any(control_type in control_name for control_type in [
+                "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+            ]):
+                # Default visibility based on joystick_visible
                 is_visible = self.texts_visible and self.joystick_visible
+                
+                # Determine if we should override for directional-only game
+                if is_directional_only and auto_show_directionals and not self.joystick_visible:
+                    # Override to visible if auto-show is enabled for directional-only games
+                    is_visible = self.texts_visible
+                    print(f"Keeping {control_name} visible despite Hide Directional setting (directional-only game)")
                 
                 # Only update if needed
                 if control_data['label'].isVisible() != is_visible:
                     control_data['label'].setVisible(is_visible)
                     controls_updated += 1
         
-        print(f"Applied directional controls visibility ({self.joystick_visible}) to {controls_updated} controls")
+        print(f"Applied directional controls visibility to {controls_updated} controls")
         return controls_updated
 
     # Call this at the end of PreviewWindow.__init__
@@ -3381,7 +3478,8 @@ class PreviewWindow(QMainWindow):
         """Load bezel and joystick visibility settings from file in settings directory"""
         settings = {
             "bezel_visible": False,  # Default to hidden
-            "joystick_visible": True  # Default to visible
+            "joystick_visible": True,  # Default to visible
+            "auto_show_directionals_for_directional_only": True  # Default to enabled
         }
         
         try:
@@ -3419,6 +3517,8 @@ class PreviewWindow(QMainWindow):
         except Exception as e:
             print(f"Error loading bezel/joystick settings: {e}")
         
+        self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
+
         return settings
 
     # Add method to save bezel settings
@@ -5671,27 +5771,64 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'canvas'):
             self.canvas.update()
     
-    # Replace your existing toggle_joystick_controls method with this one
-    # Update toggle_joystick_controls to use more appropriate button text
     def toggle_joystick_controls(self):
-        """Toggle visibility of all directional controls (joysticks and D-pad) and save setting"""
+        """Toggle visibility of all directional controls with automatic handling for directional-only games"""
         self.joystick_visible = not self.joystick_visible
         
-        # Update button text to better reflect that it controls all directional inputs
+        # Update button text
         self.joystick_button.setText("Show Directional" if not self.joystick_visible else "Hide Directional")
         
-        # Toggle visibility for all directional controls
-        for control_name, control_data in self.control_labels.items():
-            if any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKRIGHT", "DPAD"]):
-                is_visible = self.texts_visible and self.joystick_visible
-                control_data['label'].setVisible(is_visible)
+        # Apply the joystick visibility with special handling for directional-only games
+        self.apply_joystick_visibility()
         
         # CRITICAL: Enforce correct layer order
         self.enforce_layer_order()
         
-        # Save the joystick visibility setting (globally)
+        # Save the setting (even though we might override it for directional-only games)
         self.save_bezel_settings(is_global=True)
-        print(f"Directional controls visibility set to {self.joystick_visible} and saved to settings")
+        
+        # Show appropriate message
+        if getattr(self, 'is_directional_only_game', False) and not self.joystick_visible:
+            print("Note: Directional controls remain visible because this game only uses directional inputs")
+        else:
+            print(f"Directional controls visibility set to {self.joystick_visible}")
+    
+    def save_directional_settings(self, is_global=True):
+        """Save joystick visibility settings including respect_directional_only"""
+        try:
+            # Create settings directory if it doesn't exist
+            os.makedirs(self.settings_dir, exist_ok=True)
+            
+            # Get existing settings first
+            settings = {}
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    try:
+                        settings = json.load(f)
+                    except:
+                        pass
+            
+            # Update with our settings
+            settings["joystick_visible"] = self.joystick_visible
+            settings["respect_directional_only"] = getattr(self, 'respect_directional_only', True)
+            
+            # Preserve other settings
+            if hasattr(self, 'bezel_visible'):
+                settings["bezel_visible"] = self.bezel_visible
+            
+            # Save to file
+            with open(settings_file, 'w') as f:
+                json.dump(settings, f)
+                
+            print(f"Saved directional settings: {settings}")
+            return True
+        except Exception as e:
+            print(f"Error saving directional settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     # Update the reset_positions method to better handle saved positions
     def reset_positions(self):
@@ -5908,7 +6045,7 @@ class PreviewWindow(QMainWindow):
         """Create control labels without shadows and respect clean_mode"""
         if not self.game_data or 'players' not in self.game_data:
             return
-                
+                    
         # CRITICAL FIX: Make sure we have properly loaded fonts
         if not hasattr(self, 'current_font') or self.current_font is None:
             print("Font not initialized before creating labels - forcing font loading")
@@ -5922,42 +6059,37 @@ class PreviewWindow(QMainWindow):
             except Exception as e:
                 print(f"Error loading saved positions: {e}")
         
-        # Make sure joystick_visible is set before we start creating controls
-        if not hasattr(self, 'joystick_visible'):
-            # Load from settings if possible
-            bezel_settings = {}
-            if hasattr(self, 'load_bezel_settings'):
-                try:
-                    bezel_settings = self.load_bezel_settings()
-                except Exception as e:
-                    print(f"Error loading bezel settings: {e}")
-            self.joystick_visible = bezel_settings.get("joystick_visible", True)
-            print(f"Pre-initialized joystick visibility to: {self.joystick_visible}")
-        
         # Process controls
         for player in self.game_data.get('players', []):
             if player['number'] != 1:  # Only show Player 1 controls
                 continue
-                    
+                        
             # Create a label for each control
             grid_x, grid_y = 0, 0
             for control in player.get('labels', []):
                 control_name = control['name']
                 action_text = control['value']
                 
-                # Get button prefix based on mapping if available, or control name otherwise
+                # Get button prefix based on control type
                 button_prefix = ""
                 if 'mapping' in control and control.get('is_custom', False):
-                    # Use the mapping to determine the button prefix
+                    # For standard controls with custom mapping
                     button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
                 elif hasattr(self, 'get_button_prefix'):
-                    # Default: use control name to determine prefix
+                    # Default fallback
                     button_prefix = self.get_button_prefix(control_name)
                 
-                # Determine visibility
+                # Determine visibility based on control type
                 is_visible = True
-                if "JOYSTICK" in control_name:
-                    is_visible = getattr(self, 'joystick_visible', True)
+                is_directional = any(control_type in control_name for control_type in [
+                    "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                    "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
+                    "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+                ])
+
+                if is_directional:
+                    # Use the pre-determined directional visibility
+                    is_visible = self.texts_visible and self.should_show_directional
                 
                 # Apply text settings
                 if self.text_settings.get("use_uppercase", False):
@@ -6061,7 +6193,7 @@ class PreviewWindow(QMainWindow):
                     text_color = self.text_settings.get("action_color", "#FFFFFF")
                     label.setStyleSheet(f"color: {text_color}; background-color: transparent; font-family: '{label.font().family()}';")
                     
-                    # Apply visibility
+                    # Apply visibility setting based on control type
                     label.setVisible(is_visible)
                     
                     # First, let the label auto-size based on content
@@ -6130,7 +6262,7 @@ class PreviewWindow(QMainWindow):
 
     # 2. Enhanced button prefix from mapping method
     def get_button_prefix_from_mapping(self, mapping):
-        """Get the button prefix based on mapping string, including specialized controls"""
+        """Get the button prefix based on mapping string, including specialized controls and keyboard"""
         # Standard XINPUT mappings
         xinput_to_prefix = {
             "XINPUT_1_A": "A",
@@ -6193,12 +6325,68 @@ class PreviewWindow(QMainWindow):
             "TRACKCODE_1_YAXIS_NEG_FAST": "TRK↑+"
         }
         
+        # Keyboard-specific mappings
+        keyboard_to_prefix = {
+            # Arrow keys
+            "KEYCODE_UP": "↑",
+            "KEYCODE_DOWN": "↓", 
+            "KEYCODE_LEFT": "←",
+            "KEYCODE_RIGHT": "→",
+            
+            # Common action keys
+            "KEYCODE_Z": "Z",
+            "KEYCODE_X": "X",
+            "KEYCODE_C": "C",
+            "KEYCODE_A": "A",
+            "KEYCODE_S": "S",
+            "KEYCODE_D": "D",
+            "KEYCODE_Q": "Q",
+            "KEYCODE_W": "W",
+            "KEYCODE_E": "E",
+            "KEYCODE_R": "R",
+            
+            # Numeric keys
+            "KEYCODE_1": "1",
+            "KEYCODE_2": "2",
+            "KEYCODE_3": "3",
+            "KEYCODE_4": "4",
+            "KEYCODE_5": "5",
+            
+            # Function/special keys
+            "KEYCODE_SPACE": "SPC",
+            "KEYCODE_ENTER": "↵",
+            "KEYCODE_LSHIFT": "⇧",
+            "KEYCODE_RSHIFT": "⇧",
+            "KEYCODE_LCONTROL": "Ctrl",
+            "KEYCODE_RCONTROL": "Ctrl",
+            "KEYCODE_LALT": "Alt",
+            "KEYCODE_RALT": "Alt",
+            "KEYCODE_TAB": "⇥",
+            "KEYCODE_ESC": "Esc",
+            
+            # Player 2 common keys
+            "KEYCODE_I": "I",
+            "KEYCODE_J": "J", 
+            "KEYCODE_K": "K",
+            "KEYCODE_L": "L"
+        }
+        
         # Combine mapping dictionaries
-        all_mappings = {**xinput_to_prefix, **mame_to_prefix}
+        all_mappings = {**xinput_to_prefix, **mame_to_prefix, **keyboard_to_prefix}
         
         # Check for direct match
         if mapping in all_mappings:
             return all_mappings[mapping]
+        
+        # Special handling for keyboard keys not explicitly listed
+        if mapping.startswith("KEYCODE_"):
+            # Extract the key name
+            key_name = mapping.replace("KEYCODE_", "")
+            # For most keys, just return the key name
+            if len(key_name) == 1:  # Single character keys
+                return key_name
+            else:
+                return key_name[:3]  # First 3 chars for longer key names
         
         # If no direct match, try partial matching for JOYCODE buttons
         if "JOYCODE_1_BUTTON" in mapping:

@@ -2157,12 +2157,12 @@ class MAMEControlConfig(ctk.CTk):
             # Check if selection is active
             if not self.game_listbox.winfo_exists():
                 return
-                
+                    
             # Get selected index - carefully handle empty selection
             selected_indices = self.game_listbox.curselection()
             if not selected_indices:
                 return
-                    
+                        
             index = selected_indices[0]
             
             # Ensure index is valid for our data list
@@ -2172,14 +2172,19 @@ class MAMEControlConfig(ctk.CTk):
                 # Check if this is actually a change in selection
                 if self.current_game == rom_name:
                     return  # Skip processing if no change
-                    
+                        
                 # Store the selected ROM
                 self.current_game = rom_name
                 
                 # Store selected line (for compatibility)
-                self.selected_line = index + 1  # 1-indexed for compatibility
+                self.selected_line = index + 1  # 1-indexed for backward compatibility
+                
+                # Clear cache entry to force refresh with current input mode
+                if hasattr(self, 'rom_data_cache') and rom_name in self.rom_data_cache:
+                    del self.rom_data_cache[rom_name]
                 
                 # Update the display with a slight delay to prevent UI conflicts
+                # Use the current input mode
                 self.after(10, lambda: self.display_game_info(rom_name))
                 
                 # Explicitly maintain selection (prevents flickering)
@@ -2660,18 +2665,20 @@ class MAMEControlConfig(ctk.CTk):
                 
                 return
 
+            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            print(f"Display game info using input mode: {current_mode}")
+
             # IMPORTANT: Get custom control configuration if it exists
             cfg_controls = {}
             if rom_name in self.custom_configs:
                 # Parse the custom config
                 cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
                 
-                # Convert if XInput is enabled
-                if self.use_xinput:
-                    cfg_controls = {
-                        control: self.convert_mapping(mapping, True)
-                        for control, mapping in cfg_controls.items()
-                    }
+                # Convert using current mode
+                cfg_controls = {
+                    control: self.convert_mapping(mapping, current_mode)
+                    for control, mapping in cfg_controls.items()
+                }
                 
                 # Update game_data with custom mappings
                 self.update_game_data_with_custom_mappings(game_data, cfg_controls)
@@ -5562,12 +5569,12 @@ controller xbox t		= """
             # Parse the custom config
             cfg_controls = self.parse_cfg_controls(self.custom_configs[self.current_game])
             
-            # Convert if XInput is enabled
-            if self.use_xinput:
-                cfg_controls = {
-                    control: self.convert_mapping(mapping, True)
-                    for control, mapping in cfg_controls.items()
-                }
+            # Convert based on current input mode
+            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            cfg_controls = {
+                control: self.convert_mapping(mapping, current_mode)
+                for control, mapping in cfg_controls.items()
+            }
             
             # Modify game_data to include custom mappings
             self.update_game_data_with_custom_mappings(game_data, cfg_controls)
@@ -5686,7 +5693,7 @@ controller xbox t		= """
         """Update game_data to include the custom control mappings with function-based organization"""
         if not cfg_controls and not hasattr(self, 'default_controls'):
             return
-            
+                
         # Debug output: Print all available cfg_controls
         print(f"Available custom mappings: {len(cfg_controls)}")
         for control, mapping in cfg_controls.items():
@@ -5716,9 +5723,10 @@ controller xbox t		= """
                 print(f"WARNING: {btn} missing from custom mappings")
                 # Add default mapping if available
                 if hasattr(self, 'default_controls') and btn in self.default_controls:
+                    # UPDATED: Use input_mode for conversion instead of use_xinput boolean
+                    current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
                     mapping = self.default_controls[btn]
-                    if self.use_xinput:
-                        mapping = self.convert_mapping(mapping, True)
+                    mapping = self.convert_mapping(mapping, current_mode)
                     print(f"  Adding default mapping for {btn}: {mapping}")
                     cfg_controls[btn] = mapping
         
@@ -5738,17 +5746,22 @@ controller xbox t		= """
         # Combine ROM-specific and default mappings
         all_mappings = {}
         
+        # Get current input mode or default to XInput if use_xinput is True
+        current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+        print(f"Using input mode: {current_mode} for mappings")
+        
         # First, add default mappings
         if hasattr(self, 'default_controls') and self.default_controls:
             for control, mapping in self.default_controls.items():
-                # Convert if XInput is enabled
-                if self.use_xinput:
-                    mapping = self.convert_mapping(mapping, True)
-                all_mappings[control] = {'mapping': mapping, 'source': 'Default CFG'}
+                # Convert based on current input mode
+                converted_mapping = self.convert_mapping(mapping, current_mode)
+                all_mappings[control] = {'mapping': converted_mapping, 'source': 'Default CFG'}
         
         # Then override with ROM-specific mappings
         for control, mapping in cfg_controls.items():
-            all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
+            # Make sure mapping is converted to the current mode
+            converted_mapping = self.convert_mapping(mapping, current_mode)
+            all_mappings[control] = {'mapping': converted_mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
         
         # Process each control in the game data
         for player in game_data.get('players', []):
@@ -5815,10 +5828,16 @@ controller xbox t		= """
                     label['cfg_mapping'] = True
                     
                     # NEW CODE: Extract target button from mapping for better display
-                    if self.use_xinput and 'XINPUT' in mapping_info['mapping']:
+                    # Update this to handle all input modes
+                    current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+                    
+                    if current_mode == 'xinput' and 'XINPUT' in mapping_info['mapping']:
                         # Extract the button part (e.g., XINPUT_1_X -> X Button)
                         label['target_button'] = self.get_friendly_xinput_name(mapping_info['mapping'])
-
+                    elif current_mode == 'keyboard' and 'KEYCODE' in mapping_info['mapping']:
+                        # Extract the key name for keyboard mappings
+                        key_name = mapping_info['mapping'].replace('KEYCODE_', '')
+                        label['target_button'] = f'Key {key_name}'
                     elif 'JOYCODE' in mapping_info['mapping']:
                         # Check if the mapping contains an OR statement
                         if " OR " in mapping_info['mapping']:
@@ -5967,7 +5986,6 @@ controller xbox t		= """
             print(f"Error saving settings: {e}")
             return False
 
-    # These helper methods ensure the toggle_xinput and toggle_hide_preview_buttons correctly update UI components
     def load_settings(self):
         """Load settings from JSON file in settings directory"""
         # Set sensible defaults
@@ -5976,7 +5994,8 @@ controller xbox t		= """
         self.hide_preview_buttons = False
         self.show_button_names = True
         self.use_xinput = True
-        self.xinput_only_mode = True  # Default to showing all controls
+        self.input_mode = 'xinput'  # New mode option
+        self.xinput_only_mode = True
         
         # Load custom settings if available
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
@@ -5999,10 +6018,7 @@ controller xbox t		= """
 
                 # Load hide preview buttons setting
                 if 'hide_preview_buttons' in settings:
-                    if isinstance(settings['hide_preview_buttons'], bool):
-                        self.hide_preview_buttons = settings['hide_preview_buttons']
-                    elif isinstance(settings['hide_preview_buttons'], int):
-                        self.hide_preview_buttons = bool(settings['hide_preview_buttons'])
+                    self.hide_preview_buttons = bool(settings.get('hide_preview_buttons', False))
                     
                     # Update toggle if it exists
                     if hasattr(self, 'hide_buttons_toggle'):
@@ -6011,33 +6027,23 @@ controller xbox t		= """
                         else:
                             self.hide_buttons_toggle.deselect()
                 
-                # Load XInput toggle setting
-                if 'use_xinput' in settings:
-                    if isinstance(settings['use_xinput'], bool):
-                        self.use_xinput = settings['use_xinput']
-                    elif isinstance(settings['use_xinput'], int):
-                        self.use_xinput = bool(settings['use_xinput'])
-                    
-                    # Update toggle if it exists
-                    if hasattr(self, 'xinput_toggle'):
-                        if self.use_xinput:
-                            self.xinput_toggle.select()
-                        else:
-                            self.xinput_toggle.deselect()
-                            
+                # Load input mode setting
+                if 'input_mode' in settings:
+                    self.input_mode = settings['input_mode']
+                    # For backwards compatibility
+                    self.use_xinput = (self.input_mode == 'xinput')
+                elif 'use_xinput' in settings:
+                    # Legacy setting
+                    self.use_xinput = bool(settings.get('use_xinput', True))
+                    self.input_mode = 'xinput' if self.use_xinput else 'joycode'
+                        
                 # Load show button names setting
                 if 'show_button_names' in settings:
-                    if isinstance(settings['show_button_names'], bool):
-                        self.show_button_names = settings['show_button_names']
-                    elif isinstance(settings['show_button_names'], int):
-                        self.show_button_names = bool(settings['show_button_names'])
-                
-                 # Load XInput Only Mode setting
+                    self.show_button_names = bool(settings.get('show_button_names', True))
+                    
+                # Load XInput Only Mode setting
                 if 'xinput_only_mode' in settings:
-                    if isinstance(settings['xinput_only_mode'], bool):
-                        self.xinput_only_mode = settings['xinput_only_mode']
-                    elif isinstance(settings['xinput_only_mode'], int):
-                        self.xinput_only_mode = bool(settings['xinput_only_mode'])
+                    self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
                     
                     # Update toggle if it exists
                     if hasattr(self, 'xinput_only_toggle'):
@@ -6057,9 +6063,40 @@ controller xbox t		= """
             'visible_control_types': self.visible_control_types,
             'hide_preview_buttons': self.hide_preview_buttons,
             'show_button_names': self.show_button_names,
-            'use_xinput': self.use_xinput
+            'input_mode': self.input_mode
         }
 
+    def save_settings(self):
+        """Save current settings to the standard settings file"""
+        settings = {
+            "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
+            "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
+            "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
+            "show_button_names": getattr(self, 'show_button_names', True),
+            "input_mode": getattr(self, 'input_mode', 'xinput'),  # New mode setting
+            "use_xinput": getattr(self, 'use_xinput', True),  # Keep for backwards compatibility
+            "xinput_only_mode": getattr(self, 'xinput_only_mode', True)
+        }
+        
+        print(f"Debug - saving settings: {settings}")
+        
+        try:
+            if hasattr(self, 'settings_path'):
+                # Ensure settings directory exists
+                os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
+                
+                # Save settings
+                with open(self.settings_path, 'w') as f:
+                    json.dump(settings, f, indent=2)
+                print(f"Settings saved to: {self.settings_path}")
+                return True
+            else:
+                print("Error: settings_path not available")
+                return False
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
+    
     def save_controls(self, rom_name, dialog, description_var, playercount_var, buttons_var, sticks_var, alternating_var, control_entries, custom_control_rows):
         """Save controls directly to gamedata.json with support for adding missing games and multi-word ROM names"""
         try:
@@ -6285,11 +6322,15 @@ controller xbox t		= """
             traceback.print_exc()
             return False
     
-    def convert_mapping(self, mapping: str, to_xinput: bool) -> str:
-        """Convert between JOYCODE and XInput mappings with better handling"""
+    def convert_mapping(self, mapping: str, to_mode: str = None) -> str:
+        """Convert between JOYCODE, XInput, and Keyboard mappings"""
         if not mapping:
             return mapping
             
+        # Determine target mode if not explicitly specified
+        if to_mode is None:
+            to_mode = getattr(self, 'input_mode', 'xinput')
+        
         # Extended mapping tables including analog axis mappings
         xinput_mappings = {
             # Standard buttons
@@ -6342,8 +6383,79 @@ controller xbox t		= """
         # Create reverse mapping for XINPUT to JOYCODE
         joycode_mappings = {v: k for k, v in xinput_mappings.items()}
         
+        # New keyboard mappings table
+        keyboard_mappings = {
+            # JOYCODE to keyboard mappings
+            'JOYCODE_1_BUTTON1': 'KEYCODE_Z',           # A Button -> Z
+            'JOYCODE_1_BUTTON2': 'KEYCODE_X',           # B Button -> X
+            'JOYCODE_1_BUTTON3': 'KEYCODE_A',           # X Button -> A
+            'JOYCODE_1_BUTTON4': 'KEYCODE_S',           # Y Button -> S
+            'JOYCODE_1_BUTTON5': 'KEYCODE_Q',           # Left Bumper -> Q
+            'JOYCODE_1_BUTTON6': 'KEYCODE_W',           # Right Bumper -> W
+            'JOYCODE_1_BUTTON7': 'KEYCODE_1',           # Left Trigger -> 1
+            'JOYCODE_1_BUTTON8': 'KEYCODE_2',           # Right Trigger -> 2
+            'JOYCODE_1_BUTTON9': 'KEYCODE_E',           # Left Stick Button -> E
+            'JOYCODE_1_BUTTON10': 'KEYCODE_R',          # Right Stick Button -> R
+            
+            # D-pad to arrow keys
+            'JOYCODE_1_HATUP': 'KEYCODE_UP',            # D-Pad Up -> Up Arrow
+            'JOYCODE_1_HATDOWN': 'KEYCODE_DOWN',        # D-Pad Down -> Down Arrow
+            'JOYCODE_1_HATLEFT': 'KEYCODE_LEFT',        # D-Pad Left -> Left Arrow
+            'JOYCODE_1_HATRIGHT': 'KEYCODE_RIGHT',      # D-Pad Right -> Right Arrow
+            
+            # Analog stick directions
+            'JOYCODE_1_YAXIS_UP_SWITCH': 'KEYCODE_UP',     # Left Stick Up -> Up Arrow
+            'JOYCODE_1_YAXIS_DOWN_SWITCH': 'KEYCODE_DOWN', # Left Stick Down -> Down Arrow
+            'JOYCODE_1_XAXIS_LEFT_SWITCH': 'KEYCODE_LEFT', # Left Stick Left -> Left Arrow
+            'JOYCODE_1_XAXIS_RIGHT_SWITCH': 'KEYCODE_RIGHT', # Left Stick Right -> Right Arrow
+            
+            # Player 2 mappings
+            'JOYCODE_2_BUTTON1': 'KEYCODE_C',           # P2 A Button -> C
+            'JOYCODE_2_BUTTON2': 'KEYCODE_V',           # P2 B Button -> V
+            'JOYCODE_2_BUTTON3': 'KEYCODE_D',           # P2 X Button -> D
+            'JOYCODE_2_BUTTON4': 'KEYCODE_F',           # P2 Y Button -> F
+            'JOYCODE_2_BUTTON5': 'KEYCODE_E',           # P2 Left Bumper -> E
+            'JOYCODE_2_BUTTON6': 'KEYCODE_R',           # P2 Right Bumper -> R
+            'JOYCODE_2_BUTTON7': 'KEYCODE_3',           # P2 Left Trigger -> 3
+            'JOYCODE_2_BUTTON8': 'KEYCODE_4',           # P2 Right Trigger -> 4
+            'JOYCODE_2_HATUP': 'KEYCODE_I',             # P2 D-Pad Up -> I
+            'JOYCODE_2_HATDOWN': 'KEYCODE_K',           # P2 D-Pad Down -> K
+            'JOYCODE_2_HATLEFT': 'KEYCODE_J',           # P2 D-Pad Left -> J
+            'JOYCODE_2_HATRIGHT': 'KEYCODE_L',          # P2 D-Pad Right -> L
+            
+            # XInput to keyboard mappings - derived from joycode mappings
+            'XINPUT_1_A': 'KEYCODE_Z',                  # A Button -> Z
+            'XINPUT_1_B': 'KEYCODE_X',                  # B Button -> X
+            'XINPUT_1_X': 'KEYCODE_A',                  # X Button -> A
+            'XINPUT_1_Y': 'KEYCODE_S',                  # Y Button -> S
+            'XINPUT_1_SHOULDER_L': 'KEYCODE_Q',         # Left Bumper -> Q
+            'XINPUT_1_SHOULDER_R': 'KEYCODE_W',         # Right Bumper -> W
+            'XINPUT_1_TRIGGER_L': 'KEYCODE_1',          # Left Trigger -> 1
+            'XINPUT_1_TRIGGER_R': 'KEYCODE_2',          # Right Trigger -> 2
+            'XINPUT_1_THUMB_L': 'KEYCODE_E',            # Left Stick Button -> E
+            'XINPUT_1_THUMB_R': 'KEYCODE_R',            # Right Stick Button -> R
+            'XINPUT_1_DPAD_UP': 'KEYCODE_UP',           # D-Pad Up -> Up Arrow
+            'XINPUT_1_DPAD_DOWN': 'KEYCODE_DOWN',       # D-Pad Down -> Down Arrow
+            'XINPUT_1_DPAD_LEFT': 'KEYCODE_LEFT',       # D-Pad Left -> Left Arrow
+            'XINPUT_1_DPAD_RIGHT': 'KEYCODE_RIGHT',     # D-Pad Right -> Right Arrow
+            'XINPUT_1_LEFTY_NEG': 'KEYCODE_UP',         # Left Stick Up -> Up Arrow
+            'XINPUT_1_LEFTY_POS': 'KEYCODE_DOWN',       # Left Stick Down -> Down Arrow
+            'XINPUT_1_LEFTX_NEG': 'KEYCODE_LEFT',       # Left Stick Left -> Left Arrow
+            'XINPUT_1_LEFTX_POS': 'KEYCODE_RIGHT',      # Left Stick Right -> Right Arrow
+            
+            # Player 2 XInput mappings
+            'XINPUT_2_A': 'KEYCODE_C',                  # P2 A -> C
+            'XINPUT_2_B': 'KEYCODE_V',                  # P2 B -> V
+            'XINPUT_2_X': 'KEYCODE_D',                  # P2 X -> D
+            'XINPUT_2_Y': 'KEYCODE_F',                  # P2 Y -> F
+            'XINPUT_2_DPAD_UP': 'KEYCODE_I',            # P2 Up -> I
+            'XINPUT_2_DPAD_DOWN': 'KEYCODE_K',          # P2 Down -> K
+            'XINPUT_2_DPAD_LEFT': 'KEYCODE_J',          # P2 Left -> J
+            'XINPUT_2_DPAD_RIGHT': 'KEYCODE_L',         # P2 Right -> L
+        }
+        
         # Debug information
-        print(f"Converting mapping: {mapping} to_xinput={to_xinput}")
+        print(f"Converting mapping: {mapping} to mode={to_mode}")
         
         # If mapping contains multiple options (separated by OR)
         if " OR " in mapping:
@@ -6351,61 +6463,107 @@ controller xbox t		= """
             # Try to convert each part and return the first successful conversion
             for part in parts:
                 part = part.strip()
-                if to_xinput and part in xinput_mappings:
-                    print(f"Found match in xinput_mappings: {part} -> {xinput_mappings[part]}")
-                    return xinput_mappings[part]
-                elif not to_xinput and part in joycode_mappings:
-                    print(f"Found match in joycode_mappings: {part} -> {joycode_mappings[part]}")
-                    return joycode_mappings[part]
-            
-            # If no exact match, try to do a partial match for SWITCH controls
-            if to_xinput:
-                for part in parts:
-                    part = part.strip()
-                    if "JOYCODE" in part and "SWITCH" in part:
-                        for key in xinput_mappings:
-                            if key in part:
-                                print(f"Partial match: {part} -> {xinput_mappings[key]}")
-                                return xinput_mappings[key]
-                                
-            # If no parts could be converted, return the first JOYCODE part if any
-            for part in parts:
-                part = part.strip()
-                if "JOYCODE" in part:
-                    print(f"Using first JOYCODE part: {part}")
+                
+                # Determine source mode for this part
+                source_mode = ''
+                if part.startswith('JOYCODE'):
+                    source_mode = 'joycode'
+                elif part.startswith('XINPUT'):
+                    source_mode = 'xinput'
+                elif part.startswith('KEYCODE'):
+                    source_mode = 'keyboard'
+                    
+                # Skip if it's already in target mode
+                if source_mode == to_mode:
                     return part
                     
-            # Otherwise return the first part
-            print(f"No match found, using first part: {parts[0]}")
+                # Try converting based on source and target
+                if source_mode == 'joycode' and to_mode == 'xinput':
+                    if part in xinput_mappings:
+                        return xinput_mappings[part]
+                elif source_mode == 'joycode' and to_mode == 'keyboard':
+                    if part in keyboard_mappings:
+                        return keyboard_mappings[part]
+                elif source_mode == 'xinput' and to_mode == 'joycode':
+                    if part in joycode_mappings:
+                        return joycode_mappings[part]
+                elif source_mode == 'xinput' and to_mode == 'keyboard':
+                    if part in keyboard_mappings:
+                        return keyboard_mappings[part]
+                elif source_mode == 'keyboard' and to_mode == 'joycode':
+                    # Find the keyboard mapping that matches
+                    for joycode, keycode in keyboard_mappings.items():
+                        if keycode == part and joycode.startswith('JOYCODE'):
+                            return joycode
+                elif source_mode == 'keyboard' and to_mode == 'xinput':
+                    # Find the keyboard mapping that matches
+                    for xinput, keycode in keyboard_mappings.items():
+                        if keycode == part and xinput.startswith('XINPUT'):
+                            return xinput
+                
+            # If no conversion found, return the first part
+            print(f"No matching conversion found for any part of: {mapping}")
             return parts[0].strip()
         
         # Simple conversion for a single mapping
-        if to_xinput:
-            if mapping in xinput_mappings:
-                print(f"Direct xinput mapping: {mapping} -> {xinput_mappings[mapping]}")
-                return xinput_mappings[mapping]
-            else:
-                # Check if this is already in XInput format
-                if mapping.startswith('XINPUT_'):
-                    return mapping
-                # Try a partial match for SWITCH controls
-                if "JOYCODE" in mapping and "SWITCH" in mapping:
-                    for key in xinput_mappings:
-                        if key in mapping:
-                            print(f"Partial match: {mapping} -> {xinput_mappings[key]}")
-                            return xinput_mappings[key]
-                print(f"No xinput mapping found for: {mapping}")
-                return mapping
+        source_mode = ''
+        if mapping.startswith('JOYCODE'):
+            source_mode = 'joycode'
+        elif mapping.startswith('XINPUT'):
+            source_mode = 'xinput'
+        elif mapping.startswith('KEYCODE'):
+            source_mode = 'keyboard'
         else:
+            # Unknown format, return as is
+            return mapping
+        
+        # Skip if it's already in the target mode
+        if source_mode == to_mode:
+            return mapping
+        
+        # Convert based on source and target
+        if source_mode == 'joycode' and to_mode == 'xinput':
+            if mapping in xinput_mappings:
+                print(f"  Converting JOYCODE->XINPUT: {mapping} -> {xinput_mappings[mapping]}")
+                return xinput_mappings[mapping]
+        elif source_mode == 'joycode' and to_mode == 'keyboard':
+            if mapping in keyboard_mappings:
+                print(f"  Converting JOYCODE->KEYBOARD: {mapping} -> {keyboard_mappings[mapping]}")
+                return keyboard_mappings[mapping]
+        elif source_mode == 'xinput' and to_mode == 'joycode':
             if mapping in joycode_mappings:
-                print(f"Direct joycode mapping: {mapping} -> {joycode_mappings[mapping]}")
+                print(f"  Converting XINPUT->JOYCODE: {mapping} -> {joycode_mappings[mapping]}")
                 return joycode_mappings[mapping]
-            else:
-                # Check if this is already in JOYCODE format
-                if mapping.startswith('JOYCODE_'):
-                    return mapping
-                print(f"No joycode mapping found for: {mapping}")
-                return mapping
+        elif source_mode == 'xinput' and to_mode == 'keyboard':
+            if mapping in keyboard_mappings:
+                print(f"  Converting XINPUT->KEYBOARD: {mapping} -> {keyboard_mappings[mapping]}")
+                return keyboard_mappings[mapping]
+        elif source_mode == 'keyboard' and to_mode == 'joycode':
+            # Find the keyboard mapping that matches
+            for joycode, keycode in keyboard_mappings.items():
+                if keycode == mapping and joycode.startswith('JOYCODE'):
+                    print(f"  Converting KEYBOARD->JOYCODE: {mapping} -> {joycode}")
+                    return joycode
+        elif source_mode == 'keyboard' and to_mode == 'xinput':
+            # Find the keyboard mapping that matches
+            for xinput, keycode in keyboard_mappings.items():
+                if keycode == mapping and xinput.startswith('XINPUT'):
+                    print(f"  Converting KEYBOARD->XINPUT: {mapping} -> {xinput}")
+                    return xinput
+        
+        # If we got here, check if it's already in a format that includes parts of the target mode
+        if source_mode == 'joycode' and "SWITCH" in mapping:
+            for key, value in xinput_mappings.items():
+                if key in mapping:
+                    converted = xinput_mappings[key]
+                    if to_mode == 'xinput':
+                        return converted
+                    elif to_mode == 'keyboard' and converted in keyboard_mappings:
+                        return keyboard_mappings[converted]
+        
+        # No conversion found, return original
+        print(f"No direct conversion found for: {mapping} to {to_mode}")
+        return mapping
 
     def format_control_name(self, control_name: str) -> str:
         """Convert MAME control names to friendly names based on input type"""
@@ -6474,8 +6632,23 @@ controller xbox t		= """
     def format_mapping_display(self, mapping: str) -> str:
         """Format the mapping string for display using friendly names when available."""
         
+        # Handle Keyboard mappings
+        if mapping.startswith("KEYCODE"):
+            key_name = mapping.replace("KEYCODE_", "")
+            # Special case for arrow keys
+            if key_name == "UP":
+                return "Keyboard: Up Arrow"
+            elif key_name == "DOWN":
+                return "Keyboard: Down Arrow"
+            elif key_name == "LEFT":
+                return "Keyboard: Left Arrow"
+            elif key_name == "RIGHT":
+                return "Keyboard: Right Arrow"
+            # For other keys, just show the key name
+            return f"Keyboard: {key_name}"
+        
         # Handle XInput mappings with helper
-        if mapping.startswith("XINPUT"):
+        elif mapping.startswith("XINPUT"):
             return self.get_friendly_xinput_name(mapping)
 
         # Handle JOYCODE mappings (your existing logic, preserved)
@@ -6509,10 +6682,6 @@ controller xbox t		= """
                 else:
                     remainder = '_'.join(parts[3:])
                     return f"Joy {joy_num} {control_type} {remainder}"
-
-        # Optional: format KEYCODE mappings
-        elif "KEYCODE" in mapping:
-            return mapping.replace("KEYCODE_", "").capitalize()
 
         # Fallback
         return mapping
@@ -6587,11 +6756,125 @@ controller xbox t		= """
                 # Ensure the selected item is visible
                 self.game_list.see(f"{line_index}.0")
 
+    def toggle_input_mode(self):
+        """Cycle between input modes: XInput → JOYCODE → Keyboard → XInput with enforced refresh"""
+        # Get current mode with explicit default
+        current_mode = getattr(self, 'input_mode', 'xinput')
+        print(f"Current input mode before toggle: {current_mode}")
+        
+        # Force explicit mode cycling
+        if current_mode == 'xinput':
+            new_mode = 'joycode'
+            mode_text = "JOYCODE Mode"
+            mode_color = "#888888"  # Gray for JOYCODE
+        elif current_mode == 'joycode':
+            new_mode = 'keyboard'
+            mode_text = "Keyboard Mode" 
+            mode_color = self.theme_colors["secondary"]  # Secondary color for Keyboard
+        else:  # 'keyboard' or any other value
+            new_mode = 'xinput'
+            mode_text = "XInput Mode"
+            mode_color = self.theme_colors["primary"]  # Primary color for XInput
+        
+        print(f"Switching to new input mode: {new_mode}")
+        
+        # Update the class attribute
+        self.input_mode = new_mode
+        
+        # Legacy compatibility - maintain use_xinput flag
+        self.use_xinput = (new_mode == 'xinput')
+        print(f"Updated use_xinput flag: {self.use_xinput}")
+        
+        # Update the button text and color
+        if hasattr(self, 'input_mode_button'):
+            self.input_mode_button.configure(
+                text=mode_text,
+                fg_color=mode_color,
+                hover_color=self.theme_colors["button_hover"]
+            )
+            print(f"Updated input mode button: {mode_text}")
+        
+        # Save setting to config file immediately
+        self.save_settings()
+        
+        # COMPLETE DISPLAY REFRESH
+        # First, clear the entire cache to ensure fresh data with new mapping type
+        if hasattr(self, 'rom_data_cache'):
+            self.rom_data_cache = {}
+            print(f"Cleared entire ROM data cache due to Input Mode change: {new_mode}")
+        
+        # Get the currently selected item regardless of how it was selected
+        current_rom = self.current_game
+        if current_rom:
+            print(f"Forcing complete refresh for current ROM: {current_rom}")
+            
+            # Clear existing controls
+            if hasattr(self, 'control_frame'):
+                for widget in self.control_frame.winfo_children():
+                    widget.destroy()
+            
+            # Force complete reload with explicit mode
+            # This bypasses caching mechanisms
+            try:
+                # Get fresh game data
+                game_data = None
+                
+                # Use database if available
+                if os.path.exists(self.db_path):
+                    game_data = self.get_game_data_from_db(current_rom)
+                
+                # Fall back to JSON lookup
+                if not game_data and hasattr(self, 'gamedata_json') and self.gamedata_json:
+                    # Check direct match
+                    if current_rom in self.gamedata_json:
+                        game_data = self.get_game_data(current_rom)
+                    # Check clone
+                    elif hasattr(self, 'parent_lookup') and current_rom in self.parent_lookup:
+                        parent_rom = self.parent_lookup[current_rom]
+                        if parent_rom in self.gamedata_json:
+                            game_data = self.get_game_data(current_rom)
+                
+                if game_data:
+                    # Process with custom mappings
+                    cfg_controls = {}
+                    if current_rom in self.custom_configs:
+                        # Parse the custom config
+                        cfg_controls = self.parse_cfg_controls(self.custom_configs[current_rom])
+                        
+                        # Convert to current mode explicitly
+                        cfg_controls = {
+                            control: self.convert_mapping(mapping, new_mode)
+                            for control, mapping in cfg_controls.items()
+                        }
+                        
+                        # Update game_data with custom mappings
+                        self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                
+                # Force display update
+                self.display_game_info(current_rom)
+                
+                # Re-select in listbox
+                if hasattr(self, 'game_listbox') and hasattr(self, 'game_list_data'):
+                    for i, (rom_name, _) in enumerate(self.game_list_data):
+                        if rom_name == current_rom:
+                            self.game_listbox.selection_clear(0, tk.END)
+                            self.game_listbox.selection_set(i)
+                            self.game_listbox.see(i)
+                            break
+                    
+            except Exception as e:
+                print(f"Error refreshing display after mode toggle: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Return the new mode for confirmation
+        return new_mode
+
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """Display controls using a canvas-based approach for significantly better performance"""
         row = start_row
         
-        # Get romname from game_data
+        # Get romname from game_dataf
         romname = game_data.get('romname', '')
         
         # Clear existing controls first
@@ -6744,25 +7027,35 @@ controller xbox t		= """
         # Configure grid for full width expansion
         controls_card.columnconfigure(0, weight=1)
         
-        # Add XInput toggle above the Controller Mappings title
+        # Replace the XInput toggle with a cycling button in the display_controls_table method
         xinput_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
         xinput_frame.pack(fill="x", padx=15, pady=(15, 0))
-        
-        # XInput toggle switch
-        self.xinput_toggle = ctk.CTkSwitch(
+
+        # Determine current mode and set initial button properties
+        current_mode = getattr(self, 'input_mode', 'xinput')
+        if current_mode == 'xinput':
+            mode_text = "XInput Mode"
+            mode_color = self.theme_colors["primary"]
+        elif current_mode == 'joycode':
+            mode_text = "JOYCODE Mode"
+            mode_color = "#888888"
+        else:  # keyboard
+            mode_text = "Keyboard Mode"
+            mode_color = self.theme_colors["secondary"]
+
+        # Print the initial mode for debugging
+        print(f"Initial input mode button state: {current_mode} -> {mode_text}")
+
+        # Create the button with the correct initial state
+        self.input_mode_button = ctk.CTkButton(
             xinput_frame,
-            text="Use XInput Mappings",
-            command=self.toggle_xinput,
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"]
+            text=mode_text,
+            command=self.toggle_input_mode,
+            fg_color=mode_color,
+            hover_color=self.theme_colors["button_hover"],
+            width=150  # Make it a bit wider for the text
         )
-        # Set default state based on current use_xinput value
-        if hasattr(self, 'use_xinput') and self.use_xinput:
-            self.xinput_toggle.select()
-        else:
-            self.xinput_toggle.deselect()
-        
-        self.xinput_toggle.pack(anchor="w")
+        self.input_mode_button.pack(anchor="w")
         
         # Create a frame for title and edit button
         title_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
@@ -6797,18 +7090,19 @@ controller xbox t		= """
         header_frame.pack(fill="x", pady=(0, 5))
         header_frame.pack_propagate(False)  # Fix the height
         
-        # Header column widths (in pixels)
-        col_widths = [300, 250, 200]  # Hardcoded for better performance
-        
-        # Create header labels
-        header_titles = ["Control", "Game Action", "Mapping Source"]
-        
+        # Header column widths (in pixels) - UPDATED for 4 columns
+        col_widths = [180, 200, 180, 160]  # Adjusted width for 4 columns
+
+        # Create header labels - UPDATED for 4 columns with improved alignment
+        header_titles = ["MAME Control", "Controller Input", "Game Action", "Mapping Source"]
+
+        # Calculate consistent x positions for both headers and content
+        x_positions = [15]  # Start with padding for first column
+        for i in range(1, len(header_titles)):
+            x_positions.append(x_positions[i-1] + col_widths[i-1] + 15)  # Previous position + width + padding
+
+        # Place header labels using consistent positions
         for i, title in enumerate(header_titles):
-            # Position offset for each column
-            x_pos = 15  # Start with padding
-            for j in range(i):
-                x_pos += col_widths[j] + 15  # Add previous columns + padding
-            
             header_label = ctk.CTkLabel(
                 header_frame,
                 text=title,
@@ -6817,7 +7111,7 @@ controller xbox t		= """
                 anchor="w",
                 justify="left"
             )
-            header_label.place(x=x_pos, y=5)
+            header_label.place(x=x_positions[i], y=5)
         
         # Collect only Player 1 controls
         all_controls = []
@@ -6945,8 +7239,49 @@ controller xbox t		= """
             # Use a single consistent background color matching card_bg
             bg_color = self.theme_colors["card_bg"]
             
+            # When creating each row:
             for i in range(visible_rows):
                 control = all_controls[i]
+                control_name = control['name']
+                action = control['action']
+                
+                # Process mapping with OR statements
+                mapping_value = control.get('mapping', '')
+                primary_mapping = ""
+                all_mappings = []
+                
+                if " OR " in mapping_value:
+                    mapping_parts = mapping_value.split(" OR ")
+                    
+                    # Get all formatted mappings for tooltip
+                    for part in mapping_parts:
+                        part = part.strip()
+                        formatted_part = self.format_mapping_display(part)
+                        all_mappings.append(formatted_part)
+                        
+                        # Set primary mapping (preferring XINPUT in XINPUT mode)
+                        if not primary_mapping:
+                            if self.use_xinput and "XINPUT" in part:
+                                primary_mapping = self.get_friendly_xinput_name(part)
+                            elif self.use_xinput and "JOYCODE" in part:
+                                # Try to convert JOYCODE to XINPUT
+                                converted = self.convert_mapping(part, True)
+                                if "XINPUT" in converted:
+                                    primary_mapping = self.get_friendly_xinput_name(converted)
+                    
+                    # If no XINPUT mapping found, use first mapping as primary
+                    if not primary_mapping and all_mappings:
+                        primary_mapping = all_mappings[0]
+                        
+                    # Create display text with counter
+                    if len(all_mappings) > 1:
+                        display_text = f"{primary_mapping} (+{len(all_mappings)-1})"
+                    else:
+                        display_text = primary_mapping
+                else:
+                    # Single mapping
+                    display_text = self.format_mapping_display(mapping_value)
+                    all_mappings = [display_text]
                 
                 # Create row container with consistent background
                 row_height = 40
@@ -6958,53 +7293,73 @@ controller xbox t		= """
                 row_frame.pack(fill=tk.X, pady=1, expand=True)
                 row_frame.pack_propagate(False)  # Keep fixed height
                 
-                # Display name for the control
+                # Column 1: Raw MAME Control Name (new column!)
+                control_name = control['name']
+                
+                # Column 2: Display Name (Controller Input)
                 display_name = control.get('display_name', self.format_control_name(control['name']))
+                
+                # Column 3: Game Action
                 action = control['action']
+                
+                # Column 4: Source (optional - could keep or remove this)
                 source = control['source']
                 
-                # Direct column placement with pixel positioning - MUCH faster than grid/pack
-                # Use native tk.Label (not CTk) but with consistent fonts matching CTk styling
+                # Column 1: Raw MAME Control Name
                 label1 = tk.Label(
                     row_frame,
-                    text=display_name,
-                    font=("Arial", 13),  # Match CTk font style
+                    text=control_name,
+                    font=("Consolas", 12),
+                    anchor="w",
+                    justify="left",
+                    background=bg_color,
+                    foreground="#888888"
+                )
+                label1.place(x=x_positions[0], y=10, width=col_widths[0])
+                
+                # Column 2: Controller Input with hover tooltip
+                label2 = tk.Label(
+                    row_frame,
+                    text=display_text,
+                    font=("Arial", 13),
+                    anchor="w",
+                    justify="left",
+                    background=bg_color,
+                    foreground=self.theme_colors["primary"]
+                )
+                label2.place(x=x_positions[1], y=10, width=col_widths[1])
+                
+                # Column 3: Game Action
+                label3 = tk.Label(
+                    row_frame,
+                    text=action,
+                    font=("Arial", 13, "bold"),
                     anchor="w",
                     justify="left",
                     background=bg_color,
                     foreground=self.theme_colors["text"]
                 )
-                label1.place(x=15, y=10, width=col_widths[0])
+                label3.place(x=x_positions[2], y=10, width=col_widths[2])
                 
-                label2 = tk.Label(
-                    row_frame,
-                    text=action,
-                    font=("Arial", 13, "bold"),  # Match CTk font style with bold
-                    anchor="w",
-                    justify="left",
-                    background=bg_color,
-                    foreground=self.theme_colors["primary"]  # Use primary color for action
-                )
-                label2.place(x=15 + col_widths[0], y=10, width=col_widths[1])
-                
-                # Source color based on type
+                # Column 4: Mapping Source - with appropriate styling based on source
+                # Determine source color based on type
                 if "ROM CFG" in source:
-                    source_color = self.theme_colors["success"]
+                    source_color = self.theme_colors["success"]  # Green for ROM CFG
                 elif "Default CFG" in source:
-                    source_color = self.theme_colors["primary"]
+                    source_color = self.theme_colors["primary"]  # Primary color for Default CFG
                 else:
-                    source_color = "#888888"  # Game Data
-                
-                label3 = tk.Label(
+                    source_color = "#888888"  # Gray for Game Data
+                    
+                label4 = tk.Label(
                     row_frame,
                     text=source,
-                    font=("Arial", 13),  # Match CTk font style
+                    font=("Arial", 12),
                     anchor="w",
                     justify="left",
                     background=bg_color,
                     foreground=source_color
                 )
-                label3.place(x=15 + col_widths[0] + col_widths[1], y=10, width=col_widths[2])
+                label4.place(x=x_positions[3], y=10, width=col_widths[3])
         
         # Update the canvas scroll region
         def update_canvas_width(event=None):
@@ -7511,6 +7866,11 @@ controller xbox t		= """
                 self.game_list_data.append((rom, display_text))
                 list_display_items.append(display_text)
             
+            # Remember current selection if any
+            current_selection = None
+            if hasattr(self, 'current_game') and self.current_game:
+                current_selection = self.current_game
+            
             # Update the listbox
             self.game_listbox.delete(0, tk.END)
             for item in list_display_items:
@@ -7528,11 +7888,39 @@ controller xbox t		= """
             title = f"{view_titles.get(self.current_view, 'ROMs')} (filtered: {len(filtered_roms)})"
             self.update_list_title(title)
             
+            # Try to re-select previously selected ROM if it's in the filtered results
+            if current_selection:
+                found_index = None
+                for i, (rom_name, _) in enumerate(self.game_list_data):
+                    if rom_name == current_selection:
+                        found_index = i
+                        break
+                
+                if found_index is not None:
+                    # Clear any existing selection
+                    self.game_listbox.selection_clear(0, tk.END)
+                    
+                    # Select the item
+                    self.game_listbox.selection_set(found_index)
+                    self.game_listbox.see(found_index)
+                    self.game_listbox.activate(found_index)
+                    
+                    # Force refresh with current input mode
+                    rom_name = self.game_list_data[found_index][0]
+                    
+                    # Clear cache to force refresh with current input mode
+                    if hasattr(self, 'rom_data_cache') and rom_name in self.rom_data_cache:
+                        print(f"Clearing cache for {rom_name} to ensure refresh with current input mode")
+                        del self.rom_data_cache[rom_name]
+                    
+                    # Update the display with current input mode
+                    self.after(50, lambda: self.display_game_info(rom_name))
+                
         except Exception as e:
             print(f"Error in search filtering: {e}")
             import traceback
             traceback.print_exc()
-    
+
     # Update scan_roms_directory method 
     def scan_roms_directory(self):
         """Scan the roms directory for available games with improved path handling"""
