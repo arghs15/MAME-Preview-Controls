@@ -1535,7 +1535,7 @@ class PreviewWindow(QMainWindow):
             os.makedirs(self.settings_dir, exist_ok=True)
             
             # Try to load existing settings first
-            settings_file = os.path.join(self.settings_dir, "global_text_settings.json")
+            settings_file = os.path.join(self.settings_dir, "text_appearance_settings.json")
             current_settings = {}
             
             if os.path.exists(settings_file):
