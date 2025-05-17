@@ -2864,21 +2864,51 @@ class PreviewWindow(QMainWindow):
         return readable
     
     def toggle_controls_view(self):
-        """Toggle between normal game controls, XInput controls, and specialized controls"""
+        """Toggle between control views with simple include_specialized setting"""
+        # SIMPLE FLAG: Set to False to exclude specialized controls from rotation, True to include them
+        include_specialized = False  # <-- Easy to change this single line
+        
         # Check what's currently showing
         showing_xinput = hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls
         showing_specialized = hasattr(self, 'showing_specialized_controls') and self.showing_specialized_controls
         
         if showing_xinput:
-            # Switch to specialized controls
-            self.showing_all_xinput_controls = False
-            self.show_specialized_controls()
-            
-            # Update button text
-            if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Normal Controls")
+            if include_specialized:
+                # Switch to specialized controls
+                self.showing_all_xinput_controls = False
+                self.show_specialized_controls()
                 
-        elif showing_specialized:
+                # Update button text for NEXT state (normal)
+                if hasattr(self, 'controls_mode_button'):
+                    self.controls_mode_button.setText("Normal Controls")
+            else:
+                # Skip specialized and go back to normal
+                self.showing_all_xinput_controls = False
+                
+                # Clear ALL existing controls first
+                for control_name in list(self.control_labels.keys()):
+                    # Remove the control from the canvas
+                    if control_name in self.control_labels:
+                        if 'label' in self.control_labels[control_name]:
+                            self.control_labels[control_name]['label'].deleteLater()
+                        del self.control_labels[control_name]
+
+                # Clear collections
+                self.control_labels = {}
+                
+                # Reload the current game controls from scratch
+                self.create_control_labels()
+                
+                # Force apply the font after recreating controls
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self.apply_text_settings)
+                QTimer.singleShot(200, self.force_resize_all_labels)
+                
+                # Update button text for NEXT state (XInput)
+                if hasattr(self, 'controls_mode_button'):
+                    self.controls_mode_button.setText("XInput Controls")
+                    
+        elif showing_specialized and include_specialized:
             # Switch back to normal game controls
             self.showing_specialized_controls = False
             
@@ -2896,23 +2926,26 @@ class PreviewWindow(QMainWindow):
             # Reload the current game controls from scratch
             self.create_control_labels()
             
-            # CRITICAL FIX: Force apply the font after recreating controls
+            # Force apply the font after recreating controls
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(100, self.apply_text_settings)
             QTimer.singleShot(200, self.force_resize_all_labels)
             
-            # Update button text
+            # Update button text for NEXT state (XInput)
             if hasattr(self, 'controls_mode_button'):
                 self.controls_mode_button.setText("XInput Controls")
-                
         else:
-            # If neither specialized nor xinput is showing, we must be in normal mode
-            # so switch to XInput controls view
+            # If showing normal controls, switch to XInput
             self.show_all_xinput_controls()
             
-            # Update button text
+            # Update button text based on the include_specialized flag
             if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Special Controls")
+                if include_specialized:
+                    # If specialized is included, the next state will be specialized
+                    self.controls_mode_button.setText("Special Controls")
+                else:
+                    # Otherwise, next state will be normal
+                    self.controls_mode_button.setText("Normal Controls")
     
     # 2. Update the show_all_xinput_controls method to only show standard XInput controls
     def show_all_xinput_controls(self):
