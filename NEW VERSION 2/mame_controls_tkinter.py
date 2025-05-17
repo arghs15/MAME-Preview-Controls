@@ -355,7 +355,7 @@ class MAMEControlConfig(ctk.CTk):
             self.configure(fg_color=self.theme_colors["background"])
             
             # Initialize core attributes needed for both modes
-            self.visible_control_types = ["BUTTON", "JOYSTICK", "DIAL", "PEDAL"]
+            self.visible_control_types = ["BUTTON", "JOYSTICK", "DIAL", "PEDAL", "AD_STICK", "TRACKBALL", "LIGHTGUN", "MOUSE"]
             self.default_controls = {}
             self.gamedata_json = {}
             self.available_roms = set()
@@ -5560,11 +5560,11 @@ controller xbox t		= """
         """Filter game_data to only include XInput-compatible controls"""
         if not game_data:
             return game_data
-            
+                
         # Make a copy to avoid modifying the original
         import copy
         filtered_data = copy.deepcopy(game_data)
-        
+            
         # Define strictly which controls are valid in XInput mode
         xinput_controls = {
             'P1_BUTTON1', 'P1_BUTTON2', 'P1_BUTTON3', 'P1_BUTTON4',
@@ -5573,7 +5573,12 @@ controller xbox t		= """
             'P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT',
             'P1_JOYSTICKRIGHT_UP', 'P1_JOYSTICKRIGHT_DOWN', 'P1_JOYSTICKRIGHT_LEFT', 'P1_JOYSTICKRIGHT_RIGHT',
             'P1_DPAD_UP', 'P1_DPAD_DOWN', 'P1_DPAD_LEFT', 'P1_DPAD_RIGHT',
-            'P1_START', 'P1_SELECT'
+            'P1_START', 'P1_SELECT',
+            # Add these analog controls that were missing
+            'P1_AD_STICK_X', 'P1_AD_STICK_Y', 'P1_AD_STICK_Z',
+            'P1_DIAL', 'P1_DIAL_V', 'P1_PADDLE', 'P1_PEDAL', 'P1_PEDAL2',
+            'P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y',
+            'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_POSITIONAL'
         }
         
         # For each player, filter labels to only XInput controls
@@ -7265,27 +7270,35 @@ controller xbox t		= """
             )
             header_label.place(x=x_positions[i], y=5)
         
-        # Collect only Player 1 controls
+        # When collecting controls, add this debug print
         all_controls = []
-
-        # Debug print to see what's in game_data
-        print(f"DEBUG: Game data for {romname}: {game_data.keys()}")
-        print(f"DEBUG: Players in game data: {len(game_data.get('players', []))}")
-
+        print(f"DEBUG: Starting to collect Player 1 controls")
+        
         for player in game_data.get('players', []):
             player_num = player.get('number')
-            print(f"DEBUG: Processing player {player_num} with {len(player.get('labels', []))} controls")
+            print(f"DEBUG: Player {player_num} has {len(player.get('labels', []))} labels")
             
             if player.get('number') == 1:  # Only include Player 1
                 for label in player.get('labels', []):
-                    # Debug print to see each control being processed
-                    print(f"DEBUG: Found P1 control: {label.get('name', '?')}: {label.get('value', '?')}")
-                    
-                    # Add control to our list
+                    # Add debug information
                     control_name = label['name']
                     action = label['value']
+                    print(f"DEBUG: Processing control {control_name}: {action}")
                     
-                    # Determine mapping information
+                    # For AD_STICK controls, ensure they're processed
+                    if "AD_STICK" in control_name:
+                        print(f"DEBUG: Found AD_STICK control: {control_name}")
+                        # Force flag to true for these controls
+                        label['is_custom'] = control_name in cfg_controls
+                        # Set display mode to ensure it shows up
+                        if "AD_STICK_X" in control_name:
+                            label['display_style'] = 'move_horizontal'
+                        elif "AD_STICK_Y" in control_name:
+                            label['display_style'] = 'move_vertical'
+                        elif "AD_STICK_Z" in control_name:
+                            label['display_style'] = 'analog_input'
+                    
+                    # Determine mapping information - rest of the code remains the same
                     is_custom = control_name in cfg_controls
                     is_default = not is_custom and hasattr(self, 'default_controls') and control_name in self.default_controls
                     
@@ -7390,17 +7403,26 @@ controller xbox t		= """
             
             # Use a single consistent background color matching card_bg
             bg_color = self.theme_colors["card_bg"]
-            
+
             # When creating each row:
             for i in range(visible_rows):
                 control = all_controls[i]
                 control_name = control['name']
                 action = control['action']
                 
-                # Process mapping with OR statements or increment/decrement
+                # Special case for analog controls which may not have mappings
+                is_analog_control = ("AD_STICK" in control_name or 
+                                    "DIAL" in control_name or 
+                                    "PEDAL" in control_name or 
+                                    "TRACKBALL" in control_name or
+                                    "LIGHTGUN" in control_name or
+                                    "MOUSE" in control_name)
+                
+                # Process mapping with OR statements or increment/decrement pairs
                 mapping_value = control.get('mapping', '')
                 primary_mapping = ""
                 all_mappings = []
+                display_text = ""
 
                 # Special handling for increment/decrement pairs
                 if " ||| " in mapping_value:
@@ -7444,10 +7466,28 @@ controller xbox t		= """
                         display_text = f"{primary_mapping} (+{len(all_mappings)-1})"
                     else:
                         display_text = primary_mapping
-                else:
+                elif mapping_value:
                     # Single mapping
                     display_text = self.format_mapping_display(mapping_value)
                     all_mappings = [display_text]
+                else:
+                    # No mapping - for analog controls show a description
+                    if is_analog_control:
+                        if "AD_STICK_X" in control_name:
+                            display_text = "Left/Right Controls"
+                        elif "AD_STICK_Y" in control_name:
+                            display_text = "Up/Down Controls"
+                        elif "AD_STICK_Z" in control_name:
+                            display_text = "Throttle Controls"
+                        elif "DIAL" in control_name:
+                            display_text = "Dial Controls"
+                        elif "PEDAL" in control_name:
+                            display_text = "Pedal Controls"
+                        elif "TRACKBALL" in control_name or "MOUSE" in control_name or "LIGHTGUN" in control_name:
+                            display_text = "Positional Controls"
+                        else:
+                            display_text = "Analog Controls"
+                        all_mappings = [display_text]
                 
                 # Create row container with consistent background
                 row_height = 40
@@ -7469,7 +7509,9 @@ controller xbox t		= """
                 action = control['action']
                 
                 # Column 4: Source (optional - could keep or remove this)
-                source = control['source']
+                source = control.get('source', '')
+                if not source and is_analog_control:
+                    source = "Game Data"  # Default source for analog controls
                 
                 # Column 1: Raw MAME Control Name
                 label1 = tk.Label(
@@ -7486,7 +7528,7 @@ controller xbox t		= """
                 # Column 2: Controller Input with hover tooltip
                 label2 = tk.Label(
                     row_frame,
-                    text=display_text,
+                    text=display_text if display_text else ("Analog Control" if is_analog_control else ""),
                     font=("Arial", 13),
                     anchor="w",
                     justify="left",
@@ -8253,6 +8295,12 @@ controller xbox t		= """
             return "JOYSTICK" in self.visible_control_types
         elif "BUTTON" in control_name:
             return "BUTTON" in self.visible_control_types
+        elif "AD_STICK" in control_name:
+            return "AD_STICK" in self.visible_control_types  # Explicit check for AD_STICK
+        elif "DIAL" in control_name:
+            return "DIAL" in self.visible_control_types
+        elif "PEDAL" in control_name:
+            return "PEDAL" in self.visible_control_types
         return True
 
     def apply_font_scaling(self, font_family, font_size):
