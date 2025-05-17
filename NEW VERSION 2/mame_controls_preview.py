@@ -1863,17 +1863,17 @@ class PreviewWindow(QMainWindow):
         self.bottom_row.addWidget(self.toggle_texts_button)
         
         # Create the joystick button with better initial text
-        self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
-        self.joystick_button.clicked.connect(self.toggle_joystick_controls)
-        self.joystick_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.joystick_button)
+        #self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
+        #self.joystick_button.clicked.connect(self.toggle_joystick_controls)
+        #self.joystick_button.setStyleSheet(button_style)
+        #self.bottom_row.addWidget(self.joystick_button)
         
         # Add a settings button if it doesn't exist
-        if not hasattr(self, 'settings_button'):
-            self.settings_button = QPushButton("Settings")
-            self.settings_button.clicked.connect(self.show_settings_dialog)
-            self.settings_button.setStyleSheet(button_style)
-            self.bottom_row.addWidget(self.settings_button)
+        #if not hasattr(self, 'settings_button'):
+            #self.settings_button = QPushButton("Settings")
+            #self.settings_button.clicked.connect(self.show_settings_dialog)
+            #self.settings_button.setStyleSheet(button_style)
+            #self.bottom_row.addWidget(self.settings_button)
         
         # Add button prefix toggle button
         prefix_text = "Hide Prefixes" if self.text_settings.get("show_button_prefix", True) else "Show Prefixes"
@@ -3478,7 +3478,7 @@ class PreviewWindow(QMainWindow):
         """Load bezel and joystick visibility settings from file in settings directory"""
         settings = {
             "bezel_visible": False,  # Default to hidden
-            "joystick_visible": True,  # Default to visible
+            "joystick_visible": False,  # Default to hidden 
             "auto_show_directionals_for_directional_only": True  # Default to enabled
         }
         
@@ -3534,7 +3534,7 @@ class PreviewWindow(QMainWindow):
             # Create settings object
             settings = {
                 "bezel_visible": self.bezel_visible,
-                "joystick_visible": getattr(self, 'joystick_visible', True)  # Default to True if not set
+                #"joystick_visible": getattr(self, 'joystick_visible', True)  # Default to True if not set
             }
             
             # Save settings
