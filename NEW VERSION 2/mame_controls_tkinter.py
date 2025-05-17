@@ -1292,27 +1292,43 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Parsing CFG content of length: {len(cfg_content)}")
 
             # Determine control mode
-            if self.use_xinput:
-                mapping_mode = "xinput"
-            elif hasattr(self, "joycode_mode") and self.joycode_mode:
-                mapping_mode = "joycode"
-            else:
-                mapping_mode = "keyboard"
+            mapping_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            print(f"Using mapping mode: {mapping_mode} for parsing CFG")
 
-            # Mapping extractor (injected inline, no restructuring)
+            # Mapping extractor - revised to be more precise based on mode
             def get_preferred_mapping(mapping_str: str) -> str:
                 if not mapping_str:
                     return "NONE"
-                parts = [p.strip() for p in mapping_str.strip().split("OR")]
-                if mapping_mode in ("xinput", "joycode"):
-                    for part in parts:
-                        if "JOYCODE" in part:
-                            return part
-                elif mapping_mode == "keyboard":
-                    for part in parts:
-                        if "KEYCODE" in part:
-                            return part
-                return parts[0] if parts else mapping_str.strip()
+                    
+                # For multiple options (separated by OR)
+                if "OR" in mapping_str:
+                    parts = [p.strip() for p in mapping_str.strip().split("OR")]
+                    
+                    # Return the mapping that matches our current mode
+                    if mapping_mode == "xinput":
+                        # For xinput mode, prioritize XINPUT parts first, then JOYCODE
+                        for part in parts:
+                            if "XINPUT" in part:
+                                return part
+                        for part in parts:
+                            if "JOYCODE" in part:
+                                return part
+                    elif mapping_mode == "joycode":
+                        # For joycode mode, prioritize JOYCODE parts
+                        for part in parts:
+                            if "JOYCODE" in part:
+                                return part
+                    elif mapping_mode == "keyboard":
+                        # For keyboard mode, prioritize KEYCODE parts
+                        for part in parts:
+                            if "KEYCODE" in part:
+                                return part
+                                
+                    # If no matching part, return the first one
+                    return parts[0]
+                else:
+                    # Single mapping, return as is
+                    return mapping_str.strip()
 
             # Parse the XML content
             parser = ET.XMLParser(encoding='utf-8')
@@ -1484,7 +1500,6 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
 
         return controls
-
 
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen state"""
@@ -5754,7 +5769,7 @@ controller xbox t		= """
         """Update game_data to include the custom control mappings with function-based organization"""
         if not cfg_controls and not hasattr(self, 'default_controls'):
             return
-                
+                    
         # Debug output: Print all available cfg_controls
         print(f"Available custom mappings: {len(cfg_controls)}")
         for control, mapping in cfg_controls.items():
@@ -5993,18 +6008,24 @@ controller xbox t		= """
                     elif 'JOYCODE' in mapping_info['mapping']:
                         # Check if the mapping contains an OR statement
                         if " OR " in mapping_info['mapping']:
+                            # HERE IS WHERE WE NEED TO MODIFY THE CODE
                             # Look for JOYCODE part within the OR statement
                             parts = mapping_info['mapping'].split(" OR ")
                             joycode_part = None
                             
+                            # UPDATED: Modified to prioritize JOYCODE parts in joycode mode too
                             # Try to find a JOYCODE part
                             for part in parts:
                                 if "JOYCODE" in part:
                                     joycode_part = part.strip()
+                                    # For joycode mode, use it directly
+                                    if current_mode == 'joycode':
+                                        label['target_button'] = self.format_mapping_display(joycode_part)
+                                        break
                                     break
                             
                             # Use the JOYCODE part if found, otherwise use the first part
-                            if joycode_part:
+                            if joycode_part and current_mode != 'joycode':  # Skip if already handled
                                 # Extract from the JOYCODE part
                                 parts = joycode_part.split('_')
                                 if len(parts) >= 3 and 'BUTTON' in parts[2]:
@@ -6014,14 +6035,15 @@ controller xbox t		= """
                                     if len(parts) >= 3:
                                         label['target_button'] = parts[2]
                             else:
-                                # Fallback to first part
-                                first_part = parts[0].strip()
-                                if "KEYCODE" in first_part:
-                                    # Handle KEYCODE (keyboard keys)
-                                    key_name = first_part.replace('KEYCODE_', '')
-                                    label['target_button'] = key_name
-                                else:
-                                    label['target_button'] = first_part
+                                # Fallback to first part only if we didn't set target_button yet
+                                if current_mode != 'joycode' or 'target_button' not in label:
+                                    first_part = parts[0].strip()
+                                    if "KEYCODE" in first_part:
+                                        # Handle KEYCODE (keyboard keys)
+                                        key_name = first_part.replace('KEYCODE_', '')
+                                        label['target_button'] = key_name
+                                    else:
+                                        label['target_button'] = first_part
                         else:
                             # Regular JOYCODE without OR
                             parts = mapping_info['mapping'].split('_')
@@ -6068,30 +6090,7 @@ controller xbox t		= """
                         label['display_name'] = 'P1 B Button'
                     elif control_name == 'P1_BUTTON3':
                         label['display_name'] = 'P1 X Button'
-                    elif control_name == 'P1_BUTTON4':
-                        label['display_name'] = 'P1 Y Button'
-                    elif control_name == 'P1_BUTTON5':
-                        label['display_name'] = 'P1 LB Button'
-                    elif control_name == 'P1_BUTTON6':
-                        label['display_name'] = 'P1 RB Button'
-                    elif control_name == 'P1_BUTTON7':
-                        label['display_name'] = 'P1 LT Button'
-                    elif control_name == 'P1_BUTTON8':
-                        label['display_name'] = 'P1 RT Button'
-                    elif control_name == 'P1_BUTTON9':
-                        label['display_name'] = 'P1 Left Stick Button'
-                    elif control_name == 'P1_BUTTON10':
-                        label['display_name'] = 'P1 Right Stick Button'
-                    elif func_category == 'move_horizontal':
-                        label['display_name'] = 'Horizontal Movement'
-                    elif func_category == 'move_vertical':
-                        label['display_name'] = 'Vertical Movement'
-                    elif control_name == 'P1_START':
-                        label['display_name'] = 'P1 Start Button' 
-                    elif control_name == 'P1_SELECT':
-                        label['display_name'] = 'P1 Select Button'
-                    else:
-                        label['display_name'] = self.format_control_name(control_name)
+                    # ... rest of the display_name assignments ...
                 else:
                     # JOYCODE mode - use traditional names or custom target
                     if 'target_button' in label:
@@ -6636,56 +6635,57 @@ controller xbox t		= """
         # If mapping contains multiple options (separated by OR)
         if " OR " in mapping:
             parts = mapping.split(" OR ")
-            # First try to find and convert any JOYCODE parts specifically for xinput mode
-            if to_mode == 'xinput':
-                for part in parts:
-                    part = part.strip()
-                    if part.startswith('JOYCODE') and part in xinput_mappings:
-                        return xinput_mappings[part]
             
-            # Then proceed with normal conversion attempts
+            # First look for parts that match the target mode
             for part in parts:
                 part = part.strip()
                 
-                # Determine source mode for this part
-                source_mode = ''
-                if part.startswith('JOYCODE'):
-                    source_mode = 'joycode'
-                elif part.startswith('XINPUT'):
-                    source_mode = 'xinput'
-                elif part.startswith('KEYCODE'):
-                    source_mode = 'keyboard'
-                    
-                # Skip if it's already in target mode
-                if source_mode == to_mode:
+                # Check if this part already matches the target mode
+                if to_mode == 'xinput' and part.startswith('XINPUT'):
+                    print(f"  Found XINPUT part in OR statement: {part}")
                     return part
-                    
-                # Try converting based on source and target
-                if source_mode == 'joycode' and to_mode == 'xinput':
-                    if part in xinput_mappings:
-                        return xinput_mappings[part]
-                elif source_mode == 'joycode' and to_mode == 'keyboard':
-                    if part in keyboard_mappings:
-                        return keyboard_mappings[part]
-                elif source_mode == 'xinput' and to_mode == 'joycode':
-                    if part in joycode_mappings:
-                        return joycode_mappings[part]
-                elif source_mode == 'xinput' and to_mode == 'keyboard':
-                    if part in keyboard_mappings:
-                        return keyboard_mappings[part]
-                elif source_mode == 'keyboard' and to_mode == 'joycode':
-                    # Find the keyboard mapping that matches
-                    for joycode, keycode in keyboard_mappings.items():
-                        if keycode == part and joycode.startswith('JOYCODE'):
-                            return joycode
-                elif source_mode == 'keyboard' and to_mode == 'xinput':
-                    # Find the keyboard mapping that matches
-                    for xinput, keycode in keyboard_mappings.items():
-                        if keycode == part and xinput.startswith('XINPUT'):
-                            return xinput
+                elif to_mode == 'joycode' and part.startswith('JOYCODE'):
+                    print(f"  Found JOYCODE part in OR statement: {part}")
+                    return part
+                elif to_mode == 'keyboard' and part.startswith('KEYCODE'):
+                    print(f"  Found KEYCODE part in OR statement: {part}")
+                    return part
             
-            # If no conversion found, return the first part
-            print(f"No matching conversion found for any part of: {mapping}")
+            # If no direct match, try to convert a compatible part
+            if to_mode == 'xinput':
+                # For xinput mode, try to convert JOYCODE parts
+                for part in parts:
+                    if part.startswith('JOYCODE') and part in xinput_mappings:
+                        converted = xinput_mappings[part]
+                        print(f"  Converting JOYCODE->XINPUT: {part} -> {converted}")
+                        return converted
+            elif to_mode == 'joycode':
+                # For joycode mode, try to convert XINPUT parts
+                for part in parts:
+                    if part.startswith('XINPUT') and part in joycode_mappings:
+                        converted = joycode_mappings[part]
+                        print(f"  Converting XINPUT->JOYCODE: {part} -> {converted}")
+                        return converted
+            elif to_mode == 'keyboard':
+                # For keyboard mode, try to find a KEYCODE part first
+                for part in parts:
+                    if part.startswith('KEYCODE'):
+                        print(f"  Using KEYCODE part: {part}")
+                        return part
+                        
+                # Or convert from another mode if possible
+                for part in parts:
+                    if part.startswith('JOYCODE') and part in keyboard_mappings:
+                        converted = keyboard_mappings[part]
+                        print(f"  Converting JOYCODE->KEYBOARD: {part} -> {converted}")
+                        return converted
+                    elif part.startswith('XINPUT') and part in keyboard_mappings:
+                        converted = keyboard_mappings[part]
+                        print(f"  Converting XINPUT->KEYBOARD: {part} -> {converted}")
+                        return converted
+            
+            # If all else fails, return the first part (original behavior)
+            print(f"  No suitable conversion found, using first part: {parts[0]}")
             return parts[0].strip()
         
         # Simple conversion for a single mapping
@@ -6814,6 +6814,32 @@ controller xbox t		= """
     
     def format_mapping_display(self, mapping: str) -> str:
         """Format the mapping string for display using friendly names when available."""
+        
+        # Handle OR statements by finding the preferred part based on mode
+        if " OR " in mapping:
+            parts = mapping.split(" OR ")
+            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            
+            # Find the preferred part based on current mode
+            preferred_part = None
+            if current_mode == 'xinput' or current_mode == 'joycode':
+                # For both xinput and joycode, prefer JOYCODE parts
+                for part in parts:
+                    if "JOYCODE" in part:
+                        preferred_part = part.strip()
+                        break
+            elif current_mode == 'keyboard':
+                # For keyboard mode, prefer KEYCODE parts
+                for part in parts:
+                    if "KEYCODE" in part:
+                        preferred_part = part.strip()
+                        break
+            
+            # Use the preferred part if found, otherwise use the first part
+            if preferred_part:
+                mapping = preferred_part
+            else:
+                mapping = parts[0].strip()
         
         # Handle Keyboard mappings
         if mapping.startswith("KEYCODE"):
