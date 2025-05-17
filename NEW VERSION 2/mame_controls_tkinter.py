@@ -1288,21 +1288,44 @@ class MAMEControlConfig(ctk.CTk):
         try:
             import xml.etree.ElementTree as ET
             from io import StringIO
-            
+
             print(f"Parsing CFG content of length: {len(cfg_content)}")
-            
+
+            # Determine control mode
+            if self.use_xinput:
+                mapping_mode = "xinput"
+            elif hasattr(self, "joycode_mode") and self.joycode_mode:
+                mapping_mode = "joycode"
+            else:
+                mapping_mode = "keyboard"
+
+            # Mapping extractor (injected inline, no restructuring)
+            def get_preferred_mapping(mapping_str: str) -> str:
+                if not mapping_str:
+                    return "NONE"
+                parts = [p.strip() for p in mapping_str.strip().split("OR")]
+                if mapping_mode in ("xinput", "joycode"):
+                    for part in parts:
+                        if "JOYCODE" in part:
+                            return part
+                elif mapping_mode == "keyboard":
+                    for part in parts:
+                        if "KEYCODE" in part:
+                            return part
+                return parts[0] if parts else mapping_str.strip()
+
             # Parse the XML content
             parser = ET.XMLParser(encoding='utf-8')
             tree = ET.parse(StringIO(cfg_content), parser=parser)
             root = tree.getroot()
-            
+
             # Find all port elements under input
             input_elem = root.find('.//input')
             if input_elem is not None:
                 # Debug - count total ports
                 all_ports = input_elem.findall('port')
                 print(f"Found {len(all_ports)} total ports in config")
-                
+
                 # Process all port elements regardless of type
                 for port in all_ports:
                     control_type = port.get('type')
@@ -1311,62 +1334,57 @@ class MAMEControlConfig(ctk.CTk):
                         special_control = any(substr in control_type for substr in 
                                             ["PADDLE", "DIAL", "TRACKBALL", "MOUSE", "LIGHTGUN", 
                                             "AD_STICK", "PEDAL", "POSITIONAL", "GAMBLE"])
-                        
+
                         if special_control:
                             # Look for increment and decrement sequences
                             inc_newseq = port.find('./newseq[@type="increment"]')
                             dec_newseq = port.find('./newseq[@type="decrement"]')
                             std_newseq = port.find('./newseq[@type="standard"]')
-                            
+
                             # FIXED: Handle case where only increment exists
                             if inc_newseq is not None and inc_newseq.text and inc_newseq.text.strip() != "NONE":
-                                # If we only have increment but no decrement, or decrement is NONE
                                 if (dec_newseq is None or not dec_newseq.text or dec_newseq.text.strip() == "NONE"):
-                                    # Just use the increment mapping alone
-                                    inc_mapping = inc_newseq.text.strip()
+                                    inc_mapping = get_preferred_mapping(inc_newseq.text.strip())
                                     controls[control_type] = inc_mapping
                                     print(f"Found increment-only mapping: {control_type} -> {inc_mapping}")
-                                # If we have both increment and decrement
                                 elif dec_newseq is not None and dec_newseq.text and dec_newseq.text.strip() != "NONE":
-                                    inc_mapping = inc_newseq.text.strip()
-                                    dec_mapping = dec_newseq.text.strip()
-                                    # Special format for dual mappings: "inc ||| dec"
+                                    inc_mapping = get_preferred_mapping(inc_newseq.text.strip())
+                                    dec_mapping = get_preferred_mapping(dec_newseq.text.strip())
                                     combined_mapping = f"{inc_mapping} ||| {dec_mapping}"
                                     controls[control_type] = combined_mapping
                                     print(f"Found directional mapping: {control_type} -> {combined_mapping}")
-                            # FIXED: Handle case where only decrement exists  
                             elif dec_newseq is not None and dec_newseq.text and dec_newseq.text.strip() != "NONE":
-                                dec_mapping = dec_newseq.text.strip()
+                                dec_mapping = get_preferred_mapping(dec_newseq.text.strip())
                                 controls[control_type] = dec_mapping
                                 print(f"Found decrement-only mapping: {control_type} -> {dec_mapping}")
-                            # Use standard mapping only if it's not NONE
                             elif std_newseq is not None and std_newseq.text and std_newseq.text.strip() != "NONE":
-                                mapping = std_newseq.text.strip()
+                                mapping = get_preferred_mapping(std_newseq.text.strip())
                                 controls[control_type] = mapping
                                 print(f"Found standard mapping for special control: {control_type} -> {mapping}")
                         else:
                             # Regular handling for standard sequence (non-special controls)
                             newseq = port.find('./newseq[@type="standard"]')
                             if newseq is not None and newseq.text and newseq.text.strip() != "NONE":
-                                mapping = newseq.text.strip()
+                                mapping = get_preferred_mapping(newseq.text.strip())
                                 controls[control_type] = mapping
                                 print(f"Found standard mapping: {control_type} -> {mapping}")
             else:
                 print("No input element found in XML")
-                    
+
         except ET.ParseError as e:
             print(f"XML parsing failed with error: {str(e)}")
             print("First 100 chars of content:", repr(cfg_content[:100]))
         except Exception as e:
             print(f"Unexpected error parsing cfg: {str(e)}")
-            
+
         print(f"Found {len(controls)} control mappings")
         if controls:
             print("Sample mappings:")
             for k, v in list(controls.items())[:6]:  # Show up to 6 mappings
                 print(f"  {k}: {v}")
-                
+
         return controls
+
     
     def load_default_config(self):
         """Load the default MAME control configuration"""
@@ -1408,12 +1426,35 @@ class MAMEControlConfig(ctk.CTk):
         try:
             import xml.etree.ElementTree as ET
             from io import StringIO
-            
+
+            # Determine mapping mode based on active input setting
+            if self.use_xinput:
+                mapping_mode = "xinput"
+            elif hasattr(self, "joycode_mode") and self.joycode_mode:
+                mapping_mode = "joycode"
+            else:
+                mapping_mode = "keyboard"
+
+            # Local helper (inserted inline)
+            def get_preferred_mapping(mapping_str: str) -> str:
+                if not mapping_str:
+                    return "NONE"
+                parts = [p.strip() for p in mapping_str.strip().split("OR")]
+                if mapping_mode in ("xinput", "joycode"):
+                    for part in parts:
+                        if "JOYCODE" in part:
+                            return part
+                elif mapping_mode == "keyboard":
+                    for part in parts:
+                        if "KEYCODE" in part:
+                            return part
+                return parts[0] if parts else mapping_str.strip()
+
             # Parse the XML content
             parser = ET.XMLParser(encoding='utf-8')
             tree = ET.parse(StringIO(cfg_content), parser)
             root = tree.getroot()
-            
+
             # Find the input section
             input_elem = root.find('.//input')
             if input_elem is not None:
@@ -1421,51 +1462,29 @@ class MAMEControlConfig(ctk.CTk):
                 for port in input_elem.findall('port'):
                     control_type = port.get('type')
                     if control_type:  # Include all control types
-                        # Optional: Add debug output to see what's being processed
                         print(f"Found control: {control_type}")
-                        # Find the standard sequence
                         newseq = port.find('./newseq[@type="standard"]')
                         if newseq is not None and newseq.text:
                             full_mapping = newseq.text.strip()
-                            
-                            # Extract JOYCODE part if multiple assignments exist
-                            if " OR " in full_mapping:
-                                parts = full_mapping.split(" OR ")
-                                joycode_part = None
-                                
-                                # First priority: Find any JOYCODE entry
-                                for part in parts:
-                                    part = part.strip()
-                                    if "JOYCODE" in part:
-                                        joycode_part = part
-                                        break
-                                
-                                # Second priority: Use the first entry if no JOYCODE found
-                                if joycode_part is None and parts:
-                                    joycode_part = parts[0].strip()
-                                    
-                                # Use the extracted part or the full mapping as fallback
-                                mapping = joycode_part if joycode_part else full_mapping
-                            else:
-                                mapping = full_mapping
-                                
+                            mapping = get_preferred_mapping(full_mapping)
                             controls[control_type] = mapping
-                            
+
                 print(f"Parsed {len(controls)} controls from default.cfg")
-                
+
                 # Print some sample mappings
                 sample_controls = list(controls.items())[:5]
                 for control, mapping in sample_controls:
                     print(f"  {control}: {mapping}")
             else:
                 print("No input element found in default.cfg")
-                
+
         except Exception as e:
             print(f"Error parsing default.cfg: {e}")
             import traceback
             traceback.print_exc()
-        
+
         return controls
+
 
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen state"""
