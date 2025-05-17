@@ -6617,7 +6617,14 @@ controller xbox t		= """
         # If mapping contains multiple options (separated by OR)
         if " OR " in mapping:
             parts = mapping.split(" OR ")
-            # Try to convert each part and return the first successful conversion
+            # First try to find and convert any JOYCODE parts specifically for xinput mode
+            if to_mode == 'xinput':
+                for part in parts:
+                    part = part.strip()
+                    if part.startswith('JOYCODE') and part in xinput_mappings:
+                        return xinput_mappings[part]
+            
+            # Then proceed with normal conversion attempts
             for part in parts:
                 part = part.strip()
                 
@@ -7437,18 +7444,28 @@ controller xbox t		= """
                     display_text = f"{inc_display} | {dec_display}"
                     all_mappings = [inc_display, dec_display]
                     primary_mapping = display_text
+                # Handle OR statements
                 elif " OR " in mapping_value:
                     # This is the existing code for OR statements
                     mapping_parts = mapping_value.split(" OR ")
                     
-                    # Get all formatted mappings for tooltip
-                    for part in mapping_parts:
-                        part = part.strip()
-                        formatted_part = self.format_mapping_display(part)
-                        all_mappings.append(formatted_part)
-                        
-                        # Set primary mapping (preferring XINPUT in XINPUT mode)
-                        if not primary_mapping:
+                    # First, specifically look for JOYCODE parts when in XInput mode
+                    joycode_part = None
+                    if self.use_xinput:
+                        for part in mapping_parts:
+                            part = part.strip()
+                            if "JOYCODE" in part:
+                                joycode_part = part
+                                # Convert the JOYCODE part directly to XINPUT
+                                converted = self.convert_mapping(joycode_part, 'xinput')
+                                if "XINPUT" in converted:
+                                    primary_mapping = self.get_friendly_xinput_name(converted)
+                                    break
+                    
+                    # Only proceed with normal processing if no JOYCODE part was found or converted
+                    if not primary_mapping:
+                        # Get all formatted mappings for tooltip (existing code)
+                        for part in mapping_parts:
                             if self.use_xinput and "XINPUT" in part:
                                 primary_mapping = self.get_friendly_xinput_name(part)
                             elif self.use_xinput and "JOYCODE" in part:
