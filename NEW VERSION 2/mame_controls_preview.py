@@ -1521,6 +1521,17 @@ class PreviewWindow(QMainWindow):
                     label.setText(f"{prefix}: {action_text}")
                 else:
                     label.setText(action_text)
+                
+                # IMPORTANT: Make sure the label keeps its complete styling information
+                if hasattr(label, 'parse_text'):
+                    try:
+                        label.parse_text(label.text())
+                    except Exception as e:
+                        print(f"Error parsing text for {control_name}: {e}")
+                        
+                # Force the correct colors/gradients to be reapplied
+                if hasattr(label, 'update'):
+                    label.update()
         
         # Update button text
         if hasattr(self, 'prefix_button'):
@@ -1557,6 +1568,10 @@ class PreviewWindow(QMainWindow):
             print(f"Error saving button prefix setting: {e}")
             import traceback
             traceback.print_exc()
+        
+        # Force a complete refresh of all label styling
+        QTimer.singleShot(100, self.apply_text_settings)
+        QTimer.singleShot(200, self.force_resize_all_labels)
         
         # Force a canvas update
         self.canvas.update()
