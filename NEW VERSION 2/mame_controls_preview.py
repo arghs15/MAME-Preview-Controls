@@ -271,6 +271,40 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    def show_toast_notification(self, message, duration=2000):
+        """Show a brief notification that automatically disappears after specified duration (ms)"""
+        from PyQt5.QtWidgets import QLabel
+        from PyQt5.QtCore import Qt, QTimer
+        
+        # Create a floating label for the notification with improved visibility
+        toast = QLabel(message, self)
+        toast.setStyleSheet("""
+            background-color: rgba(40, 40, 45, 220);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 60);
+        """)
+        toast.setAlignment(Qt.AlignCenter)
+        toast.setWordWrap(True)
+        toast.setFixedSize(300, 80)
+        
+        # Calculate position (center of the window)
+        x = (self.width() - toast.width()) // 2
+        y = (self.height() - toast.height()) // 2
+        toast.move(x, y)
+        
+        # Make sure it's visible and on top
+        toast.raise_()
+        toast.show()
+        
+        # Schedule automatic hiding
+        QTimer.singleShot(duration, toast.deleteLater)
+        
+        return toast
+        
     def calculate_max_text_width(self, controls_dict, font, show_button_prefix=True, use_uppercase=False, extra_padding=40):
         """Calculate the maximum text width needed for all controls with improved padding for long text"""
         from PyQt5.QtGui import QFontMetrics
@@ -1050,6 +1084,10 @@ class PreviewWindow(QMainWindow):
         # Save the setting
         self.save_snapping_settings()
         
+        # Show toast notification
+        status = "enabled" if self.snapping_enabled else "disabled"
+        self.show_toast_notification(f"Snapping {status}")
+        
         print(f"Snapping {'enabled' if self.snapping_enabled else 'disabled'}")
 
     def save_snapping_settings(self):
@@ -1198,20 +1236,21 @@ class PreviewWindow(QMainWindow):
                 
                 # Buttons
                 button_layout = QHBoxLayout()
-                
-                apply_button = QPushButton("Apply")
-                apply_button.clicked.connect(self.apply_settings)
-                
-                ok_button = QPushButton("OK")
-                ok_button.clicked.connect(self.accept_settings)
-                
-                cancel_button = QPushButton("Cancel")
-                cancel_button.clicked.connect(self.reject)
-                
-                button_layout.addWidget(apply_button)
+
+                self.apply_button = QPushButton("Apply")
+                self.apply_button.clicked.connect(self.apply_settings)
+
+                # Change "OK" to "Done"
+                self.ok_button = QPushButton("Done")  # Changed from "OK" to "Done"
+                self.ok_button.clicked.connect(self.accept_settings)
+
+                self.cancel_button = QPushButton("Cancel")
+                self.cancel_button.clicked.connect(self.reject)
+
+                button_layout.addWidget(self.apply_button)
                 button_layout.addStretch()
-                button_layout.addWidget(ok_button)
-                button_layout.addWidget(cancel_button)
+                button_layout.addWidget(self.ok_button)
+                button_layout.addWidget(self.cancel_button)
                 
                 layout.addLayout(button_layout)
             
@@ -1853,6 +1892,13 @@ class PreviewWindow(QMainWindow):
         self.rom_save_button.clicked.connect(lambda: self.save_positions(is_global=False))
         self.rom_save_button.setStyleSheet(button_style)
         self.top_row.addWidget(self.rom_save_button)
+
+        # In your create_floating_button_frame method, add another button:
+        self.reset_rom_button = QPushButton("Reset ROM")
+        self.reset_rom_button.clicked.connect(self.delete_rom_specific_settings)
+        self.reset_rom_button.setStyleSheet(button_style)
+        self.reset_rom_button.setToolTip("Delete ROM-specific settings and revert to global")
+        self.top_row.addWidget(self.reset_rom_button)
         
         self.text_settings_button = QPushButton("Text Settings")
         self.text_settings_button.clicked.connect(self.show_text_settings)
@@ -2316,7 +2362,6 @@ class PreviewWindow(QMainWindow):
                     
         print("All labels resized with improved width calculation")
 
-    # Replace your existing toggle_bezel_improved method with this one
     def toggle_bezel_improved(self):
         """Toggle bezel visibility and save the setting globally"""
         if not self.has_bezel:
@@ -2343,6 +2388,7 @@ class PreviewWindow(QMainWindow):
         
         # ALWAYS save as global settings
         self.save_bezel_settings(is_global=True)
+        self.show_toast_notification("Bezel visibility saved")
         print(f"Saved bezel visibility ({self.bezel_visible}) to GLOBAL settings")
     
     # Add method to find bezel path
@@ -3385,7 +3431,7 @@ class PreviewWindow(QMainWindow):
                 
             # Check for all types of directional controls - EXPANDED LIST
             if any(control_type in control_name for control_type in [
-                "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
+                "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD",  # Standard directional
                 "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
                 "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
             ]):
@@ -3428,7 +3474,7 @@ class PreviewWindow(QMainWindow):
         
         # Apply visibility to joystick controls
         for control_name, control_data in self.control_labels.items():
-            if "JOYSTICK" in control_name:
+            if any(js_type in control_name for js_type in ["JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT"]):
                 is_visible = self.texts_visible and self.joystick_visible
                 control_data['label'].setVisible(is_visible)
         
@@ -3500,7 +3546,6 @@ class PreviewWindow(QMainWindow):
                 
                 print(f"Bezel resized to {window_width}x{window_height}")
     
-    # Add helper method to explicitly save global text settings
     def save_global_text_settings(self):
         """Save current text settings as global defaults in settings directory"""
         try:
@@ -3514,9 +3559,9 @@ class PreviewWindow(QMainWindow):
                 json.dump(self.text_settings, f)
             print(f"Saved GLOBAL text settings to {settings_file}: {self.text_settings}")
             
-            # Optional - show a confirmation message
-            QMessageBox.information(self, "Settings Saved", 
-                                "Text settings have been saved as global defaults.")
+            # Use simplified PyQt5 toast notification
+            self.show_toast_notification("Text settings saved")
+            
         except Exception as e:
             print(f"Error saving global text settings: {e}")
             import traceback
@@ -3590,15 +3635,6 @@ class PreviewWindow(QMainWindow):
                 json.dump(settings, f)
                 
             print(f"Saved bezel/joystick settings to {settings_file}: {settings}")
-            
-            # Show message if global
-            if is_global:
-                print(f"GLOBAL bezel/joystick settings saved")
-                QMessageBox.information(
-                    self,
-                    "Global Settings Saved",
-                    f"Visibility settings saved as global default."
-                )
                 
             return True
         except Exception as e:
@@ -3697,9 +3733,8 @@ class PreviewWindow(QMainWindow):
         
         return settings
     
-    # Replace your existing toggle_logo method with this one
     def toggle_logo(self):
-        """Toggle logo visibility"""
+        """Toggle logo visibility with global saving"""
         self.logo_visible = not self.logo_visible
         
         # Update button text
@@ -3718,8 +3753,15 @@ class PreviewWindow(QMainWindow):
         # Update settings
         self.logo_settings["logo_visible"] = self.logo_visible
         
-        # Save setting immediately 
-        self.save_positions(is_global=False)  # Save for current ROM by default
+        # Save the logo settings *globally* (not per ROM)
+        if hasattr(self, 'save_logo_settings'):
+            self.save_logo_settings(is_global=True)
+            self.show_toast_notification("Logo visibility saved globally")
+        else:
+            # Fallback to save_positions if save_logo_settings is not available
+            # But make sure to use is_global=True for global saving
+            self.save_positions(is_global=True)
+            self.show_toast_notification("Logo visibility saved globally")
     
     # Add this method to your PreviewWindow class
     def enforce_layer_order(self):
@@ -3794,8 +3836,9 @@ class PreviewWindow(QMainWindow):
             # Save to file
             with open(settings_file, 'w') as f:
                 json.dump(settings_to_save, f)
-                
+                    
             print(f"Saved logo settings to {settings_file}: {settings_to_save}")
+            self.show_toast_notification("Logo settings saved")
             return True
         except Exception as e:
             print(f"Error saving logo settings: {e}")
@@ -4413,8 +4456,103 @@ class PreviewWindow(QMainWindow):
         self.button_layout.addLayout(self.top_row)
         self.button_layout.addLayout(self.bottom_row)
     
+    def delete_rom_specific_settings(self):
+        """Delete ROM-specific settings files and refresh preview with global settings"""
+        try:
+            # List of possible ROM-specific settings files
+            rom_files = [
+                os.path.join(self.settings_dir, f"{self.rom_name}_positions.json"),
+                os.path.join(self.settings_dir, f"{self.rom_name}_logo.json"),
+                os.path.join(self.settings_dir, f"{self.rom_name}_bezel.json"),
+                # Add any other ROM-specific settings files here
+            ]
+            
+            # Check if any files exist
+            existing_files = [f for f in rom_files if os.path.exists(f)]
+            
+            if not existing_files:
+                # No files to delete
+                self.show_toast_notification(f"No ROM-specific settings found for {self.rom_name}")
+                return False
+            
+            # Ask for confirmation
+            from PyQt5.QtWidgets import QMessageBox
+            confirm = QMessageBox.question(
+                self,
+                "Confirm Reset",
+                f"Delete all ROM-specific settings for {self.rom_name}?\n\nThis will revert to global settings.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if confirm != QMessageBox.Yes:
+                return False
+                
+            # Delete the files
+            deleted_count = 0
+            for file_path in existing_files:
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted ROM-specific settings: {file_path}")
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"Error deleting {file_path}: {e}")
+            
+            # Show success message
+            self.show_toast_notification(f"Reset {deleted_count} ROM-specific settings")
+            
+            # REFRESH PREVIEW WITH GLOBAL SETTINGS:
+            
+            # 1. Reload global positions
+            from PyQt5.QtCore import QTimer
+            global_positions = self.load_saved_positions()  # This now loads global positions since ROM files are gone
+            
+            # 2. Reset control positions
+            self.reset_positions()
+            
+            # 3. Reload bezel settings from global
+            bezel_settings = self.load_bezel_settings()
+            self.bezel_visible = bezel_settings.get("bezel_visible", False)
+            
+            # 4. Apply bezel visibility
+            if hasattr(self, 'bezel_label') and self.bezel_label:
+                self.bezel_label.setVisible(self.bezel_visible)
+                if hasattr(self, 'bezel_button'):
+                    self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
+            
+            # 5. Reload logo settings from global
+            self.logo_settings = self.load_logo_settings()
+            self.logo_visible = self.logo_settings.get("logo_visible", True)
+            
+            # 6. Apply logo settings
+            if hasattr(self, 'logo_label') and self.logo_label:
+                self.logo_label.setVisible(self.logo_visible)
+                self.update_logo_display()  # Apply position, size, etc.
+                if hasattr(self, 'logo_button'):
+                    self.logo_button.setText("Hide Logo" if self.logo_visible else "Show Logo")
+            
+            # 7. Reload and apply text settings
+            self.text_settings = self.load_text_settings()
+            self.apply_text_settings()
+            
+            # 8. Enforce the proper layer order
+            self.enforce_layer_order()
+            
+            # 9. Force a complete refresh with slight delays
+            QTimer.singleShot(100, self.force_resize_all_labels)
+            QTimer.singleShot(300, self.enforce_layer_order)
+            
+            print(f"Preview refreshed with global settings")
+            return True
+            
+        except Exception as e:
+            print(f"Error resetting ROM settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     def save_image(self):
-        """Enhanced save_image method that preserves transparency and correct text alignment"""
+        """Enhanced save_image method that uses toast notifications"""
         try:
             # Create the images directory if it doesn't exist
             images_dir = os.path.join(self.preview_dir, "screenshots")
@@ -4423,7 +4561,7 @@ class PreviewWindow(QMainWindow):
             # Define the output path
             output_path = os.path.join(images_dir, f"{self.rom_name}.png")
             
-            # Check if file already exists
+            # Check if file already exists - keep confirmation for overwriting
             if os.path.exists(output_path):
                 # Ask for confirmation
                 if QMessageBox.question(
@@ -4442,7 +4580,7 @@ class PreviewWindow(QMainWindow):
                 self.canvas.height(),
                 QImage.Format_ARGB32
             )
-            # Fill with transparent background instead of black
+            # Fill with transparent background
             image.fill(Qt.transparent)
             
             # Create painter for the image
@@ -4626,25 +4764,28 @@ class PreviewWindow(QMainWindow):
             # Save the image as PNG to preserve transparency
             if image.save(output_path, "PNG"):
                 print(f"Image saved successfully to {output_path}")
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Image saved to:\n{output_path}"
-                )
+                
+                # Use toast notification instead of message box
+                self.show_toast_notification(f"Image saved to screenshots folder")
+                
                 return True
             else:
                 print(f"Failed to save image to {output_path}")
+                
+                # Keep error as a dialog
                 QMessageBox.warning(
                     self,
                     "Error",
                     f"Failed to save image. Could not write to file."
                 )
                 return False
-                
+                    
         except Exception as e:
             print(f"Error saving image: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Keep error as a dialog
             QMessageBox.critical(
                 self,
                 "Error",
@@ -5637,10 +5778,17 @@ class PreviewWindow(QMainWindow):
             'P1_BUTTON10': 'RS',
             'P1_START': 'START',
             'P1_SELECT': 'BACK',
+            # Left joystick - both naming conventions
             'P1_JOYSTICK_UP': 'LS↑',
             'P1_JOYSTICK_DOWN': 'LS↓',
             'P1_JOYSTICK_LEFT': 'LS←',
             'P1_JOYSTICK_RIGHT': 'LS→',
+            'P1_JOYSTICKLEFT_UP': 'LS↑',     # Add this
+            'P1_JOYSTICKLEFT_DOWN': 'LS↓',   # Add this 
+            'P1_JOYSTICKLEFT_LEFT': 'LS←',   # Add this
+            'P1_JOYSTICKLEFT_RIGHT': 'LS→',  # Add this
+            
+            # Right joystick mappings
             'P1_JOYSTICKRIGHT_UP': 'RS↑',
             'P1_JOYSTICKRIGHT_DOWN': 'RS↓',
             'P1_JOYSTICKRIGHT_LEFT': 'RS←',
@@ -5984,20 +6132,20 @@ class PreviewWindow(QMainWindow):
             save_type = "global" if is_global else f"ROM-specific ({self.rom_name})"
             print(f"All settings saved as {save_type}")
             
-            # Show confirmation message
-            QMessageBox.information(
-                self,
-                "Settings Saved",
-                f"Settings saved as {save_type}."
-            )
+            # Show toast notification with appropriate message
+            if is_global:
+                self.show_toast_notification("Positions saved for all games")
+            else:
+                self.show_toast_notification(f"Positions saved for {self.rom_name}")
+                
             return True
-            
+                
         except Exception as e:
             print(f"Error saving settings: {e}")
             import traceback
             traceback.print_exc()
             
-            # Show error message
+            # Keep error message as a dialog
             QMessageBox.critical(
                 self,
                 "Error",
