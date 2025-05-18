@@ -30305,67 +30305,83 @@
       },
       "P1_JOYSTICKRIGHT_LEFT": {
         "tag": ":P1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P1_JOYSTICKLEFT_UP": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICKRIGHT_DOWN": {
         "tag": ":P1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Down"
       },
       "P1_JOYSTICKLEFT_RIGHT": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Right"
       },
       "P1_JOYSTICKRIGHT_UP": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Up"
       },
       "P1_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Right"
       },
       "P1_JOYSTICKLEFT_LEFT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P1_JOYSTICKLEFT_DOWN": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_JOYSTICKLEFT_LEFT": {
         "tag": ":P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P2_JOYSTICKRIGHT_LEFT": {
         "tag": ":P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P2_JOYSTICKLEFT_UP": {
         "tag": ":P2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_JOYSTICKLEFT_RIGHT": {
         "tag": ":P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_DOWN": {
         "tag": ":P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_JOYSTICKRIGHT_UP": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Up"
       },
       "P2_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Right"
       },
       "P2_JOYSTICKRIGHT_DOWN": {
         "tag": ":P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Down"
       }
     }
   },
@@ -31347,15 +31363,18 @@
     "controls": {
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "START2": {
         "tag": ":IN0",
@@ -31367,7 +31386,8 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "COIN1": {
         "tag": ":IN0",
@@ -31379,19 +31399,23 @@
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       }
     }
   },
@@ -55882,67 +55906,83 @@
       },
       "P1_JOYSTICKLEFT_DOWN": {
         "tag": ":INP1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICKLEFT_UP": {
         "tag": ":INP1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICKLEFT_RIGHT": {
         "tag": ":INP1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_JOYSTICKLEFT_LEFT": {
         "tag": ":INP1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICKRIGHT_UP": {
         "tag": ":INP1A",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICKRIGHT_DOWN": {
         "tag": ":INP1A",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICKRIGHT_LEFT": {
         "tag": ":INP1A",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICKRIGHT_RIGHT": {
         "tag": ":INP1A",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_UP": {
         "tag": ":INP2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_JOYSTICKLEFT_RIGHT": {
         "tag": ":INP2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_LEFT": {
         "tag": ":INP2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICKLEFT_DOWN": {
         "tag": ":INP2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICKRIGHT_RIGHT": {
         "tag": ":INP2A",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICKRIGHT_DOWN": {
         "tag": ":INP2A",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICKRIGHT_LEFT": {
         "tag": ":INP2A",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICKRIGHT_UP": {
         "tag": ":INP2A",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       }
     }
   },
@@ -74036,7 +74076,8 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":60",
-        "mask": "4"
+        "mask": "4",
+        "name": "Right"
       },
       "COIN3": {
         "tag": ":60",
@@ -74048,7 +74089,8 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":60",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "COIN2": {
         "tag": ":80",
@@ -89795,67 +89837,83 @@
     "controls": {
       "P1_JOYSTICKRIGHT_DOWN": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Down"
       },
       "P1_JOYSTICKRIGHT_LEFT": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICKRIGHT_UP": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P1_JOYSTICKLEFT_RIGHT": {
         "tag": ":P1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Right"
       },
       "P1_JOYSTICKLEFT_LEFT": {
         "tag": ":P1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Left"
       },
       "P1_JOYSTICKLEFT_DOWN": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_JOYSTICKLEFT_UP": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P1_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_RIGHT": {
         "tag": ":P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Right"
       },
       "P2_JOYSTICKRIGHT_DOWN": {
         "tag": ":P2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Down"
       },
       "P2_JOYSTICKRIGHT_LEFT": {
         "tag": ":P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICKRIGHT_UP": {
         "tag": ":P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P2_JOYSTICKLEFT_DOWN": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P2_JOYSTICKLEFT_LEFT": {
         "tag": ":P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Left"
       },
       "P2_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_UP": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "START2": {
         "tag": ":SYSTEM",
@@ -93464,35 +93522,43 @@
     "controls": {
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "COIN2": {
         "tag": ":SERVICE",
@@ -99211,67 +99277,83 @@
     "controls": {
       "P1_JOYSTICKRIGHT_LEFT": {
         "tag": ":P1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P1_JOYSTICKLEFT_DOWN": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Down"
       },
       "P1_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P1_JOYSTICKLEFT_LEFT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P1_JOYSTICKRIGHT_UP": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P1_JOYSTICKRIGHT_DOWN": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_JOYSTICKLEFT_UP": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P1_JOYSTICKLEFT_RIGHT": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_UP": {
         "tag": ":P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P2_JOYSTICKRIGHT_LEFT": {
         "tag": ":P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P2_JOYSTICKLEFT_DOWN": {
         "tag": ":P2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Down"
       },
       "P2_JOYSTICKLEFT_LEFT": {
         "tag": ":P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P2_JOYSTICKRIGHT_DOWN": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P2_JOYSTICKRIGHT_UP": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P2_JOYSTICKRIGHT_RIGHT": {
         "tag": ":P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P2_JOYSTICKLEFT_RIGHT": {
         "tag": ":P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Right"
       },
       "START2": {
         "tag": ":SERVICE",
@@ -99299,35 +99381,43 @@
       },
       "P3_JOYSTICKRIGHT_LEFT": {
         "tag": ":UNUSED",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P3_JOYSTICKLEFT_UP": {
         "tag": ":UNUSED",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P3_JOYSTICKLEFT_LEFT": {
         "tag": ":UNUSED",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P3_JOYSTICKLEFT_DOWN": {
         "tag": ":UNUSED",
-        "mask": "1"
+        "mask": "1",
+        "name": "Down"
       },
       "P3_JOYSTICKRIGHT_DOWN": {
         "tag": ":UNUSED",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P3_JOYSTICKRIGHT_UP": {
         "tag": ":UNUSED",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P3_JOYSTICKLEFT_RIGHT": {
         "tag": ":UNUSED",
-        "mask": "4"
+        "mask": "4",
+        "name": "Right"
       },
       "P3_JOYSTICKRIGHT_RIGHT": {
         "tag": ":UNUSED",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       }
     }
   },
@@ -116294,35 +116384,43 @@
     "controls": {
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "COIN2": {
         "tag": ":IN2",
