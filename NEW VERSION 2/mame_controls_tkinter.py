@@ -17,6 +17,7 @@ from tkinter import messagebox, StringVar, scrolledtext, Frame, Label, PhotoImag
 from functools import lru_cache
 import tkinter as tk
 from tkinter import ttk, messagebox
+from screeninfo import get_monitors
 
 # Theme settings for the application
 THEME_COLORS = {
@@ -36,6 +37,15 @@ THEME_COLORS = {
         "button_hover": "#1A6DAE",    # Button hover color
     }
 }
+
+def get_monitor_for_point(x, y):
+    """Return the monitor that contains the point (x, y)."""
+    for monitor in get_monitors():
+        if (monitor.x <= x < monitor.x + monitor.width and
+            monitor.y <= y < monitor.y + monitor.height):
+            return monitor
+    return get_monitors()[0]  # fallback to primary
+
 
 # Add these helper functions if not already present
 def get_application_path():
@@ -573,6 +583,19 @@ class MAMEControlConfig(ctk.CTk):
             # Force full UI update
             self.update_idletasks()
             
+            # Let the window position where the OS naturally puts it
+            # The most reliable approach is to not try to override this behavior
+            # which varies between running as script and as exe
+            
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+            win_width = 1280
+            win_height = 800
+            x = (screen_width - win_width) // 2
+            y = (screen_height - win_height) // 2
+            self.geometry(f"{win_width}x{win_height}+{x}+{y}")
+
+            
             # Show the main window
             debug_print("Showing application window")
             self.deiconify()
@@ -621,20 +644,30 @@ class MAMEControlConfig(ctk.CTk):
             debug_print(f"Loading message: {message}")
     
     def create_splash_window(self):
-        """Create a separate splash window that shows while loading"""
+        """Create a separate splash window that shows while loading using mouse position to determine screen"""
         try:
             # Create a toplevel window for splash
             splash = tk.Toplevel()
             splash.title("Loading")
-            splash.geometry("400x200")
-            splash.resizable(False, False)
+            splash.withdraw()  # Hide initially
             
-            # Center the splash on screen
-            screen_width = splash.winfo_screenwidth()
-            screen_height = splash.winfo_screenheight()
-            x = (screen_width - 400) // 2
-            y = (screen_height - 200) // 2
-            splash.geometry(f"400x200+{x}+{y}")
+            root = tk.Tk()
+            root.withdraw()
+            mouse_x = root.winfo_pointerx()
+            mouse_y = root.winfo_pointery()
+            root.destroy()
+
+            monitor = get_monitor_for_point(mouse_x, mouse_y)
+
+            # Set splash size
+            splash_width = 400
+            splash_height = 200
+
+            # Center splash on the monitor under the mouse
+            x = monitor.x + (monitor.width - splash_width) // 2
+            y = monitor.y + (monitor.height - splash_height) // 2
+
+            splash.geometry(f"{splash_width}x{splash_height}+{x}+{y}")
             
             # Configure appearance
             splash.configure(bg="#1e1e1e")  # Dark background
@@ -688,6 +721,9 @@ class MAMEControlConfig(ctk.CTk):
             )
             self.splash_progress.pack(pady=10)
             self.splash_progress.start(15)  # Start animation
+            
+            # Now show the window
+            splash.deiconify()
             
             # Ensure it stays on top
             splash.attributes('-topmost', True)
@@ -1882,7 +1918,7 @@ class MAMEControlConfig(ctk.CTk):
         self.preview_button.pack(side="right", padx=10)
         
         # 2. XInput Only Mode toggle (will appear to the left of Preview Controls)
-        self.xinput_only_toggle = ctk.CTkSwitch(
+        '''self.xinput_only_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="XInput Only Mode",
             command=self.toggle_xinput_only_mode,
@@ -1895,7 +1931,7 @@ class MAMEControlConfig(ctk.CTk):
         else:
             self.xinput_only_toggle.deselect()
         
-        self.xinput_only_toggle.pack(side="right", padx=10)
+        self.xinput_only_toggle.pack(side="right", padx=10)'''
         
         # 3. Hide buttons toggle (will appear to the left of XInput only toggle)
         self.hide_buttons_toggle = ctk.CTkSwitch(
@@ -1913,7 +1949,7 @@ class MAMEControlConfig(ctk.CTk):
         
         self.hide_buttons_toggle.pack(side="right", padx=10)
 
-    def toggle_xinput_only_mode(self):
+    '''def toggle_xinput_only_mode(self):
         """Handle toggling between showing all controls or only XInput controls"""
         if hasattr(self, 'xinput_only_toggle'):
             # Get the current toggle state
@@ -1982,7 +2018,7 @@ class MAMEControlConfig(ctk.CTk):
                 except Exception as e:
                     print(f"Error refreshing display after toggling XInput Only Mode: {e}")
                     import traceback
-                    traceback.print_exc()
+                    traceback.print_exc()'''
     
     def clear_xinput_mode_cache(self):
         """Clear cache when toggling XInput Only Mode"""
