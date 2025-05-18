@@ -568,7 +568,7 @@ class MAMEControlConfig(ctk.CTk):
         self.after(500, self.show_application)
 
     def show_application(self):
-        """Show the application window when everything is loaded"""
+        """Show the application window on the same monitor as the splash"""
         try:
             debug_print("Preparing to show application window...")
             
@@ -583,21 +583,29 @@ class MAMEControlConfig(ctk.CTk):
             # Force full UI update
             self.update_idletasks()
             
-            # Let the window position where the OS naturally puts it
-            # The most reliable approach is to not try to override this behavior
-            # which varies between running as script and as exe
+            # Get the monitor to use - use the one we determined at launch time
+            if hasattr(self, 'launch_monitor'):
+                monitor = self.launch_monitor
+            else:
+                # Fallback to primary monitor if launch_monitor wasn't set
+                monitors = get_monitors()
+                monitor = monitors[0]  # Default to first
+                for m in monitors:
+                    if getattr(m, 'is_primary', False):
+                        monitor = m
+                        break
             
-            screen_width = self.winfo_screenwidth()
-            screen_height = self.winfo_screenheight()
+            # Set window size and position
             win_width = 1280
             win_height = 800
-            x = (screen_width - win_width) // 2
-            y = (screen_height - win_height) // 2
+            x = monitor.x + (monitor.width - win_width) // 2
+            y = monitor.y + (monitor.height - win_height) // 2
+            
+            # Position window on the appropriate monitor
             self.geometry(f"{win_width}x{win_height}+{x}+{y}")
-
             
             # Show the main window
-            debug_print("Showing application window")
+            debug_print(f"Showing application window on monitor at {monitor.x},{monitor.y} with size {monitor.width}x{monitor.height}")
             self.deiconify()
             
             # Auto maximize after showing
@@ -643,30 +651,116 @@ class MAMEControlConfig(ctk.CTk):
             self.update_idletasks()
             debug_print(f"Loading message: {message}")
     
+    def get_current_monitor(self):
+        """Get the monitor where the window is or should be displayed"""
+        try:
+            # Get available monitors
+            monitors = get_monitors()
+            
+            # If we have stored monitor info, use it
+            if hasattr(self, 'current_monitor') and self.current_monitor:
+                return self.current_monitor
+                
+            # Get primary monitor (usually the first one)
+            primary_monitor = monitors[0]
+            for monitor in monitors:
+                if monitor.is_primary:
+                    primary_monitor = monitor
+                    break
+                    
+            # Store and return the primary monitor
+            self.current_monitor = primary_monitor
+            return primary_monitor
+        except Exception as e:
+            print(f"Error getting current monitor: {e}")
+            # Return a dummy monitor if needed
+            class DummyMonitor:
+                def __init__(self):
+                    self.x = 0
+                    self.y = 0
+                    self.width = 1920
+                    self.height = 1080
+            return DummyMonitor()
+    
     def create_splash_window(self):
-        """Create a separate splash window that shows while loading using mouse position to determine screen"""
+        """Create a separate splash window that shows on the appropriate monitor"""
         try:
             # Create a toplevel window for splash
             splash = tk.Toplevel()
             splash.title("Loading")
             splash.withdraw()  # Hide initially
             
-            root = tk.Tk()
-            root.withdraw()
-            mouse_x = root.winfo_pointerx()
-            mouse_y = root.winfo_pointery()
-            root.destroy()
+            # Check if running as executable
+            is_frozen = getattr(sys, 'frozen', False)
+            
+            # Different positioning strategy based on running mode
+            if is_frozen:
+                # When running as executable, try to determine launch monitor
+                try:
+                    # Get executable path
+                    if hasattr(sys, '_MEIPASS'):
+                        # PyInstaller specific
+                        exe_dir = os.path.dirname(sys.executable)
+                    else:
+                        exe_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+                    
+                    # Get mouse pointer location to determine which monitor the user is using
+                    mouse_x = splash.winfo_pointerx()
+                    mouse_y = splash.winfo_pointery()
+                    
+                    # Find monitor containing mouse pointer
+                    monitors = get_monitors()
+                    launch_monitor = monitors[0]  # Default to first
+                    
+                    for monitor in monitors:
+                        if (monitor.x <= mouse_x < monitor.x + monitor.width and
+                            monitor.y <= mouse_y < monitor.y + monitor.height):
+                            launch_monitor = monitor
+                            break
+                    
+                    # Store for main window
+                    self.launch_monitor = launch_monitor
+                    
+                    # Center splash on launch monitor
+                    splash_width = 400
+                    splash_height = 200
+                    x = launch_monitor.x + (launch_monitor.width - splash_width) // 2
+                    y = launch_monitor.y + (launch_monitor.height - splash_height) // 2
+                    
+                except Exception as e:
+                    debug_print(f"Error determining launch monitor: {e}")
+                    # Fallback to primary monitor
+                    monitors = get_monitors()
+                    primary_monitor = monitors[0]
+                    for m in monitors:
+                        if getattr(m, 'is_primary', False):
+                            primary_monitor = m
+                            break
+                    
+                    self.launch_monitor = primary_monitor
+                    
+                    splash_width = 400
+                    splash_height = 200
+                    x = primary_monitor.x + (primary_monitor.width - splash_width) // 2
+                    y = primary_monitor.y + (primary_monitor.height - splash_height) // 2
+                    
+            else:
+                # When running as script, always use primary monitor
+                monitors = get_monitors()
+                primary_monitor = monitors[0]  # Default to first
+                for monitor in monitors:
+                    if getattr(monitor, 'is_primary', False):
+                        primary_monitor = monitor
+                        break
+                
+                self.launch_monitor = primary_monitor
+                
+                splash_width = 400
+                splash_height = 200
+                x = primary_monitor.x + (primary_monitor.width - splash_width) // 2
+                y = primary_monitor.y + (primary_monitor.height - splash_height) // 2
 
-            monitor = get_monitor_for_point(mouse_x, mouse_y)
-
-            # Set splash size
-            splash_width = 400
-            splash_height = 200
-
-            # Center splash on the monitor under the mouse
-            x = monitor.x + (monitor.width - splash_width) // 2
-            y = monitor.y + (monitor.height - splash_height) // 2
-
+            # Set window position
             splash.geometry(f"{splash_width}x{splash_height}+{x}+{y}")
             
             # Configure appearance
@@ -675,7 +769,7 @@ class MAMEControlConfig(ctk.CTk):
             # Frame with border
             frame = tk.Frame(
                 splash, 
-                bg="#1e1e1e",  # Dark background
+                bg="#1e1e1e",
                 highlightbackground="#1f538d",  # Blue border
                 highlightthickness=2
             )
@@ -736,11 +830,11 @@ class MAMEControlConfig(ctk.CTk):
             splash.update()
             
             return splash
-            
+                
         except Exception as e:
             debug_print(f"Error creating splash window: {e}")
             return None
-
+    
     def update_splash_message(self, message):
         """Update the splash window message"""
         if hasattr(self, 'splash_message'):
