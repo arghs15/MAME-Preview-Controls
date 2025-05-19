@@ -3950,48 +3950,86 @@ controller xbox t		= """
         ).pack(anchor="w", padx=15, pady=(15, 10))
         
         # Get existing controls from game data to ensure we show ALL controls
+        # Get existing controls from game data to ensure we show ALL controls
         existing_controls = []
-        
+        existing_control_names = set()  # Track which control names exist in the game data
+                
         if game_data and 'players' in game_data:
             for player in game_data.get('players', []):
                 for label in player.get('labels', []):
                     # Add all controls to our list including specialized ones like P1_DIAL
                     existing_controls.append((label['name'], label['value']))
-        
-        # Define standard controller buttons
-        standard_controls = [
-            ('P1_BUTTON1', 'A Button'),
-            ('P1_BUTTON2', 'B Button'),
-            ('P1_BUTTON3', 'X Button'),
-            ('P1_BUTTON4', 'Y Button'),
-            ('P1_BUTTON5', 'Left Bumper (LB)'),
-            ('P1_BUTTON6', 'Right Bumper (RB)'),
-            ('P1_BUTTON7', 'Left Trigger (LT)'),
-            ('P1_BUTTON8', 'Right Trigger (RT)'),
-            ('P1_BUTTON9', 'Left Stick Button (L3)'),
-            ('P1_BUTTON10', 'Right Stick Button (R3)'),
-            # Analog stick
-            ('P1_JOYSTICK_UP', 'Left Stick Up'),
-            ('P1_JOYSTICK_DOWN', 'Left Stick Down'),
-            ('P1_JOYSTICK_LEFT', 'Left Stick Left'),
-            ('P1_JOYSTICK_RIGHT', 'Left Stick Right'),
-            # Right analog stick
-            ('P1_JOYSTICKRIGHT_UP', 'Right Stick Up'),
-            ('P1_JOYSTICKRIGHT_DOWN', 'Right Stick Down'),
-            ('P1_JOYSTICKRIGHT_LEFT', 'Right Stick Left'),
-            ('P1_JOYSTICKRIGHT_RIGHT', 'Right Stick Right'),
-            # D-pad
-            ('P1_DPAD_UP', 'D-Pad Up'),
-            ('P1_DPAD_DOWN', 'D-Pad Down'),
-            ('P1_DPAD_LEFT', 'D-Pad Left'),
-            ('P1_DPAD_RIGHT', 'D-Pad Right'),
-            # System buttons
-            ('P1_START', 'Start Button'),
-            ('P1_SELECT', 'Select/Coin Button'),
+                    existing_control_names.add(label['name'])
+
+        # Dynamically generate buttons based on game data
+        standard_controls = []
+
+        # First determine how many buttons to show
+        if is_new_game:
+            # For new games, use the buttons value from the UI
+            buttons_to_show = int(buttons_var.get())
+            print(f"New game: showing {buttons_to_show} buttons from UI input")
+        else:
+            # For existing games, only show buttons that are actually defined in the controls
+            num_buttons = int(game_data.get('buttons', 2))  # Default to 2 if not specified
+            print(f"Existing game: game defines {num_buttons} buttons")
+            
+            # Only show buttons that are actually defined in the controls
+            defined_buttons = []
+            for i in range(1, 11):  # Check up to button 10
+                button_name = f"P1_BUTTON{i}"
+                if button_name in existing_control_names or (
+                    'controls' in game_data and button_name in game_data['controls']):
+                    defined_buttons.append(button_name)
+            
+            print(f"Found {len(defined_buttons)} defined buttons: {defined_buttons}")
+            buttons_to_show = max(num_buttons, len(defined_buttons))
+            print(f"Will show {buttons_to_show} buttons")
+
+        # Generate button controls - ONLY for buttons that exist in the game
+        for i in range(1, buttons_to_show + 1):
+            control_name = f'P1_BUTTON{i}'
+            display_name = f'P1 Button {i}'
+            standard_controls.append((control_name, display_name))
+
+        # Only add directional controls if they're used in this game
+        directional_controls = []
+        if any(name.startswith('P1_JOYSTICK_') for name in existing_control_names):
+            directional_controls.extend([
+                ('P1_JOYSTICK_UP', 'P1 Joystick Up'),
+                ('P1_JOYSTICK_DOWN', 'P1 Joystick Down'),
+                ('P1_JOYSTICK_LEFT', 'P1 Joystick Left'),
+                ('P1_JOYSTICK_RIGHT', 'P1 Joystick Right'),
+            ])
+
+        # Only add right stick controls if they're used
+        right_stick_controls = []
+        if any(name.startswith('P1_JOYSTICKRIGHT_') for name in existing_control_names):
+            right_stick_controls.extend([
+                ('P1_JOYSTICKRIGHT_UP', 'P1 Right Stick Up'),
+                ('P1_JOYSTICKRIGHT_DOWN', 'P1 Right Stick Down'),
+                ('P1_JOYSTICKRIGHT_LEFT', 'P1 Right Stick Left'),
+                ('P1_JOYSTICKRIGHT_RIGHT', 'P1 Right Stick Right'),
+            ])
+
+        # Only add D-pad controls if they're used
+        dpad_controls = []
+        if any(name.startswith('P1_DPAD_') for name in existing_control_names):
+            dpad_controls.extend([
+                ('P1_DPAD_UP', 'P1 D-Pad Up'),
+                ('P1_DPAD_DOWN', 'P1 D-Pad Down'),
+                ('P1_DPAD_LEFT', 'P1 D-Pad Left'),
+                ('P1_DPAD_RIGHT', 'P1 D-Pad Right'),
+            ])
+
+        # System buttons are common so we'll include them
+        system_controls = [
+            ('P1_START', 'P1 Start Button'),
+            ('P1_SELECT', 'P1 Select/Coin Button'),
         ]
-        
-        # Add specialized MAME controls that aren't part of standard gamepad
-        specialized_controls = [
+
+        # Define all specialized controls but only add the ones that exist in the game data
+        all_specialized_controls = [
             ('P1_DIAL', 'Rotary Dial'),
             ('P1_DIAL_V', 'Vertical Dial'),
             ('P1_PADDLE', 'Paddle Controller'),
@@ -4007,20 +4045,24 @@ controller xbox t		= """
             ('P1_PEDAL', 'Pedal Input'),
             ('P1_PEDAL2', 'Second Pedal Input'),
             ('P1_POSITIONAL', 'Positional Control'),
-            
-            # System controls
             ('P1_GAMBLE_HIGH', 'Gamble High'),
             ('P1_GAMBLE_LOW', 'Gamble Low'),
         ]
-        
-        # Merge standard and specialized controls
-        all_controls = standard_controls + specialized_controls
-        
-        # Add any existing controls that aren't in our predefined lists
+
+        # Only include specialized controls if they exist in the game data
+        specialized_controls = [
+            control for control in all_specialized_controls 
+            if control[0] in existing_control_names
+        ]
+
+        # Create the final control list, merging all relevant controls
+        all_controls = standard_controls + directional_controls + right_stick_controls + dpad_controls + system_controls + specialized_controls
+
+        # Add any custom controls that aren't in our lists but are in the game data
         for control_name, action in existing_controls:
             if not any(control[0] == control_name for control in all_controls):
                 all_controls.append((control_name, action))
-        
+
         # Create a dictionary to store all the entry fields
         control_entries = {}
         
@@ -4079,7 +4121,7 @@ controller xbox t		= """
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
         # Title for standard controls
-        standard_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
+        '''standard_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
         standard_header.pack(fill="x", pady=(0, 10))
         
         ctk.CTkLabel(
@@ -4087,7 +4129,7 @@ controller xbox t		= """
             text="Standard Controls",
             font=("Arial", 13, "bold"),
             text_color="#ffffff"
-        ).pack(padx=10, pady=5)
+        ).pack(padx=10, pady=5)'''
         
         # Create entry fields for each standard control
         for i, (control_name, display_name) in enumerate(standard_controls):
@@ -4128,7 +4170,7 @@ controller xbox t		= """
             control_entries[control_name] = action_entry
         
         # Add a header for specialized controls
-        specialized_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
+        '''specialized_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
         specialized_header.pack(fill="x", pady=(20, 10))
         
         ctk.CTkLabel(
@@ -4136,7 +4178,7 @@ controller xbox t		= """
             text="Specialized MAME Controls",
             font=("Arial", 13, "bold"),
             text_color="#ffffff"
-        ).pack(padx=10, pady=5)
+        ).pack(padx=10, pady=5)'''
         
         # Create entry fields for specialized controls
         for i, (control_name, display_name) in enumerate(specialized_controls):
@@ -4184,7 +4226,7 @@ controller xbox t		= """
         
         if additional_controls:
             # Add a header for additional controls
-            additional_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
+            '''additional_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
             additional_header.pack(fill="x", pady=(20, 10))
             
             ctk.CTkLabel(
@@ -4192,7 +4234,7 @@ controller xbox t		= """
                 text="Additional Controls",
                 font=("Arial", 13, "bold"),
                 text_color="#ffffff"
-            ).pack(padx=10, pady=5)
+            ).pack(padx=10, pady=5)'''
             
             # Create entry fields for additional controls
             for i, (control_name, action) in enumerate(additional_controls):
@@ -4245,7 +4287,50 @@ controller xbox t		= """
         # List to track custom controls
         custom_control_rows = []
         
-        # Function to add a new custom control row
+        def update_all_dropdowns(changed_control, add=False):
+            """
+            Update all dropdown menus when a control is added or removed
+            
+            Parameters:
+            - changed_control: The control name that was added or removed
+            - add: True if the control should be added to dropdowns, False if it should be removed
+            """
+            # Only process if it's a valid control name
+            if not changed_control or changed_control == "OTHER (Type custom name)":
+                return
+                
+            for row_data in custom_control_rows:
+                if 'dropdown' not in row_data or not row_data['dropdown'].winfo_exists():
+                    continue
+                    
+                dropdown = row_data['dropdown']
+                current_options = dropdown.cget("values")
+                current_value = row_data['control_var'].get()
+                
+                # Skip updating this dropdown if it's the one that changed
+                if current_value == changed_control and not add:
+                    continue
+                    
+                if add:
+                    # Add the control back to the options if it's not already there
+                    if changed_control not in current_options:
+                        # Insert the control in alphabetical order (keeping "OTHER" at the end)
+                        new_options = list(current_options)
+                        if "OTHER (Type custom name)" in new_options:
+                            new_options.remove("OTHER (Type custom name)")
+                            
+                        new_options.append(changed_control)
+                        new_options.sort()  # Sort alphabetically
+                        new_options.append("OTHER (Type custom name)")  # Keep OTHER at the end
+                        
+                        # Update the dropdown
+                        dropdown.configure(values=new_options)
+                else:
+                    # Remove the control from the options
+                    if changed_control in current_options:
+                        new_options = [opt for opt in current_options if opt != changed_control]
+                        dropdown.configure(values=new_options)
+        
         def add_custom_control_row():
             row_frame = ctk.CTkFrame(custom_controls_frame, fg_color=self.theme_colors["background"], corner_radius=4)
             row_frame.pack(fill="x", pady=2)
@@ -4255,14 +4340,105 @@ controller xbox t		= """
             row_frame.columnconfigure(1, weight=1)  # Action entry
             row_frame.columnconfigure(2, weight=0)  # Remove button
             
-            # Control name entry
-            control_entry = ctk.CTkEntry(
-                row_frame, 
-                width=200, 
-                placeholder_text="Custom Control (e.g., P1_BUTTON11)",
+            # Define comprehensive list of all possible MAME controls
+            all_control_options = [
+                # Standard buttons from 1-12
+                "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", 
+                "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
+                "P1_BUTTON9", "P1_BUTTON10", "P1_BUTTON11", "P1_BUTTON12",
+                # System buttons
+                "P1_START", "P1_SELECT", "P1_COIN",
+                # Joysticks
+                "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT",
+                # Right joystick
+                "P1_JOYSTICKRIGHT_UP", "P1_JOYSTICKRIGHT_DOWN", "P1_JOYSTICKRIGHT_LEFT", "P1_JOYSTICKRIGHT_RIGHT",
+                # D-Pad
+                "P1_DPAD_UP", "P1_DPAD_DOWN", "P1_DPAD_LEFT", "P1_DPAD_RIGHT",
+                # Specialized controls
+                "P1_DIAL", "P1_DIAL_V", "P1_PADDLE", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
+                "P1_MOUSE_X", "P1_MOUSE_Y", "P1_LIGHTGUN_X", "P1_LIGHTGUN_Y",
+                "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z",
+                "P1_PEDAL", "P1_PEDAL2", "P1_POSITIONAL",
+                "P1_GAMBLE_HIGH", "P1_GAMBLE_LOW",
+                # Player 2 controls
+                "P2_BUTTON1", "P2_BUTTON2", "P2_BUTTON3", "P2_BUTTON4",
+                "P2_JOYSTICK_UP", "P2_JOYSTICK_DOWN", "P2_JOYSTICK_LEFT", "P2_JOYSTICK_RIGHT",
+                "P2_START", "P2_SELECT",
+            ]
+            
+            # Get list of already assigned controls
+            already_assigned = []
+            
+            # From standard controls
+            for control_name, entry in control_entries.items():
+                if isinstance(entry, ctk.CTkEntry) and entry.get().strip():
+                    already_assigned.append(control_name)
+            
+            # From custom controls
+            for row_data in custom_control_rows:
+                if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
+                    control = row_data['control_var'].get()
+                    if control and control != "OTHER (Type custom name)":
+                        already_assigned.append(control)
+                elif 'custom_entry' in row_data and row_data['custom_entry'].winfo_exists():
+                    control = row_data['custom_entry'].get().strip()
+                    if control:
+                        already_assigned.append(control)
+            
+            # Filter out already assigned controls
+            available_controls = [c for c in all_control_options if c not in already_assigned]
+            
+            # Always add the custom option at the end
+            control_options = available_controls + ["OTHER (Type custom name)"]
+            
+            # Control name dropdown
+            control_var = tk.StringVar()
+            if control_options:
+                control_var.set(control_options[0])  # Set the first available option as default
+            
+            control_dropdown = ctk.CTkComboBox(
+                row_frame,
+                width=250,
+                values=control_options,
+                variable=control_var,
+                fg_color=self.theme_colors["card_bg"],
+                button_color=self.theme_colors["primary"],
+                button_hover_color=self.theme_colors["secondary"],
+                dropdown_fg_color=self.theme_colors["card_bg"]
+            )
+            control_dropdown.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
+            
+            # Custom control entry (initially hidden)
+            custom_control_entry = ctk.CTkEntry(
+                row_frame,
+                width=250,
+                placeholder_text="Enter custom control name",
                 fg_color=self.theme_colors["card_bg"]
             )
-            control_entry.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
+            custom_control_entry.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
+            custom_control_entry.grid_remove()  # Initially hidden
+            
+            # Function to handle dropdown changes
+            def on_dropdown_change(*args):
+                old_value = getattr(control_var, "_last_value", None)
+                new_value = control_var.get()
+                
+                # Store the current value for next time
+                control_var._last_value = new_value
+                
+                if new_value == "OTHER (Type custom name)":
+                    # Hide dropdown, show custom entry
+                    control_dropdown.grid_remove()
+                    custom_control_entry.grid()
+                    custom_control_entry.focus_set()
+                elif old_value != new_value:
+                    # Control selection changed, update other dropdowns
+                    update_all_dropdowns(new_value, add=False)  # Remove from other dropdowns
+                    if old_value and old_value != "OTHER (Type custom name)":
+                        update_all_dropdowns(old_value, add=True)  # Add old value back to other dropdowns
+
+            # Bind the change event
+            control_var.trace_add("write", on_dropdown_change)
             
             # Action entry
             action_entry = ctk.CTkEntry(
@@ -4278,6 +4454,16 @@ controller xbox t		= """
                 row_frame.destroy()
                 if row_data in custom_control_rows:
                     custom_control_rows.remove(row_data)
+                    
+                    # Update other dropdowns to make this control available again
+                    if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
+                        removed_control = row_data['control_var'].get()
+                        if removed_control != "OTHER (Type custom name)":
+                            update_all_dropdowns(removed_control, add=True)
+                    elif 'custom_entry' in row_data:
+                        removed_control = row_data['custom_entry'].get().strip()
+                        if removed_control:
+                            update_all_dropdowns(removed_control, add=True)
             
             remove_button = ctk.CTkButton(
                 row_frame,
@@ -4293,7 +4479,13 @@ controller xbox t		= """
             remove_button.grid(row=0, column=2, padx=(5, 10), pady=8)
             
             # Store row data
-            row_data = {'frame': row_frame, 'control': control_entry, 'action': action_entry}
+            row_data = {
+                'frame': row_frame, 
+                'dropdown': control_dropdown,
+                'custom_entry': custom_control_entry,
+                'control_var': control_var,
+                'action': action_entry
+            }
             custom_control_rows.append(row_data)
             
             return row_data
@@ -4500,9 +4692,19 @@ controller xbox t		= """
                 
                 # Add custom controls
                 for row_data in custom_control_rows:
-                    control_name = row_data['control'].get().strip()
+                    # Get control name based on whether dropdown or custom entry is used
+                    if row_data['dropdown'].winfo_viewable():  # If dropdown is visible
+                        control_name = row_data['control_var'].get()
+                        # Skip the "OTHER" option
+                        if control_name == "OTHER (Type custom name)":
+                            continue
+                    else:  # Custom entry is being used
+                        control_name = row_data['custom_entry'].get().strip()
+                    
                     control_label = row_data['action'].get().strip()
-                    if control_name and control_label:
+                    
+                    # Only add if both fields have values and it's not the placeholder option
+                    if control_name and control_label and control_name != "OTHER (Type custom name)":
                         game_entry[current_rom_name]["controls"][control_name] = {
                             "name": control_label,
                             "tag": "",
@@ -4624,6 +4826,9 @@ controller xbox t		= """
                             "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
                         }
                 
+                # Track defined button numbers from standard controls
+                defined_buttons = set()
+                
                 # Add standard controls
                 for control_name, entry in control_entries.items():
                     if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
@@ -4634,17 +4839,70 @@ controller xbox t		= """
                                 "tag": "",
                                 "mask": "0"
                             }
+                            
+                            # Track button numbers
+                            if control_name.startswith("P1_BUTTON"):
+                                try:
+                                    button_num = int(control_name.replace("P1_BUTTON", ""))
+                                    defined_buttons.add(button_num)
+                                except ValueError:
+                                    pass
                 
                 # Add custom controls
                 for row_data in custom_control_rows:
-                    control_name = row_data['control'].get().strip()
+                    # Get control name based on whether dropdown or custom entry is used
+                    if row_data['dropdown'].winfo_viewable():  # If dropdown is visible
+                        control_name = row_data['control_var'].get()
+                        # Skip the "OTHER" option
+                        if control_name == "OTHER (Type custom name)":
+                            continue
+                    else:  # Custom entry is being used
+                        control_name = row_data['custom_entry'].get().strip()
+                    
                     control_label = row_data['action'].get().strip()
-                    if control_name and control_label:
+                    
+                    # Only add if both fields have values and it's not the placeholder option
+                    if control_name and control_label and control_name != "OTHER (Type custom name)":
                         game_entry["controls"][control_name] = {
                             "name": control_label,
                             "tag": "",
                             "mask": "0"
                         }
+                        
+                        # Track button numbers
+                        if control_name.startswith("P1_BUTTON"):
+                            try:
+                                button_num = int(control_name.replace("P1_BUTTON", ""))
+                                defined_buttons.add(button_num)
+                            except ValueError:
+                                pass
+                
+                # Get the current button setting
+                current_buttons = int(buttons_var.get())
+                
+                # If we have defined buttons, check if we need to update the count
+                if defined_buttons:
+                    max_defined_button = max(defined_buttons) if defined_buttons else 0
+                    
+                    # Case 1: More buttons defined than current setting
+                    if max_defined_button > current_buttons:
+                        if messagebox.askyesno("Update Button Count", 
+                                    f"You've defined buttons up to P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to update the button count to {max_defined_button}?", 
+                                    parent=editor):
+                            # Update the button count
+                            buttons_var.set(str(max_defined_button))
+                            game_entry["buttons"] = str(max_defined_button)
+                            print(f"Updated button count to {max_defined_button}")
+                    
+                    # Case 2: Fewer buttons defined than current setting
+                    elif max_defined_button < current_buttons:
+                        if messagebox.askyesno("Reduce Button Count", 
+                                    f"The highest button you've defined is P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to reduce the button count to {max_defined_button}?", 
+                                    parent=editor):
+                            # Update the button count
+                            buttons_var.set(str(max_defined_button))
+                            game_entry["buttons"] = str(max_defined_button)
+                            print(f"Reduced button count to {max_defined_button}")
                 
                 # Update or add entry to gamedata
                 gamedata[current_rom_name] = game_entry

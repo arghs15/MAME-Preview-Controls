@@ -618,7 +618,24 @@ def main():
             
             # Create the Tkinter application with hidden window initially
             app = MAMEControlConfig(initially_hidden=True)
-            
+
+            # Set the window icon (add these lines)
+            try:
+                icon_path = "P1.ico"
+                # Check multiple locations
+                if not os.path.exists(icon_path):
+                    alternate_path = os.path.join(app_dir, "P1.ico")
+                    if os.path.exists(alternate_path):
+                        icon_path = alternate_path
+                
+                if os.path.exists(icon_path):
+                    print(f"Setting window icon from: {icon_path}")
+                    app.iconbitmap(icon_path)
+                else:
+                    print("Warning: Could not find icon file for window decoration")
+            except Exception as e:
+                print(f"Error setting window icon: {e}")
+
             # Auto maximize
             app.after(100, app.state, 'zoomed')
             
