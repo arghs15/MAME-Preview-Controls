@@ -738,9 +738,9 @@ class PreviewWindow(QMainWindow):
                 control_data['action'] = info['action']
                 control_data['prefix'] = info['prefix']
         
-        # Force apply font and update
+        # Force apply font and update WITH uppercase_changed=True
         from PyQt5.QtCore import QTimer
-        QTimer.singleShot(100, self.apply_text_settings)
+        QTimer.singleShot(100, lambda: self.apply_text_settings(uppercase_changed=True))
         QTimer.singleShot(200, self.force_resize_all_labels)
         
         print("Control labels recreated with case and gradient changes applied")
