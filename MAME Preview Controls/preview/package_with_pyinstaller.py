@@ -78,7 +78,7 @@ def main():
         "pyinstaller",
         "--name=temp_app",  # Temporary name that will be moved
         "--onedir",         # Create a directory with all files
-        "--contents-directory=myData",  # Hide implementation details
+        "--contents-directory=data",  # Hide implementation details
         "--windowed",
         "--hidden-import=preview_bridge",
         "--hidden-import=mame_controls_tkinter", 
@@ -147,8 +147,8 @@ def main():
     print("Final directory structure:")
     print(f"  {dist_dir}/")
     print(f"  └── preview/")
-    print(f"      ├── MAME_Controls.exe")
-    print(f"      ├── myData/")
+    print(f"      ├── MAME Controls.exe")
+    print(f"      ├── data/")
     print(f"      └── settings/")
     
     # Print details of included settings files
@@ -179,7 +179,7 @@ def main():
     # Rename the executable if necessary
     exe_ext = ".exe" if sys.platform == "win32" else ""
     src_exe = os.path.join(preview_dir, f"temp_app{exe_ext}")
-    dst_exe = os.path.join(preview_dir, f"MAME_Controls{exe_ext}")
+    dst_exe = os.path.join(preview_dir, f"MAME Controls{exe_ext}")
     
     if os.path.exists(src_exe) and src_exe != dst_exe:
         print(f"Renaming executable from {src_exe} to {dst_exe}")
