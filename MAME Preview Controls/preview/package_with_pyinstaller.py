@@ -87,10 +87,27 @@ def main():
         "mame_controls_main.py"
     ]
     
-    # Add icon if available
-    icon_path = "mame.ico"
-    if os.path.exists(icon_path):
+    # Add icon with more flexible options
+    icon_filename = "P1.ico"  # Default icon name
+    icon_paths = [
+        icon_filename,  # Current directory
+        os.path.join("assets", icon_filename),  # assets subdirectory
+        os.path.join("..", icon_filename)  # Parent directory
+    ]
+
+    # Try each possible location
+    icon_path = None
+    for path in icon_paths:
+        if os.path.exists(path):
+            icon_path = path
+            print(f"Found icon file at: {path}")
+            break
+
+    # Add to PyInstaller command if found
+    if icon_path:
         cmd.insert(2, f"--icon={icon_path}")
+    else:
+        print("Warning: No icon file found. Executable will use default icon.")
     
     print("Running command:", " ".join(cmd))
     subprocess.run(cmd)
