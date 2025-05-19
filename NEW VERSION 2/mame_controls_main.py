@@ -57,7 +57,6 @@ def get_application_path():
         # Running as script
         return os.path.dirname(os.path.abspath(__file__))
 
-
 def get_mame_parent_dir(app_path=None):
     """
     Get the parent directory where MAME, ROMs, and artwork are located.
@@ -72,6 +71,211 @@ def get_mame_parent_dir(app_path=None):
     else:
         # We're already in the MAME directory
         return app_path
+
+def validate_mame_directory(mame_dir):
+    """
+    Validate that the directory is a valid MAME installation
+    Returns True if valid, False if not
+    """
+    if not os.path.exists(mame_dir):
+        print(f"MAME directory not found: {mame_dir}")
+        return False
+        
+    # Check for essential MAME folders/files
+    required_items = ["roms", "mame.exe", "mame64.exe", "mame"]
+    found_items = []
+    
+    for item in required_items:
+        if os.path.exists(os.path.join(mame_dir, item)):
+            found_items.append(item)
+    
+    # If we found at least one required item, consider it valid
+    if found_items:
+        print(f"MAME directory validated: {mame_dir}")
+        print(f"Found MAME components: {', '.join(found_items)}")
+        return True
+    
+    print(f"Directory exists but doesn't appear to be a MAME installation: {mame_dir}")
+    return False
+
+def show_mame_not_found_error(mame_dir):
+    """Display a styled error message when MAME directory is not found"""
+    error_message = (
+        f"MAME directory not found or invalid!\n\n"
+        f"Please make sure the MAME Controls application is placed in a subdirectory of your MAME installation."
+        f"\n\nThe correct structure should be:\n"
+        f"- MAME Directory (containing mame.exe, roms folder, etc.)\n"
+        f"  └── preview (containing this application)"
+    )
+    
+    print("ERROR: " + error_message.replace('\n', ' '))
+    
+    try:
+        # Try using a styled Tkinter dialog
+        import tkinter as tk
+        from tkinter import font
+        
+        # Create a custom styled dialog
+        def create_styled_error_dialog():
+            # Create the root window
+            root = tk.Tk()
+            root.title("MAME Controls - MAME Not Found")
+            root.configure(bg="#1e1e1e")  # Dark background
+            
+            # Set icon if available
+            try:
+                icon_paths = ["mame.ico", os.path.join(os.path.dirname(os.path.abspath(__file__)), "mame.ico")]
+                for icon_path in icon_paths:
+                    if os.path.exists(icon_path):
+                        root.iconbitmap(icon_path)
+                        break
+            except:
+                pass
+            
+            # Calculate window size and position
+            window_width = 500
+            window_height = 350
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            x_position = (screen_width - window_width) // 2
+            y_position = (screen_height - window_height) // 2
+            root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+            
+            # Create a frame with border
+            main_frame = tk.Frame(
+                root, 
+                bg="#1e1e1e",
+                highlightbackground="#1f538d",  # Blue border
+                highlightthickness=2
+            )
+            main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            
+            # Add error icon
+            try:
+                from PIL import Image, ImageTk
+                # Create a basic error icon if PIL is available
+                icon_size = 48
+                icon_frame = tk.Frame(main_frame, bg="#1e1e1e", width=icon_size, height=icon_size)
+                icon_frame.pack(pady=(20, 5))
+                
+                # Create a red circle with exclamation mark
+                canvas = tk.Canvas(icon_frame, width=icon_size, height=icon_size, 
+                                 bg="#1e1e1e", highlightthickness=0)
+                canvas.pack()
+                
+                # Draw a red circle
+                canvas.create_oval(4, 4, icon_size-4, icon_size-4, fill="#c41e3a", outline="")
+                
+                # Draw an exclamation mark
+                canvas.create_rectangle(22, 14, 26, 32, fill="white", outline="")
+                canvas.create_oval(22, 36, 26, 40, fill="white", outline="")
+            except:
+                # Skip icon if PIL not available
+                pass
+            
+            # Add title
+            title_font = font.Font(family="Segoe UI", size=12, weight="bold")
+            title_label = tk.Label(
+                main_frame,
+                text="MAME Directory Not Found",
+                font=title_font,
+                fg="white",
+                bg="#1e1e1e"
+            )
+            title_label.pack(pady=(10, 15))
+            
+            # Add detailed message
+            message_frame = tk.Frame(main_frame, bg="#1e1e1e", padx=20)
+            message_frame.pack(fill="both", expand=True, padx=10, pady=0)
+            
+            text_font = font.Font(family="Segoe UI", size=10)
+            message_text = tk.Text(
+                message_frame,
+                wrap=tk.WORD,
+                bg="#2d2d2d",
+                fg="white",
+                font=text_font,
+                bd=1,
+                padx=10,
+                pady=10,
+                relief=tk.FLAT,
+                highlightbackground="#3d3d3d",
+                highlightthickness=1
+            )
+            message_text.insert(tk.END, error_message)
+            message_text.config(state=tk.DISABLED)  # Make readonly
+            message_text.pack(fill="both", expand=True)
+            
+            # Add OK button
+            button_frame = tk.Frame(main_frame, bg="#1e1e1e")
+            button_frame.pack(fill="x", pady=(15, 20))
+            
+            def on_ok():
+                root.destroy()
+                
+            ok_button = tk.Button(
+                button_frame,
+                text="OK",
+                command=on_ok,
+                bg="#1f538d",  # Blue background
+                fg="white",
+                font=font.Font(family="Segoe UI", size=10, weight="bold"),
+                padx=20,
+                pady=5,
+                relief=tk.FLAT,
+                activebackground="#2a82da",
+                activeforeground="white",
+                borderwidth=0,
+                highlightthickness=0,
+                cursor="hand2"
+            )
+            ok_button.pack()
+            
+            # Make the OK button the default (Enter key)
+            ok_button.focus_set()
+            root.bind("<Return>", lambda event: on_ok())
+            root.bind("<Escape>", lambda event: on_ok())
+            
+            # Center the window and bring to front
+            root.update_idletasks()
+            root.attributes('-topmost', True)
+            root.focus_force()
+            
+            return root
+        
+        # Create and show the dialog
+        dialog = create_styled_error_dialog()
+        dialog.mainloop()
+        
+    except Exception as e:
+        # Fallback to PyQt if tkinter fails
+        try:
+            from PyQt5.QtWidgets import QApplication, QMessageBox
+            
+            app = QApplication([])
+            # Apply dark theme to the app
+            set_dark_theme(app)
+            
+            # Show error message with styled QMessageBox
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Critical)
+            msg_box.setWindowTitle("MAME Controls - MAME Not Found")
+            msg_box.setText("MAME Directory Not Found")
+            msg_box.setInformativeText(error_message)
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            
+            # Show the dialog
+            msg_box.exec_()
+            
+        except Exception as e2:
+            # If all GUI methods fail, just print to console
+            print(f"Failed to show error dialog: {e}, {e2}")
+            print("=" * 50)
+            print(error_message)
+            print("=" * 50)
+    
+    # Ensure cleanup happens
+    cleanup_on_exit()
 
 def main():
     """Main entry point for the application with improved path handling and early cache check"""
@@ -94,6 +298,11 @@ def main():
     
     print(f"App directory: {app_dir}")
     print(f"MAME directory: {mame_dir}")
+    
+    # Add MAME directory validation
+    if not validate_mame_directory(mame_dir):
+        show_mame_not_found_error(mame_dir)
+        return 1
     
     try:
         # Create argument parser
