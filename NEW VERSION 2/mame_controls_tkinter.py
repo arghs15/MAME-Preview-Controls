@@ -3933,131 +3933,11 @@ controller xbox t		= """
         )
         sticks_combo.grid(row=3, column=3, padx=5, pady=5, sticky="w")
         
-        # Clone games section (only for new games)
+        # Initialize clone_entries for use throughout the method
         clone_entries = []
         preview_text = None  # Define here to avoid NameError
         
-        if is_new_game:
-            # Clone games card
-            clone_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-            clone_card.pack(fill="x", padx=0, pady=(0, 15))
-            
-            ctk.CTkLabel(
-                clone_card,
-                text="Clone Games (Optional)",
-                font=("Arial", 16, "bold"),
-                anchor="w"
-            ).pack(anchor="w", padx=15, pady=(15, 10))
-            
-            clones_description = (
-                "You can add clone ROMs for this game. These will inherit the parent game's settings."
-            )
-            
-            ctk.CTkLabel(
-                clone_card,
-                text=clones_description,
-                font=("Arial", 12),
-                text_color=self.theme_colors["text_dimmed"],
-                wraplength=750
-            ).pack(anchor="w", padx=15, pady=(0, 10))
-            
-            # Container for clone entries
-            clones_container = ctk.CTkFrame(clone_card, fg_color="transparent")
-            clones_container.pack(fill="x", padx=15, pady=(0, 15))
-            
-            def add_clone_row():
-                row_frame = ctk.CTkFrame(
-                    clones_container, 
-                    fg_color=self.theme_colors["background"],
-                    corner_radius=4
-                )
-                row_frame.pack(fill="x", pady=2)
-                
-                # Clone ROM name
-                clone_rom_var = tk.StringVar()
-                clone_rom_entry = ctk.CTkEntry(
-                    row_frame,
-                    width=150,
-                    textvariable=clone_rom_var,
-                    fg_color=self.theme_colors["card_bg"],
-                    placeholder_text="Clone ROM Name"
-                )
-                clone_rom_entry.pack(side="left", padx=10, pady=8)
-                
-                # Clone description
-                clone_desc_var = tk.StringVar()
-                clone_desc_entry = ctk.CTkEntry(
-                    row_frame,
-                    width=400,
-                    textvariable=clone_desc_var,
-                    fg_color=self.theme_colors["card_bg"],
-                    placeholder_text="Clone Description"
-                )
-                clone_desc_entry.pack(side="left", padx=10, pady=8)
-                
-                # Remove button
-                def remove_row():
-                    row_frame.destroy()
-                    clone_entries.remove(clone_data)
-                
-                remove_button = ctk.CTkButton(
-                    row_frame,
-                    text="×",
-                    width=30,
-                    height=30,
-                    command=remove_row,
-                    fg_color=self.theme_colors["danger"],
-                    hover_color="#c82333",
-                    font=("Arial", 14, "bold"),
-                    corner_radius=15
-                )
-                remove_button.pack(side="right", padx=10, pady=8)
-                
-                # Store data for this row
-                clone_data = {
-                    "frame": row_frame,
-                    "rom_var": clone_rom_var,
-                    "desc_var": clone_desc_var
-                }
-                
-                clone_entries.append(clone_data)
-                
-                return clone_data
-            
-            # Add initial clone row
-            add_clone_row()
-            
-            # Add another clone button
-            add_clone_button = ctk.CTkButton(
-                clones_container,
-                text="+ Add Another Clone",
-                command=add_clone_row,
-                fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"],
-                height=35
-            )
-            add_clone_button.pack(pady=10)
-            
-            # Preview section - show JSON output
-            preview_frame = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-            preview_frame.pack(fill="x", padx=0, pady=(0, 15))
-            
-            ctk.CTkLabel(
-                preview_frame,
-                text="JSON Preview",
-                font=("Arial", 14, "bold")
-            ).pack(anchor="w", padx=15, pady=(15, 10))
-            
-            # Preview text box
-            preview_text = ctk.CTkTextbox(
-                preview_frame,
-                height=150,
-                font=("Consolas", 12),
-                fg_color=self.theme_colors["background"]
-            )
-            preview_text.pack(fill="x", padx=15, pady=(0, 15))
-        
-        # Control mappings card
+        # REORDERED: Control mappings card MOVED UP before clone management
         controls_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         controls_card.pack(fill="x", padx=0, pady=(0, 15))
         
@@ -4432,6 +4312,144 @@ controller xbox t		= """
         )
         add_custom_button.pack(pady=10)
         
+        # MOVED: Clone games section BELOW control mappings
+        # Clone games card
+        clone_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        clone_card.pack(fill="x", padx=0, pady=(0, 15))
+        
+        # Adjust title based on whether creating new game or editing existing
+        title_text = "Clone Games (Optional)" if is_new_game else "Manage Clone Games"
+        
+        ctk.CTkLabel(
+            clone_card,
+            text=title_text,
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        # Adjust description based on whether creating new game or editing existing
+        clones_description = "You can add clone ROMs for this game. These will inherit the parent game's settings."
+        if not is_new_game:
+            clones_description = "Add, edit, or remove clone ROMs for this game. Clones inherit the parent game's settings unless overridden."
+        
+        ctk.CTkLabel(
+            clone_card,
+            text=clones_description,
+            font=("Arial", 12),
+            text_color=self.theme_colors["text_dimmed"],
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+        
+        # Container for clone entries
+        clones_container = ctk.CTkFrame(clone_card, fg_color="transparent")
+        clones_container.pack(fill="x", padx=15, pady=(0, 15))
+        
+        def add_clone_row(clone_rom="", clone_desc=""):
+            row_frame = ctk.CTkFrame(
+                clones_container, 
+                fg_color=self.theme_colors["background"],
+                corner_radius=4
+            )
+            row_frame.pack(fill="x", pady=2)
+            
+            # Clone ROM name
+            clone_rom_var = tk.StringVar(value=clone_rom)
+            clone_rom_entry = ctk.CTkEntry(
+                row_frame,
+                width=150,
+                textvariable=clone_rom_var,
+                fg_color=self.theme_colors["card_bg"],
+                placeholder_text="Clone ROM Name"
+            )
+            clone_rom_entry.pack(side="left", padx=10, pady=8)
+            
+            # Clone description
+            clone_desc_var = tk.StringVar(value=clone_desc)
+            clone_desc_entry = ctk.CTkEntry(
+                row_frame,
+                width=400,
+                textvariable=clone_desc_var,
+                fg_color=self.theme_colors["card_bg"],
+                placeholder_text="Clone Description"
+            )
+            clone_desc_entry.pack(side="left", padx=10, pady=8)
+            
+            # Remove button
+            def remove_row():
+                row_frame.destroy()
+                clone_entries.remove(clone_data)
+            
+            remove_button = ctk.CTkButton(
+                row_frame,
+                text="×",
+                width=30,
+                height=30,
+                command=remove_row,
+                fg_color=self.theme_colors["danger"],
+                hover_color="#c82333",
+                font=("Arial", 14, "bold"),
+                corner_radius=15
+            )
+            remove_button.pack(side="right", padx=10, pady=8)
+            
+            # Store data for this row
+            clone_data = {
+                "frame": row_frame,
+                "rom_var": clone_rom_var,
+                "desc_var": clone_desc_var
+            }
+            
+            clone_entries.append(clone_data)
+            
+            return clone_data
+        
+        # If editing existing game, load any existing clones
+        existing_clones_added = False
+        if not is_new_game and rom_name in self.gamedata_json:
+            parent_data = self.gamedata_json[rom_name]
+            if 'clones' in parent_data and isinstance(parent_data['clones'], dict):
+                # Add rows for existing clones
+                for clone_rom, clone_data in parent_data['clones'].items():
+                    clone_desc = clone_data.get('description', f"{clone_rom} (Clone of {rom_name})")
+                    add_clone_row(clone_rom, clone_desc)
+                    existing_clones_added = True
+        
+        # Add initial clone row if no existing clones
+        if not existing_clones_added:
+            add_clone_row()
+        
+        # Add another clone button
+        add_clone_button = ctk.CTkButton(
+            clones_container,
+            text="+ Add Another Clone",
+            command=add_clone_row,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"],
+            height=35
+        )
+        add_clone_button.pack(pady=10)
+        
+        # If creating a new game, show the preview section
+        if is_new_game:
+            # Preview section - show JSON output
+            preview_frame = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+            preview_frame.pack(fill="x", padx=0, pady=(0, 15))
+            
+            ctk.CTkLabel(
+                preview_frame,
+                text="JSON Preview",
+                font=("Arial", 14, "bold")
+            ).pack(anchor="w", padx=15, pady=(15, 10))
+            
+            # Preview text box
+            preview_text = ctk.CTkTextbox(
+                preview_frame,
+                height=150,
+                font=("Consolas", 12),
+                fg_color=self.theme_colors["background"]
+            )
+            preview_text.pack(fill="x", padx=15, pady=(0, 15))
+        
         # Preview JSON function - only used if is_new_game is True
         def update_preview():
             """Update the JSON preview based on current form values"""
@@ -4596,16 +4614,15 @@ controller xbox t		= """
                     "controls": {}
                 }
                 
-                # Add clones if this is a new game
-                if is_new_game:
-                    for clone_data in clone_entries:
-                        clone_rom = clone_data["rom_var"].get().strip()
-                        clone_desc = clone_data["desc_var"].get().strip()
-                        
-                        if clone_rom:
-                            game_entry["clones"][clone_rom] = {
-                                "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
-                            }
+                # Add clones
+                for clone_data in clone_entries:
+                    clone_rom = clone_data["rom_var"].get().strip()
+                    clone_desc = clone_data["desc_var"].get().strip()
+                    
+                    if clone_rom:
+                        game_entry["clones"][clone_rom] = {
+                            "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
+                        }
                 
                 # Add standard controls
                 for control_name, entry in control_entries.items():
