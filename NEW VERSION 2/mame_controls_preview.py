@@ -2925,53 +2925,24 @@ class PreviewWindow(QMainWindow):
         return readable
     
     def toggle_controls_view(self):
-        """Toggle between control views with simple include_specialized setting"""
-        # SIMPLE FLAG: Set to False to exclude specialized controls from rotation, True to include them
-        include_specialized = False  # <-- Easy to change this single line
-        
+        """Toggle between control views: Normal -> XInput -> Directionals -> Normal"""
         # Check what's currently showing
         showing_xinput = hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls
         showing_specialized = hasattr(self, 'showing_specialized_controls') and self.showing_specialized_controls
+        showing_directionals = hasattr(self, 'showing_all_directionals') and self.showing_all_directionals
         
         if showing_xinput:
-            if include_specialized:
-                # Switch to specialized controls
-                self.showing_all_xinput_controls = False
-                self.show_specialized_controls()
-                
-                # Update button text for NEXT state (normal)
-                if hasattr(self, 'controls_mode_button'):
-                    self.controls_mode_button.setText("Normal Controls")
-            else:
-                # Skip specialized and go back to normal
-                self.showing_all_xinput_controls = False
-                
-                # Clear ALL existing controls first
-                for control_name in list(self.control_labels.keys()):
-                    # Remove the control from the canvas
-                    if control_name in self.control_labels:
-                        if 'label' in self.control_labels[control_name]:
-                            self.control_labels[control_name]['label'].deleteLater()
-                        del self.control_labels[control_name]
-
-                # Clear collections
-                self.control_labels = {}
-                
-                # Reload the current game controls from scratch
-                self.create_control_labels()
-                
-                # Force apply the font after recreating controls
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(100, self.apply_text_settings)
-                QTimer.singleShot(200, self.force_resize_all_labels)
-                
-                # Update button text for NEXT state (XInput)
-                if hasattr(self, 'controls_mode_button'):
-                    self.controls_mode_button.setText("XInput Controls")
-                    
-        elif showing_specialized and include_specialized:
+            # Switch to directional controls
+            self.showing_all_xinput_controls = False
+            self.show_all_directional_controls()
+            
+            # Update button text for NEXT state (normal)
+            if hasattr(self, 'controls_mode_button'):
+                self.controls_mode_button.setText("Normal Controls")
+        
+        elif showing_directionals:
             # Switch back to normal game controls
-            self.showing_specialized_controls = False
+            self.showing_all_directionals = False
             
             # Clear ALL existing controls first
             for control_name in list(self.control_labels.keys()):
@@ -2995,18 +2966,260 @@ class PreviewWindow(QMainWindow):
             # Update button text for NEXT state (XInput)
             if hasattr(self, 'controls_mode_button'):
                 self.controls_mode_button.setText("XInput Controls")
+                
         else:
             # If showing normal controls, switch to XInput
             self.show_all_xinput_controls()
             
-            # Update button text based on the include_specialized flag
+            # Update button text for NEXT state (directionals)
             if hasattr(self, 'controls_mode_button'):
-                if include_specialized:
-                    # If specialized is included, the next state will be specialized
-                    self.controls_mode_button.setText("Special Controls")
+                self.controls_mode_button.setText("Directional Controls")
+
+    def show_all_directional_controls(self):
+        """Show all directional controls for global positioning"""
+        
+        # Directional controls for positioning - P1 ONLY
+        directional_controls = {
+            # Left stick
+            "P1_JOYSTICK_UP": "Left Stick Up",
+            "P1_JOYSTICK_DOWN": "Left Stick Down",
+            "P1_JOYSTICK_LEFT": "Left Stick Left",
+            "P1_JOYSTICK_RIGHT": "Left Stick Right",
+            
+            # Right stick 
+            "P1_JOYSTICKRIGHT_UP": "Right Stick Up",
+            "P1_JOYSTICKRIGHT_DOWN": "Right Stick Down",
+            "P1_JOYSTICKRIGHT_LEFT": "Right Stick Left",
+            "P1_JOYSTICKRIGHT_RIGHT": "Right Stick Right",
+            
+            # D-pad
+            "P1_DPAD_UP": "D-Pad Up",
+            "P1_DPAD_DOWN": "D-Pad Down",
+            "P1_DPAD_LEFT": "D-Pad Left",
+            "P1_DPAD_RIGHT": "D-Pad Right",
+        }
+        
+        try:
+            from PyQt5.QtGui import QFont, QFontInfo, QColor, QFontDatabase, QFontMetrics
+            from PyQt5.QtCore import QPoint, Qt, QTimer
+            from PyQt5.QtWidgets import QLabel, QSizePolicy
+            import os
+            
+            print("\n--- Showing directional controls ---")
+            
+            # Save existing control positions as backup
+            if not hasattr(self, 'original_controls_backup'):
+                self.original_controls_backup = {}
+                for control_name, control_data in self.control_labels.items():
+                    self.original_controls_backup[control_name] = {
+                        'action': control_data['action'],
+                        'position': control_data['label'].pos(),
+                        'original_pos': control_data.get('original_pos', QPoint(0, 0))
+                    }
+            
+            # Clear ALL existing controls first
+            for control_name in list(self.control_labels.keys()):
+                if control_name in self.control_labels:
+                    if 'label' in self.control_labels[control_name]:
+                        self.control_labels[control_name]['label'].deleteLater()
+                    del self.control_labels[control_name]
+
+            # Clear collections
+            self.control_labels = {}
+            
+            # Load saved positions
+            saved_positions = self.load_saved_positions()
+            
+            # Extract text settings
+            font_family = self.text_settings.get("font_family", "Arial")
+            font_size = self.text_settings.get("font_size", 28)
+            bold_strength = self.text_settings.get("bold_strength", 2) > 0
+            use_uppercase = self.text_settings.get("use_uppercase", False)
+            show_button_prefix = self.text_settings.get("show_button_prefix", True)
+            y_offset = self.text_settings.get("y_offset", -40)
+            
+            # Get color and gradient settings
+            use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+            use_action_gradient = self.text_settings.get("use_action_gradient", False)
+            prefix_color = self.text_settings.get("prefix_color", "#FFC107")
+            action_color = self.text_settings.get("action_color", "#FFFFFF")
+            prefix_gradient_start = self.text_settings.get("prefix_gradient_start", "#FFC107")
+            prefix_gradient_end = self.text_settings.get("prefix_gradient_end", "#FF5722")
+            action_gradient_start = self.text_settings.get("action_gradient_start", "#2196F3")
+            action_gradient_end = self.text_settings.get("action_gradient_end", "#4CAF50")
+            
+            # Use existing font if available
+            if hasattr(self, 'current_font') and self.current_font:
+                font = QFont(self.current_font)
+            elif hasattr(self, 'initialized_font') and self.initialized_font:
+                font = QFont(self.initialized_font)
+            else:
+                # Create a standard font as a last resort
+                font = QFont(font_family, font_size)
+                font.setBold(bold_strength)
+                font.setStyleStrategy(QFont.PreferMatch)
+            
+            # Calculate maximum text width
+            max_text_width = self.calculate_max_text_width(
+                directional_controls,
+                font,
+                show_button_prefix=show_button_prefix,
+                use_uppercase=use_uppercase,
+                extra_padding=40
+            )
+            
+            # Create all directional controls with organized layout
+            for control_name, action_text in directional_controls.items():
+                # Apply uppercase if needed
+                if use_uppercase:
+                    action_text = action_text.upper()
+                
+                # Get button prefix
+                button_prefix = self.get_button_prefix(control_name)
+                
+                # Add prefix if enabled
+                display_text = action_text
+                if show_button_prefix and button_prefix:
+                    display_text = f"{button_prefix}: {action_text}"
+                
+                # Choose the correct label class based on gradient settings
+                if use_prefix_gradient or use_action_gradient:
+                    # Use gradient-enabled label
+                    label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                    
+                    # Set gradient properties
+                    label.use_prefix_gradient = use_prefix_gradient
+                    label.use_action_gradient = use_action_gradient
+                    label.prefix_gradient_start = QColor(prefix_gradient_start)
+                    label.prefix_gradient_end = QColor(prefix_gradient_end)
+                    label.action_gradient_start = QColor(action_gradient_start)
+                    label.action_gradient_end = QColor(action_gradient_end)
                 else:
-                    # Otherwise, next state will be normal
-                    self.controls_mode_button.setText("Normal Controls")
+                    # Use color-enabled label
+                    label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                
+                # Apply font
+                label.setFont(font)
+                label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
+                
+                label.prefix = button_prefix
+                label.action = action_text
+                
+                # Configure label sizing
+                label.setMinimumSize(0, 0)
+                label.setMaximumSize(16777215, 16777215)
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                
+                # Make sure we have proper settings in the label
+                label.settings = self.text_settings.copy()
+                
+                # Let the label auto-size based on content
+                label.adjustSize()
+
+                # Resize with better sizing logic
+                font_metrics = QFontMetrics(label.font())
+                text_width = font_metrics.horizontalAdvance(display_text)
+                
+                # Get font family to check if it's a custom font
+                font_family = label.font().family()
+                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                    "Impact", "System"]
+
+                # Determine padding based on font type
+                base_padding = 50 if is_custom_font else 30
+                if len(display_text) > 15:
+                    base_padding += 20
+                if len(display_text) > 20:
+                    base_padding += 30
+                    
+                label_width = text_width + base_padding
+                label_height = label.height()
+                label.resize(label_width, label_height)
+                
+                # Determine position from saved positions or organize in a grid
+                x, y = 0, 0
+                
+                if saved_positions and control_name in saved_positions:
+                    # Use the coordinates from global positions
+                    pos_x, pos_y = saved_positions[control_name]
+                    x, y = pos_x, pos_y + y_offset
+                    original_pos = QPoint(pos_x, pos_y)
+                
+                elif control_name in self.original_controls_backup:
+                    # Use backup position
+                    backup_pos = self.original_controls_backup[control_name]['position']
+                    x, y = backup_pos.x(), backup_pos.y()
+                    original_pos = self.original_controls_backup[control_name]['original_pos']
+                
+                else:
+                    # Organize in a logical layout by control type
+                    if 'JOYSTICK_' in control_name:  # Left stick
+                        if 'UP' in control_name:
+                            x, y = 300, 100 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 300, 220 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 200, 160 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 400, 160 + y_offset
+                            
+                    elif 'JOYSTICKRIGHT_' in control_name:  # Right stick
+                        if 'UP' in control_name:
+                            x, y = 700, 100 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 700, 220 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 600, 160 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 800, 160 + y_offset
+                            
+                    elif 'DPAD_' in control_name:  # D-pad
+                        if 'UP' in control_name:
+                            x, y = 300, 300 + y_offset
+                        elif 'DOWN' in control_name:
+                            x, y = 300, 420 + y_offset
+                        elif 'LEFT' in control_name:
+                            x, y = 200, 360 + y_offset
+                        elif 'RIGHT' in control_name:
+                            x, y = 400, 360 + y_offset
+                    
+                    original_pos = QPoint(x, y - y_offset)
+                
+                # Apply position
+                label.move(x, y)
+                
+                # Store in control_labels
+                self.control_labels[control_name] = {
+                    'label': label,
+                    'action': action_text,
+                    'prefix': button_prefix,
+                    'original_pos': original_pos
+                }
+                
+                # All controls should be visible
+                label.setVisible(True)
+            
+            # Set directional mode flag
+            self.showing_all_directionals = True
+            self.showing_all_xinput_controls = False
+            self.showing_specialized_controls = False
+            
+            # Force updates
+            QTimer.singleShot(50, lambda: self.force_resize_all_labels())
+            QTimer.singleShot(150, lambda: self.apply_text_settings())
+            
+            # Force a canvas update
+            self.canvas.update()
+            
+            print(f"Created and displayed {len(directional_controls)} directional controls")
+            return True
+            
+        except Exception as e:
+            print(f"Error showing directional controls: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     # 2. Update the show_all_xinput_controls method to only show standard XInput controls
     def show_all_xinput_controls(self):
