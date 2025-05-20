@@ -326,6 +326,9 @@ class PreviewWindow(QMainWindow):
             if show_button_prefix and button_prefix:
                 display_text = f"{button_prefix}: {action_text}"
             
+            # ADD THIS LINE to truncate long text
+            display_text = self.truncate_display_text(display_text)
+            
             # Calculate width with more precision using horizontalAdvance
             text_width = font_metrics.horizontalAdvance(display_text)
             
@@ -499,6 +502,9 @@ class PreviewWindow(QMainWindow):
                 if show_button_prefix and button_prefix:
                     display_text = f"{button_prefix}: {action_text}"
                 
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
+                
                 # Calculate width needed for this text
                 text_width = font_metrics.horizontalAdvance(display_text)
                 
@@ -525,6 +531,9 @@ class PreviewWindow(QMainWindow):
                 display_text = action_text
                 if show_button_prefix and button_prefix:
                     display_text = f"{button_prefix}: {action_text}"
+                
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
                 
                 # Choose the correct label class based on gradient settings
                 if use_prefix_gradient or use_action_gradient:
@@ -2975,22 +2984,28 @@ class PreviewWindow(QMainWindow):
             if hasattr(self, 'controls_mode_button'):
                 self.controls_mode_button.setText("Directional Controls")
 
+    def truncate_display_text(self, text, max_length=15):
+        """Truncate display text with minimal space loss"""
+        if len(text) <= max_length:
+            return text
+        return text[:max_length-1] + "›"  # Single character indicator
+    
     def show_all_directional_controls(self):
         """Show all directional controls for global positioning"""
         
         # Directional controls for positioning - P1 ONLY
         directional_controls = {
             # Left stick
-            "P1_JOYSTICK_UP": "Left Stick Up",
-            "P1_JOYSTICK_DOWN": "Left Stick Down",
-            "P1_JOYSTICK_LEFT": "Left Stick Left",
-            "P1_JOYSTICK_RIGHT": "Left Stick Right",
+            "P1_JOYSTICK_UP": "Left Stick Test Up",
+            "P1_JOYSTICK_DOWN": "LS Down",
+            "P1_JOYSTICK_LEFT": "LS Left",
+            "P1_JOYSTICK_RIGHT": "LS Right",
             
             # Right stick 
-            "P1_JOYSTICKRIGHT_UP": "Right Stick Up",
-            "P1_JOYSTICKRIGHT_DOWN": "Right Stick Down",
-            "P1_JOYSTICKRIGHT_LEFT": "Right Stick Left",
-            "P1_JOYSTICKRIGHT_RIGHT": "Right Stick Right",
+            "P1_JOYSTICKRIGHT_UP": "RS Up",
+            "P1_JOYSTICKRIGHT_DOWN": "RS Down",
+            "P1_JOYSTICKRIGHT_LEFT": "RS Left",
+            "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
             
             # D-pad
             "P1_DPAD_UP": "D-Pad Up",
@@ -3081,6 +3096,9 @@ class PreviewWindow(QMainWindow):
                 display_text = action_text
                 if show_button_prefix and button_prefix:
                     display_text = f"{button_prefix}: {action_text}"
+                
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
                 
                 # Choose the correct label class based on gradient settings
                 if use_prefix_gradient or use_action_gradient:
@@ -3227,26 +3245,26 @@ class PreviewWindow(QMainWindow):
         
         # Standard XInput controls for positioning - P1 ONLY
         standard_controls = {
-            "P1_JOYSTICK_UP": "Left Stick Up",
-            "P1_JOYSTICK_DOWN": "Left Stick Down",
-            "P1_JOYSTICK_LEFT": "Left Stick Left",
-            "P1_JOYSTICK_RIGHT": "Left Stick Right",
-            "P1_JOYSTICKRIGHT_UP": "Right Stick Up",
-            "P1_JOYSTICKRIGHT_DOWN": "Right Stick Down",
-            "P1_JOYSTICKRIGHT_LEFT": "Right Stick Left",
-            "P1_JOYSTICKRIGHT_RIGHT": "Right Stick Right",
+            "P1_JOYSTICK_UP": "LS Up",
+            "P1_JOYSTICK_DOWN": "LS Down",
+            "P1_JOYSTICK_LEFT": "LS Left",
+            "P1_JOYSTICK_RIGHT": "LS Right",
+            "P1_JOYSTICKRIGHT_UP": "RS Up",
+            "P1_JOYSTICKRIGHT_DOWN": "RS Down",
+            "P1_JOYSTICKRIGHT_LEFT": "RS Left",
+            "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
             "P1_BUTTON1": "A Button",
             "P1_BUTTON2": "B Button",
             "P1_BUTTON3": "X Button",
             "P1_BUTTON4": "Y Button",
-            "P1_BUTTON5": "Left Bumper",
-            "P1_BUTTON6": "Right Bumper",
-            "P1_BUTTON7": "Left Trigger",
-            "P1_BUTTON8": "Right Trigger",
-            "P1_BUTTON9": "Left Stick Button",
-            "P1_BUTTON10": "Right Stick Button",
+            "P1_BUTTON5": "LB",
+            "P1_BUTTON6": "RB",
+            "P1_BUTTON7": "LT",
+            "P1_BUTTON8": "RT",
+            "P1_BUTTON9": "LS Button",
+            "P1_BUTTON10": "RS Button",
             "P1_START": "Start Button",
-            "P1_SELECT": "Back/Select Button",
+            "P1_SELECT": "Select Button",
             "P1_DPAD_UP": "D-Pad Up",
             "P1_DPAD_DOWN": "D-Pad Down",
             "P1_DPAD_LEFT": "D-Pad Left",
@@ -3351,6 +3369,9 @@ class PreviewWindow(QMainWindow):
                 if show_button_prefix and button_prefix:
                     display_text = f"{button_prefix}: {action_text}"
                 
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
+                
                 # Calculate width needed for this text
                 text_width = font_metrics.horizontalAdvance(display_text)
                 
@@ -3377,6 +3398,9 @@ class PreviewWindow(QMainWindow):
                 display_text = action_text
                 if show_button_prefix and button_prefix:
                     display_text = f"{button_prefix}: {action_text}"
+                
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
                 
                 # Choose the correct label class based on gradient settings
                 if use_prefix_gradient or use_action_gradient:
@@ -7012,6 +7036,9 @@ class PreviewWindow(QMainWindow):
                 display_text = action_text
                 if use_uppercase:
                     display_text = action_text.upper()
+                
+                # ADD THIS LINE to truncate long text
+                display_text = self.truncate_display_text(display_text)
                 
                 # Create the display text with or without prefix
                 if show_button_prefix and prefix:
