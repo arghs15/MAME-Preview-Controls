@@ -101,6 +101,7 @@ class MAMEControlConfig:
         self.visible_control_types = ["BUTTON"]
         self.hide_preview_buttons = False
         self.show_button_names = True
+        self.input_mode = 'xinput'  # Add default input mode
         
         # Load custom settings if available
         if os.path.exists(self.settings_path):
@@ -134,6 +135,13 @@ class MAMEControlConfig:
                         self.show_button_names = settings['show_button_names']
                     elif isinstance(settings['show_button_names'], int):
                         self.show_button_names = bool(settings['show_button_names'])
+                
+                # Load input mode (new)
+                if 'input_mode' in settings:
+                    self.input_mode = settings['input_mode']
+                    # Ensure valid value
+                    if self.input_mode not in ['joycode', 'xinput', 'dinput']:
+                        self.input_mode = 'xinput'
                         
             except Exception as e:
                 print(f"Error loading settings: {e}")
@@ -145,7 +153,8 @@ class MAMEControlConfig:
             'preferred_preview_screen': self.preferred_preview_screen,
             'visible_control_types': self.visible_control_types,
             'hide_preview_buttons': self.hide_preview_buttons,
-            'show_button_names': self.show_button_names
+            'show_button_names': self.show_button_names,
+            'input_mode': self.input_mode  # Add to return value
         }
         
     def save_settings(self):
@@ -154,7 +163,8 @@ class MAMEControlConfig:
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
             "visible_control_types": self.visible_control_types,
             "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
-            "show_button_names": getattr(self, 'show_button_names', True)
+            "show_button_names": getattr(self, 'show_button_names', True),
+            "input_mode": getattr(self, 'input_mode', 'xinput')  # Add input mode
         }
         
         try:
@@ -374,6 +384,10 @@ class MAMEControlConfig:
             if self.hide_preview_buttons:
                 command.append("--no-buttons")
                 
+            # Add input mode argument
+            if hasattr(self, 'input_mode'):
+                command.extend(["--input-mode", self.input_mode])
+                
             # Launch and track the process
             process = subprocess.Popen(command)
             self.preview_processes.append(process)
@@ -407,6 +421,10 @@ class MAMEControlConfig:
             
             if self.hide_preview_buttons:
                 command.append("--no-buttons")
+                
+            # Add input mode argument
+            if hasattr(self, 'input_mode'):
+                command.extend(["--input-mode", self.input_mode])
                 
             # Launch and track the process
             process = subprocess.Popen(command)
@@ -478,7 +496,7 @@ class MAMEControlConfig:
             # Load settings (for screen preference)
             self.load_settings()
             
-            # ADDED: Get command line arguments for screen and button visibility
+            # ADDED: Get command line arguments for screen, button visibility, and input mode
             import sys
             for i, arg in enumerate(sys.argv):
                 if arg == '--screen' and i+1 < len(sys.argv):
@@ -490,6 +508,11 @@ class MAMEControlConfig:
                 elif arg == '--no-buttons':
                     self.hide_preview_buttons = True
                     print(f"OVERRIDE: Hiding buttons due to command line flag")
+                elif arg == '--input-mode' and i+1 < len(sys.argv):
+                    self.input_mode = sys.argv[i+1]
+                    if self.input_mode not in ['xinput', 'dinput', 'joycode']:
+                        self.input_mode = 'xinput'  # Default to xinput if invalid
+                    print(f"OVERRIDE: Using input mode {self.input_mode} from command line")
             
             # Check if we need to load the database for faster access
             db_path = os.path.join(self.settings_dir, "gamedata.db")
@@ -554,7 +577,8 @@ class MAMEControlConfig:
                 self.mame_dir,        # 3rd positional arg
                 None,                 # 4th positional arg (parent)
                 self.hide_preview_buttons,  # 5th positional arg
-                clean_mode            # 6th positional arg
+                clean_mode,           # 6th positional arg
+                self.input_mode       # New positional arg
             )
             
             # Mark this as a standalone preview (for proper cleanup)

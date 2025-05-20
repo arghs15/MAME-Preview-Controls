@@ -6271,6 +6271,12 @@ class PreviewWindow(QMainWindow):
                 if 'mapping' in control and control.get('is_custom', False):
                     # For standard controls with custom mapping
                     button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
+                    
+                    # If no prefix found and we have a DirectInput mapping, try to extract it
+                    if not button_prefix and 'DINPUT_' in control['mapping']:
+                        button_num = control['mapping'].replace('DINPUT_1_BUTTON', '')
+                        if button_num.isdigit():
+                            button_prefix = f"B{button_num}"
                 elif hasattr(self, 'get_button_prefix'):
                     # Default fallback
                     button_prefix = self.get_button_prefix(control_name)
@@ -6479,6 +6485,28 @@ class PreviewWindow(QMainWindow):
             "XINPUT_1_SELECT": "BACK"
         }
         
+        # Add DirectInput mappings
+        dinput_to_prefix = {
+            "DINPUT_1_BUTTON0": "B0",
+            "DINPUT_1_BUTTON1": "B1",
+            "DINPUT_1_BUTTON2": "B2",
+            "DINPUT_1_BUTTON3": "B3",
+            "DINPUT_1_BUTTON4": "B4",
+            "DINPUT_1_BUTTON5": "B5",
+            "DINPUT_1_BUTTON6": "B6",
+            "DINPUT_1_BUTTON7": "B7",
+            "DINPUT_1_BUTTON8": "B8",
+            "DINPUT_1_BUTTON9": "B9",
+            "DINPUT_1_POV_UP": "POV↑",
+            "DINPUT_1_POV_DOWN": "POV↓",
+            "DINPUT_1_POV_LEFT": "POV←",
+            "DINPUT_1_POV_RIGHT": "POV→",
+            "DINPUT_1_XAXIS_NEG": "X←",
+            "DINPUT_1_XAXIS_POS": "X→",
+            "DINPUT_1_YAXIS_NEG": "Y↑",
+            "DINPUT_1_YAXIS_POS": "Y↓"
+        }
+        
         # MAME specialized control mappings
         mame_to_prefix = {
             # Analog mappings
@@ -6568,11 +6596,20 @@ class PreviewWindow(QMainWindow):
         }
         
         # Combine mapping dictionaries
-        all_mappings = {**xinput_to_prefix, **mame_to_prefix, **keyboard_to_prefix}
+        all_mappings = {**xinput_to_prefix, **mame_to_prefix, **keyboard_to_prefix, **dinput_to_prefix}
         
         # Check for direct match
         if mapping in all_mappings:
             return all_mappings[mapping]
+        
+        # Special handling for DirectInput buttons not explicitly listed
+        if "DINPUT_1_BUTTON" in mapping:
+            try:
+                # Extract button number
+                button_num = int(mapping.replace("DINPUT_1_BUTTON", ""))
+                return f"B{button_num}"
+            except:
+                pass
         
         # Special handling for keyboard keys not explicitly listed
         if mapping.startswith("KEYCODE_"):
