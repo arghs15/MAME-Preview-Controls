@@ -33,7 +33,7 @@
         "mask": "64"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":LETA1",
         "mask": "255"
       },
@@ -4750,7 +4750,7 @@
     "clones": {},
     "controls": {
       "P1_BUTTON1": {
-        "name": "Fire / Rotate Left",
+        "name": "Fire / Rotate L",
         "tag": ":0c00",
         "mask": "4"
       },
@@ -4760,7 +4760,7 @@
         "mask": "2"
       },
       "P1_BUTTON3": {
-        "name": "Fire / Rotate Right",
+        "name": "Fire / Rotate R",
         "tag": ":0c00",
         "mask": "1"
       },
@@ -15318,32 +15318,32 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Punch - Jab",
+        "name": "Jab Punch",
         "tag": ":IN0",
         "mask": "16"
       },
       "P1_BUTTON2": {
-        "name": "Punch - Strong",
+        "name": "Strong Punch",
         "tag": ":IN0",
         "mask": "32"
       },
       "P1_BUTTON3": {
-        "name": "Punch - Fierce",
+        "name": "Fierce Punch",
         "tag": ":IN0",
         "mask": "64"
       },
       "P1_BUTTON4": {
-        "name": "Kick - Short",
+        "name": "Short Kick",
         "tag": ":IN1",
         "mask": "1"
       },
       "P1_BUTTON5": {
-        "name": "Kick - Forward",
+        "name": "Forward Kick",
         "tag": ":IN1",
         "mask": "2"
       },
       "P1_BUTTON6": {
-        "name": "Kick - Roundhouse",
+        "name": "Roundhouse Kick",
         "tag": ":IN1",
         "mask": "4"
       },
@@ -21640,7 +21640,7 @@
         "mask": "32"
       },
       "P1_BUTTON3": {
-        "name": "Pass/Change Player",
+        "name": "Pass/Change P1",
         "tag": ":IN1",
         "mask": "64"
       },
@@ -22137,22 +22137,22 @@
         "mask": "16"
       },
       "P1_JOYSTICKLEFT_UP": {
-        "name": "Left Tread Forward",
+        "name": "L Tread Forward",
         "tag": ":IN3",
         "mask": "8"
       },
       "P1_JOYSTICKLEFT_DOWN": {
-        "name": "Left Tread Backward",
+        "name": "L Tread Back",
         "tag": ":IN3",
         "mask": "4"
       },
       "P1_JOYSTICKRIGHT_UP": {
-        "name": "Right Tread Forward",
+        "name": "R Tread Forward",
         "tag": ":IN3",
         "mask": "2"
       },
       "P1_JOYSTICKRIGHT_DOWN": {
-        "name": "Right Tread Backward",
+        "name": "R Tread Back",
         "tag": ":IN3",
         "mask": "1"
       },
@@ -24236,32 +24236,32 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Quick (High Attack)",
+        "name": "Quick (High)",
         "tag": ":P1",
         "mask": "1"
       },
       "P1_BUTTON2": {
-        "name": "Medium (High Attack)",
+        "name": "Medium (High)",
         "tag": ":P1",
         "mask": "2"
       },
       "P1_BUTTON3": {
-        "name": "Fierce (High Attack)",
+        "name": "Fierce (High)",
         "tag": ":P1",
         "mask": "4"
       },
       "P1_BUTTON4": {
-        "name": "Quick (Low Attack)",
+        "name": "Quick (Low)",
         "tag": ":P1",
         "mask": "8"
       },
       "P1_BUTTON5": {
-        "name": "Medium (Low Attack)",
+        "name": "Medium (Low)",
         "tag": ":P1",
         "mask": "16"
       },
       "P1_BUTTON6": {
-        "name": "Fierce (Low Attack)",
+        "name": "Fierce (Low)",
         "tag": ":P1",
         "mask": "32"
       },
@@ -29172,119 +29172,23 @@
     "playercount": "2",
     "buttons": "3",
     "sticks": "1",
-    "clones": {
-      "altbeast2": {
-        "description": "Altered Beast (set 2) (MC-8123B 317-0066)"
-      },
-      "altbeast4": {
-        "description": "Altered Beast (set 4) (MC-8123B 317-0066)"
-      },
-      "altbeast5": {
-        "description": "Altered Beast (set 5) (FD1094 317-0069)"
-      },
-      "altbeast5d": {
-        "description": "Altered Beast (set 5) (bootleg of FD1094 317-0069 set)"
-      },
-      "altbeast6": {
-        "description": "Altered Beast (set 6) (8751 317-0076)"
-      },
-      "altbeastbl": {
-        "description": "Altered Beast (Datsu bootleg)"
-      },
-      "altbeastbl2": {
-        "description": "Altered Beast (bootleg)"
-      },
-      "altbeastj": {
-        "description": "Juuouki (set 7, Japan) (8751 317-0077)"
-      },
-      "altbeastj1": {
-        "description": "Juuouki (set 1, Japan) (FD1094 317-0065)"
-      },
-      "altbeastj3": {
-        "description": "Juuouki (set 3, Japan) (FD1094 317-0068)"
-      },
-      "altbeastj3d": {
-        "description": "Juuouki (set 3, Japan) (bootleg of FD1094 317-0068 set)"
-      },
-      "mutantwarr": {
-        "description": "Mutant Warrior (Datsu bootleg of Altered Beast)"
-      }
-    },
+    "alternating": false,
+    "clones": {},
     "controls": {
       "P1_BUTTON1": {
         "name": "Punch",
-        "tag": ":P1",
-        "mask": "2"
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON2": {
         "name": "Kick",
-        "tag": ":P1",
-        "mask": "4"
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON3": {
         "name": "Jump",
-        "tag": ":P1",
-        "mask": "1"
-      },
-      "P1_JOYSTICK_DOWN": {
-        "tag": ":P1",
-        "mask": "16"
-      },
-      "P1_JOYSTICK_UP": {
-        "tag": ":P1",
-        "mask": "32"
-      },
-      "P1_JOYSTICK_RIGHT": {
-        "tag": ":P1",
-        "mask": "64"
-      },
-      "P1_JOYSTICK_LEFT": {
-        "tag": ":P1",
-        "mask": "128"
-      },
-      "P2_JOYSTICK_DOWN": {
-        "tag": ":P2",
-        "mask": "16"
-      },
-      "P2_JOYSTICK_LEFT": {
-        "tag": ":P2",
-        "mask": "128"
-      },
-      "P2_JOYSTICK_UP": {
-        "tag": ":P2",
-        "mask": "32"
-      },
-      "P2_BUTTON2": {
-        "tag": ":P2",
-        "mask": "4"
-      },
-      "P2_JOYSTICK_RIGHT": {
-        "tag": ":P2",
-        "mask": "64"
-      },
-      "P2_BUTTON1": {
-        "tag": ":P2",
-        "mask": "2"
-      },
-      "P2_BUTTON3": {
-        "tag": ":P2",
-        "mask": "1"
-      },
-      "START1": {
-        "tag": ":SERVICE",
-        "mask": "16"
-      },
-      "START2": {
-        "tag": ":SERVICE",
-        "mask": "32"
-      },
-      "COIN1": {
-        "tag": ":SERVICE",
-        "mask": "1"
-      },
-      "COIN2": {
-        "tag": ":SERVICE",
-        "mask": "2"
+        "tag": "",
+        "mask": "0"
       }
     }
   },
@@ -34486,7 +34390,7 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Sidewinder Missile",
+        "name": "Missile",
         "tag": ":IN0",
         "mask": "8"
       },
@@ -36261,7 +36165,7 @@
       "P1_BUTTON4": {
         "tag": ":edge:joy:JOY1",
         "mask": "128",
-        "name": "Metal Slug Attack"
+        "name": "MS Attack"
       },
       "P1_BUTTON3": {
         "tag": ":edge:joy:JOY1",
@@ -36648,7 +36552,7 @@
         "mask": "2"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":ADC.0",
         "mask": "255"
       },
@@ -37512,7 +37416,7 @@
         "mask": "16"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":PADDLE1",
         "mask": "255"
       },
@@ -39613,9 +39517,7 @@
     "playercount": "2",
     "buttons": "6",
     "sticks": "1",
-    "mappings": [
-      "sf"
-    ],
+    "alternating": false,
     "clones": {
       "hsf2j2": {
         "description": "Hyper Street Fighter II: The Anniversary Edition (Japan 031222)"
@@ -39634,108 +39536,85 @@
       }
     },
     "controls": {
-      "P1_JOYSTICK_LEFT": {
-        "tag": ":IN0",
-        "mask": "2"
-      },
-      "P1_BUTTON3": {
-        "name": "Strong Punch",
-        "tag": ":IN0",
-        "mask": "64"
-      },
-      "P2_BUTTON3": {
-        "tag": ":IN0",
-        "mask": "16384"
-      },
-      "P1_JOYSTICK_DOWN": {
-        "tag": ":IN0",
-        "mask": "4"
-      },
-      "P2_JOYSTICK_UP": {
-        "tag": ":IN0",
-        "mask": "2048"
-      },
-      "P1_JOYSTICK_UP": {
-        "tag": ":IN0",
-        "mask": "8"
-      },
-      "P2_JOYSTICK_RIGHT": {
-        "tag": ":IN0",
-        "mask": "256"
-      },
-      "P1_JOYSTICK_RIGHT": {
-        "tag": ":IN0",
-        "mask": "1"
-      },
-      "P2_BUTTON1": {
-        "tag": ":IN0",
-        "mask": "4096"
-      },
-      "P2_JOYSTICK_LEFT": {
-        "tag": ":IN0",
-        "mask": "512"
+      "P1_BUTTON1": {
+        "name": "Weak Punch",
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON2": {
         "name": "Medium Punch",
-        "tag": ":IN0",
-        "mask": "32"
+        "tag": "",
+        "mask": "0"
       },
-      "P1_BUTTON1": {
-        "name": "Weak Punch",
-        "tag": ":IN0",
-        "mask": "16"
-      },
-      "P2_JOYSTICK_DOWN": {
-        "tag": ":IN0",
-        "mask": "1024"
-      },
-      "P2_BUTTON2": {
-        "tag": ":IN0",
-        "mask": "8192"
+      "P1_BUTTON3": {
+        "name": "Strong Punch",
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON4": {
         "name": "Weak Kick",
-        "tag": ":IN1",
-        "mask": "1"
-      },
-      "P2_BUTTON4": {
-        "tag": ":IN1",
-        "mask": "16"
-      },
-      "P1_BUTTON6": {
-        "name": "Strong Kick",
-        "tag": ":IN1",
-        "mask": "4"
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON5": {
         "name": "Medium Kick",
-        "tag": ":IN1",
-        "mask": "2"
+        "tag": "",
+        "mask": "0"
+      },
+      "P1_BUTTON6": {
+        "name": "Strong Kick",
+        "tag": "",
+        "mask": "0"
+      },
+      "P2_BUTTON1": {
+        "name": "Weak Punch",
+        "tag": "",
+        "mask": "0"
+      },
+      "P2_BUTTON2": {
+        "name": "Medium Punch",
+        "tag": "",
+        "mask": "0"
+      },
+      "P2_BUTTON3": {
+        "name": "Strong Punch",
+        "tag": "",
+        "mask": "0"
+      },
+      "P2_BUTTON4": {
+        "name": "Weak Kick",
+        "tag": "",
+        "mask": "0"
       },
       "P2_BUTTON5": {
-        "tag": ":IN1",
-        "mask": "32"
+        "name": "Medium Kick",
+        "tag": "",
+        "mask": "0"
       },
       "P2_BUTTON6": {
-        "tag": ":IN2",
-        "mask": "16384"
+        "name": "Strong Kick",
+        "tag": "",
+        "mask": "0"
       },
-      "COIN2": {
-        "tag": ":IN2",
-        "mask": "8192"
+      "P2_JOYSTICK_DOWN": {
+        "name": "Down",
+        "tag": "",
+        "mask": "0"
       },
-      "COIN1": {
-        "tag": ":IN2",
-        "mask": "4096"
+      "P2_JOYSTICK_LEFT": {
+        "name": "Left",
+        "tag": "",
+        "mask": "0"
       },
-      "START1": {
-        "name": "Start",
-        "tag": ":IN2",
-        "mask": "256"
+      "P2_JOYSTICK_RIGHT": {
+        "name": "Right",
+        "tag": "",
+        "mask": "0"
       },
-      "START2": {
-        "tag": ":IN2",
-        "mask": "512"
+      "P2_JOYSTICK_UP": {
+        "name": "Up",
+        "tag": "",
+        "mask": "0"
       }
     }
   },
@@ -40750,7 +40629,7 @@
         "mask": "31"
       },
       "P1_DIAL": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":DIAL",
         "mask": "255"
       },
@@ -49079,7 +48958,7 @@
         "mask": "2"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":P1X",
         "mask": "255"
       },
@@ -53850,7 +53729,7 @@
         "mask": "4"
       },
       "P1_BUTTON2": {
-        "name": "Start Player 1 / Transform",
+        "name": "Start P1 / Transform",
         "tag": ":IN0",
         "mask": "32"
       },
@@ -53860,7 +53739,7 @@
         "mask": "4"
       },
       "P2_BUTTON2": {
-        "name": "Start Player 2 / Transform",
+        "name": "Start P2 / Transform",
         "tag": ":IN0",
         "mask": "16"
       },
@@ -61014,7 +60893,7 @@
         "mask": "32"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":OPT.0",
         "mask": "65535"
       },
@@ -69083,32 +68962,32 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Punch - Jab",
+        "name": "Jab Punch",
         "tag": ":IN0",
         "mask": "16"
       },
       "P1_BUTTON2": {
-        "name": "Punch - Strong",
+        "name": "Strong Punch",
         "tag": ":IN0",
         "mask": "32"
       },
       "P1_BUTTON3": {
-        "name": "Punch - Fierce",
+        "name": "Fierce Punch",
         "tag": ":IN0",
         "mask": "64"
       },
       "P1_BUTTON4": {
-        "name": "Kick - Short",
+        "name": "Short Kick",
         "tag": ":IN1",
         "mask": "1"
       },
       "P1_BUTTON5": {
-        "name": "Kick - Forward",
+        "name": "Forward Kick",
         "tag": ":IN1",
         "mask": "2"
       },
       "P1_BUTTON6": {
-        "name": "Kick - Roundhouse",
+        "name": "Roundhouse Kick",
         "tag": ":IN1",
         "mask": "4"
       },
@@ -79994,32 +79873,32 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Quick (High Attack)",
+        "name": "Quick (High)",
         "tag": ":P1",
         "mask": "1"
       },
       "P1_BUTTON2": {
-        "name": "Medium (High Attack)",
+        "name": "Medium (High)",
         "tag": ":P1",
         "mask": "2"
       },
       "P1_BUTTON3": {
-        "name": "Fierce (High Attack)",
+        "name": "Fierce (High)",
         "tag": ":P1",
         "mask": "4"
       },
       "P1_BUTTON4": {
-        "name": "Quick (Low Attack)",
+        "name": "Quick (Low)",
         "tag": ":P1",
         "mask": "8"
       },
       "P1_BUTTON5": {
-        "name": "Medium (Low Attack)",
+        "name": "Medium (Low)",
         "tag": ":P1",
         "mask": "16"
       },
       "P1_BUTTON6": {
-        "name": "Fierce (Low Attack)",
+        "name": "Fierce (Low)",
         "tag": ":P1",
         "mask": "32"
       },
@@ -80266,17 +80145,17 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Left Blow to Head/Body",
+        "name": "Left Blow",
         "tag": ":IN0",
         "mask": "1"
       },
       "P1_BUTTON2": {
-        "name": "Right Blow to Head/Body",
+        "name": "Right Blow",
         "tag": ":IN0",
         "mask": "4"
       },
       "P1_BUTTON3": {
-        "name": "Uppercut / Hook / Knock Out Blow",
+        "name": "Upper/Hook/KO",
         "tag": ":IN0",
         "mask": "8"
       },
@@ -82897,7 +82776,7 @@
         "mask": "32"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":SPINNER",
         "mask": "255"
       },
@@ -83613,7 +83492,7 @@
         "mask": "1"
       },
       "P1_BUTTON2": {
-        "name": "Secondary Weapon",
+        "name": "Special Weapon",
         "tag": ":mainpcb:P1_A",
         "mask": "2"
       },
@@ -83688,7 +83567,7 @@
         "mask": "16"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":LIGHT0_X",
         "mask": "255"
       },
@@ -88292,32 +88171,32 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Punch - Jab",
+        "name": "Jab Punch",
         "tag": ":IN0",
         "mask": "16"
       },
       "P1_BUTTON2": {
-        "name": "Punch - Strong",
+        "name": "Strong Punch",
         "tag": ":IN0",
         "mask": "32"
       },
       "P1_BUTTON3": {
-        "name": "Punch - Fierce",
+        "name": "Fierce Punch",
         "tag": ":IN0",
         "mask": "64"
       },
       "P1_BUTTON4": {
-        "name": "Kick - Short",
+        "name": "Short Kick",
         "tag": ":IN1",
         "mask": "1"
       },
       "P1_BUTTON5": {
-        "name": "Kick - Forward",
+        "name": "Forward Kick",
         "tag": ":IN1",
         "mask": "2"
       },
       "P1_BUTTON6": {
-        "name": "Kick - Round-House",
+        "name": "RoundHouse Kick",
         "tag": ":IN1",
         "mask": "4"
       },
@@ -92359,7 +92238,7 @@
         "mask": "16"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":TRACKY",
         "mask": "255"
       },
@@ -95213,7 +95092,7 @@
         "mask": "1"
       },
       "P1_BUTTON4": {
-        "name": "Vehicle Self-Destruct Attack",
+        "name": "Vehicle Attack",
         "tag": ":P1.1",
         "mask": "4"
       },
@@ -97782,7 +97661,7 @@
         "mask": "8"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":AN4",
         "mask": "255"
       },
@@ -100182,7 +100061,7 @@
         "mask": "128"
       },
       "P1_DIAL": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":DIAL",
         "mask": "255"
       },
@@ -101825,17 +101704,17 @@
     "clones": {},
     "controls": {
       "P1_BUTTON1": {
-        "name": "Fire / Left Missile",
+        "name": "Fire / L Missile",
         "tag": ":PLAYER1",
         "mask": "2048"
       },
       "P1_BUTTON2": {
-        "name": "Fire / Center Missile",
+        "name": "Fire / C Missile",
         "tag": ":PLAYER1",
         "mask": "1024"
       },
       "P1_BUTTON3": {
-        "name": "Fire / Right Missile",
+        "name": "Fire / R Missile",
         "tag": ":PLAYER1",
         "mask": "512"
       },
@@ -102163,7 +102042,7 @@
         "mask": "32"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":ROT1",
         "mask": "4095"
       },
@@ -106020,7 +105899,7 @@
         "mask": "16"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":DIAL",
         "mask": "255"
       },
@@ -106383,7 +106262,7 @@
         "mask": "2"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":GUNX1",
         "mask": "255"
       },
@@ -106929,7 +106808,7 @@
         "mask": "64"
       },
       "P1_TRACKBALL_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":ANALOGX1",
         "mask": "255"
       },
@@ -109284,7 +109163,7 @@
         "mask": "16"
       },
       "P1_DIAL": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":ssio:IP1",
         "mask": "255"
       },
@@ -113683,7 +113562,7 @@
         "mask": "8192"
       },
       "P1_BUTTON2": {
-        "name": "Vertical Attack",
+        "name": "Vert Attack",
         "tag": ":JVS_PLAYER1",
         "mask": "1"
       },
@@ -113692,7 +113571,7 @@
         "mask": "4096"
       },
       "P1_BUTTON1": {
-        "name": "Horizontal Attack",
+        "name": "Hor Attack",
         "tag": ":JVS_PLAYER1",
         "mask": "2"
       },
@@ -114847,7 +114726,7 @@
         "mask": "255"
       },
       "P1_AD_STICK_Y": {
-        "name": "Accelerate/Break",
+        "name": "Acc/Break",
         "tag": ":ADC1",
         "mask": "255"
       },
@@ -115089,7 +114968,7 @@
       "P1_BUTTON4": {
         "tag": ":edge:joy:JOY1",
         "mask": "128",
-        "name": "Metal Slug Attack"
+        "name": "M Slug Attack"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":edge:joy:JOY1",
@@ -117988,7 +117867,7 @@
         "mask": "4096"
       },
       "P1_BUTTON6": {
-        "name": "Variable Assist 2",
+        "name": "V Assist 2",
         "tag": ":P1",
         "mask": "16"
       },
@@ -118017,7 +117896,7 @@
         "mask": "256"
       },
       "P1_BUTTON5": {
-        "name": "Variable Assist 1",
+        "name": "V Assist 1",
         "tag": ":P1",
         "mask": "32"
       },
@@ -121597,12 +121476,12 @@
     },
     "controls": {
       "P1_BUTTON1": {
-        "name": "Left Blow To Head/Body",
+        "name": "Left Blow",
         "tag": ":IN0",
         "mask": "1"
       },
       "P1_BUTTON2": {
-        "name": "Right Blow to Head/Body",
+        "name": "Right Blow",
         "tag": ":IN0",
         "mask": "4"
       },
@@ -132084,69 +131963,13 @@
     "controls": {
       "P1_BUTTON1": {
         "name": "Pass / Hike",
-        "tag": ":IN1",
-        "mask": "128"
+        "tag": "",
+        "mask": "0"
       },
       "P1_BUTTON2": {
         "name": "Lateral",
-        "tag": ":IN1",
-        "mask": "32"
-      },
-      "START1": {
-        "tag": ":IN0",
-        "mask": "1"
-      },
-      "COIN1": {
-        "tag": ":IN0",
-        "mask": "8"
-      },
-      "START2": {
-        "tag": ":IN0",
-        "mask": "2"
-      },
-      "P1_JOYSTICK_DOWN": {
-        "tag": ":IN1",
-        "mask": "4"
-      },
-      "P1_JOYSTICK_LEFT": {
-        "tag": ":IN1",
-        "mask": "2"
-      },
-      "P1_JOYSTICK_UP": {
-        "tag": ":IN1",
-        "mask": "8"
-      },
-      "P1_JOYSTICK_RIGHT": {
-        "tag": ":IN1",
-        "mask": "1"
-      },
-      "P2_JOYSTICK_DOWN": {
-        "tag": ":IN2",
-        "mask": "4"
-      },
-      "P2_BUTTON2": {
-        "tag": ":IN2",
-        "mask": "32"
-      },
-      "P2_JOYSTICK_UP": {
-        "tag": ":IN2",
-        "mask": "8"
-      },
-      "P2_BUTTON1": {
-        "tag": ":IN2",
-        "mask": "128"
-      },
-      "P2_JOYSTICK_LEFT": {
-        "tag": ":IN2",
-        "mask": "2"
-      },
-      "COIN2": {
-        "tag": ":IN2",
-        "mask": "16"
-      },
-      "P2_JOYSTICK_RIGHT": {
-        "tag": ":IN2",
-        "mask": "1"
+        "tag": "",
+        "mask": "0"
       }
     }
   },
@@ -136162,7 +135985,7 @@
         "mask": "2"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":GUN1X",
         "mask": "255"
       },
@@ -143654,7 +143477,7 @@
         "mask": "64"
       },
       "P1_DIAL": {
-        "name": "Rotate Left/Rotate Right",
+        "name": "Rotate L/R",
         "tag": ":DIAL0",
         "mask": "255"
       },
@@ -146284,7 +146107,7 @@
         "mask": "8"
       },
       "P1_LIGHTGUN_X": {
-        "name": "Aim Left/Aim Right",
+        "name": "Aim L/Aim R",
         "tag": ":AN4",
         "mask": "255"
       },
