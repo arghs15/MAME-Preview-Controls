@@ -1421,11 +1421,11 @@ class MAMEControlConfig(ctk.CTk):
 
             print(f"Parsing CFG content of length: {len(cfg_content)}")
 
-            # Determine control mode
-            mapping_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+            # Always use xinput mode for parsing
+            mapping_mode = 'xinput'
             print(f"Using mapping mode: {mapping_mode} for parsing CFG")
 
-            # Mapping extractor - revised to be more precise based on mode
+            # Mapping extractor - revised to prioritize XInput
             def get_preferred_mapping(mapping_str: str) -> str:
                 if not mapping_str:
                     return "NONE"
@@ -1434,30 +1434,29 @@ class MAMEControlConfig(ctk.CTk):
                 if "OR" in mapping_str:
                     parts = [p.strip() for p in mapping_str.strip().split("OR")]
                     
-                    # Return the mapping that matches our current mode
-                    if mapping_mode == "xinput":
-                        # For xinput mode, prioritize XINPUT parts first, then JOYCODE
-                        for part in parts:
-                            if "XINPUT" in part:
-                                return part
-                        for part in parts:
-                            if "JOYCODE" in part:
-                                return part
-                    elif mapping_mode == "joycode":
-                        # For joycode mode, prioritize JOYCODE parts
-                        for part in parts:
-                            if "JOYCODE" in part:
-                                return part
-                    elif mapping_mode == "keyboard":
-                        # For keyboard mode, prioritize KEYCODE parts
-                        for part in parts:
-                            if "KEYCODE" in part:
-                                return part
-                                
+                    # Always prioritize XINPUT first, then JOYCODE
+                    for part in parts:
+                        if "XINPUT" in part:
+                            return part
+                    for part in parts:
+                        if "JOYCODE" in part:
+                            # Convert JOYCODE to XINPUT if possible
+                            xinput_mapping = self.convert_mapping(part, 'xinput')
+                            if xinput_mapping.startswith("XINPUT"):
+                                return xinput_mapping
+                            return part
+                            
                     # If no matching part, return the first one
                     return parts[0]
                 else:
-                    # Single mapping, return as is
+                    # Single mapping, return as is or convert if needed
+                    if "XINPUT" in mapping_str:
+                        return mapping_str.strip()
+                    elif "JOYCODE" in mapping_str:
+                        # Try to convert to XInput
+                        xinput_mapping = self.convert_mapping(mapping_str.strip(), 'xinput')
+                        if xinput_mapping.startswith("XINPUT"):
+                            return xinput_mapping
                     return mapping_str.strip()
 
             # Parse the XML content
@@ -1531,7 +1530,6 @@ class MAMEControlConfig(ctk.CTk):
 
         return controls
 
-    
     def load_default_config(self):
         """Load the default MAME control configuration"""
         # Look in the cfg directory
@@ -1567,33 +1565,37 @@ class MAMEControlConfig(ctk.CTk):
             return False
 
     def parse_default_cfg(self, cfg_content):
-        """Parse default.cfg to extract all control mappings with the same logic as parse_cfg_controls"""
+        """Parse default.cfg to extract all control mappings focusing on XInput format"""
         controls = {}
         try:
             import xml.etree.ElementTree as ET
             from io import StringIO
 
-            # Determine mapping mode based on active input setting
-            if self.use_xinput:
-                mapping_mode = "xinput"
-            elif hasattr(self, "joycode_mode") and self.joycode_mode:
-                mapping_mode = "joycode"
-            else:
-                mapping_mode = "keyboard"
+            # Always use xinput for mappings
+            mapping_mode = "xinput"
 
-            # Local helper (inserted inline)
+            # Local helper to prioritize xinput mappings
             def get_preferred_mapping(mapping_str: str) -> str:
                 if not mapping_str:
                     return "NONE"
+                
                 parts = [p.strip() for p in mapping_str.strip().split("OR")]
-                if mapping_mode in ("xinput", "joycode"):
-                    for part in parts:
-                        if "JOYCODE" in part:
-                            return part
-                elif mapping_mode == "keyboard":
-                    for part in parts:
-                        if "KEYCODE" in part:
-                            return part
+                
+                # First look for XInput parts
+                for part in parts:
+                    if "XINPUT" in part:
+                        return part
+                
+                # Then look for JOYCODE parts to convert
+                for part in parts:
+                    if "JOYCODE" in part:
+                        # Try to convert to XInput
+                        xinput_mapping = self.convert_mapping(part, 'xinput')
+                        if xinput_mapping.startswith("XINPUT"):
+                            return xinput_mapping
+                        return part
+                
+                # If no matching part, return the first one
                 return parts[0] if parts else mapping_str.strip()
 
             # Parse the XML content
@@ -6171,10 +6173,10 @@ controller xbox t		= """
 
     
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
-        """Update game_data to include the custom control mappings with function-based organization"""
+        """Update game_data to include the custom control mappings with XInput focus"""
         if not cfg_controls and not hasattr(self, 'default_controls'):
             return
-                    
+                        
         # Debug output: Print all available cfg_controls
         print(f"Available custom mappings: {len(cfg_controls)}")
         for control, mapping in cfg_controls.items():
@@ -6204,10 +6206,9 @@ controller xbox t		= """
                 print(f"WARNING: {btn} missing from custom mappings")
                 # Add default mapping if available
                 if hasattr(self, 'default_controls') and btn in self.default_controls:
-                    # UPDATED: Use input_mode for conversion instead of use_xinput boolean
-                    current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
+                    # Always convert to XInput
                     mapping = self.default_controls[btn]
-                    mapping = self.convert_mapping(mapping, current_mode)
+                    mapping = self.convert_mapping(mapping, 'xinput')
                     print(f"  Adding default mapping for {btn}: {mapping}")
                     cfg_controls[btn] = mapping
         
@@ -6227,21 +6228,17 @@ controller xbox t		= """
         # Combine ROM-specific and default mappings
         all_mappings = {}
         
-        # Get current input mode or default to XInput if use_xinput is True
-        current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
-        print(f"Using input mode: {current_mode} for mappings")
-        
-        # First, add default mappings
+        # First, add default mappings (always converted to XInput)
         if hasattr(self, 'default_controls') and self.default_controls:
             for control, mapping in self.default_controls.items():
-                # Convert based on current input mode
-                converted_mapping = self.convert_mapping(mapping, current_mode)
+                # Always convert to XInput
+                converted_mapping = self.convert_mapping(mapping, 'xinput')
                 all_mappings[control] = {'mapping': converted_mapping, 'source': 'Default CFG'}
         
         # Then override with ROM-specific mappings
         for control, mapping in cfg_controls.items():
-            # Make sure mapping is converted to the current mode
-            converted_mapping = self.convert_mapping(mapping, current_mode)
+            # Make sure mapping is converted to XInput
+            converted_mapping = self.convert_mapping(mapping, 'xinput')
             all_mappings[control] = {'mapping': converted_mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
         
         # Process each control in the game data
@@ -6312,152 +6309,52 @@ controller xbox t		= """
                     if " ||| " in mapping_info['mapping']:
                         inc_mapping, dec_mapping = mapping_info['mapping'].split(" ||| ")
                         
-                        # Format based on current mode
-                        if current_mode == 'xinput':
-                            # Handle XInput format for both directions
-                            if 'XINPUT' in inc_mapping and 'XINPUT' in dec_mapping:
-                                # If either part is NONE, just show the other part
-                                if inc_mapping == "NONE" and dec_mapping != "NONE":
-                                    dec_friendly = self.get_friendly_xinput_name(dec_mapping)
-                                    label['target_button'] = dec_friendly
-                                elif dec_mapping == "NONE" and inc_mapping != "NONE":
-                                    inc_friendly = self.get_friendly_xinput_name(inc_mapping)
-                                    label['target_button'] = inc_friendly
-                                else:
-                                    # Both have values
-                                    inc_friendly = self.get_friendly_xinput_name(inc_mapping)
-                                    dec_friendly = self.get_friendly_xinput_name(dec_mapping)
-                                    label['target_button'] = f"{inc_friendly} | {dec_friendly}"
-                            else:
-                                # Try to convert if not already in XInput format
-                                inc_converted = self.convert_mapping(inc_mapping, 'xinput')
-                                dec_converted = self.convert_mapping(dec_mapping, 'xinput')
-                                
-                                # If either is NONE, only show the other
-                                if inc_mapping == "NONE" or inc_converted == "NONE":
-                                    dec_friendly = self.get_friendly_xinput_name(dec_converted) if 'XINPUT' in dec_converted else dec_converted
-                                    if dec_mapping != "NONE" and dec_friendly != "NONE":
-                                        label['target_button'] = dec_friendly
-                                elif dec_mapping == "NONE" or dec_converted == "NONE":
-                                    inc_friendly = self.get_friendly_xinput_name(inc_converted) if 'XINPUT' in inc_converted else inc_converted
-                                    if inc_mapping != "NONE" and inc_friendly != "NONE":
-                                        label['target_button'] = inc_friendly
-                                else:
-                                    # Both have values
-                                    inc_friendly = self.get_friendly_xinput_name(inc_converted) if 'XINPUT' in inc_converted else inc_converted
-                                    dec_friendly = self.get_friendly_xinput_name(dec_converted) if 'XINPUT' in dec_converted else dec_converted
-                                    label['target_button'] = f"{inc_friendly} | {dec_friendly}"
-                        elif current_mode == 'keyboard':
-                            # Similar logic for keyboard mode
+                        # Handle XInput format for both directions
+                        if 'XINPUT' in inc_mapping and 'XINPUT' in dec_mapping:
+                            # If either part is NONE, just show the other part
                             if inc_mapping == "NONE" and dec_mapping != "NONE":
-                                if 'KEYCODE' in dec_mapping:
-                                    dec_key = dec_mapping.replace('KEYCODE_', '')
-                                    label['target_button'] = f"Key {dec_key}"
-                                else:
-                                    label['target_button'] = dec_mapping
+                                dec_friendly = self.get_friendly_xinput_name(dec_mapping)
+                                label['target_button'] = dec_friendly
                             elif dec_mapping == "NONE" and inc_mapping != "NONE":
-                                if 'KEYCODE' in inc_mapping:
-                                    inc_key = inc_mapping.replace('KEYCODE_', '')
-                                    label['target_button'] = f"Key {inc_key}"
-                                else:
-                                    label['target_button'] = inc_mapping
+                                inc_friendly = self.get_friendly_xinput_name(inc_mapping)
+                                label['target_button'] = inc_friendly
                             else:
                                 # Both have values
-                                if 'KEYCODE' in inc_mapping and 'KEYCODE' in dec_mapping:
-                                    inc_key = inc_mapping.replace('KEYCODE_', '')
-                                    dec_key = dec_mapping.replace('KEYCODE_', '')
-                                    if inc_key != "NONE" and dec_key != "NONE":
-                                        label['target_button'] = f"Key {inc_key} | Key {dec_key}"
-                                    elif inc_key != "NONE":
-                                        label['target_button'] = f"Key {inc_key}"
-                                    else:
-                                        label['target_button'] = f"Key {dec_key}"
-                                else:
-                                    if inc_mapping != "NONE" and dec_mapping != "NONE":
-                                        label['target_button'] = f"{inc_mapping} | {dec_mapping}"
-                                    elif inc_mapping != "NONE":
-                                        label['target_button'] = inc_mapping
-                                    else:
-                                        label['target_button'] = dec_mapping
+                                inc_friendly = self.get_friendly_xinput_name(inc_mapping)
+                                dec_friendly = self.get_friendly_xinput_name(dec_mapping)
+                                label['target_button'] = f"{inc_friendly} | {dec_friendly}"
                         else:
-                            # JOYCODE mode with similar logic
-                            if inc_mapping == "NONE" and dec_mapping != "NONE" and 'JOYCODE' in dec_mapping:
-                                dec_parts = dec_mapping.split('_')
-                                if len(dec_parts) >= 3:
-                                    dec_display = dec_parts[2]
-                                    if dec_parts[2] == "BUTTON" and len(dec_parts) > 3:
-                                        dec_display = f"Button {dec_parts[3]}"
-                                    label['target_button'] = dec_display
-                                else:
-                                    label['target_button'] = dec_mapping
-                            elif dec_mapping == "NONE" and inc_mapping != "NONE" and 'JOYCODE' in inc_mapping:
-                                inc_parts = inc_mapping.split('_')
-                                if len(inc_parts) >= 3:
-                                    inc_display = inc_parts[2]
-                                    if inc_parts[2] == "BUTTON" and len(inc_parts) > 3:
-                                        inc_display = f"Button {inc_parts[3]}"
-                                    label['target_button'] = inc_display
-                                else:
-                                    label['target_button'] = inc_mapping
+                            # Try to convert if not already in XInput format
+                            inc_converted = self.convert_mapping(inc_mapping, 'xinput')
+                            dec_converted = self.convert_mapping(dec_mapping, 'xinput')
+                            
+                            # If either is NONE, only show the other
+                            if inc_mapping == "NONE" or inc_converted == "NONE":
+                                dec_friendly = self.get_friendly_xinput_name(dec_converted) if 'XINPUT' in dec_converted else dec_converted
+                                if dec_mapping != "NONE" and dec_friendly != "NONE":
+                                    label['target_button'] = dec_friendly
+                            elif dec_mapping == "NONE" or dec_converted == "NONE":
+                                inc_friendly = self.get_friendly_xinput_name(inc_converted) if 'XINPUT' in inc_converted else inc_converted
+                                if inc_mapping != "NONE" and inc_friendly != "NONE":
+                                    label['target_button'] = inc_friendly
                             else:
-                                # Fallback to raw values
-                                label['target_button'] = f"{inc_mapping} | {dec_mapping}"
+                                # Both have values
+                                inc_friendly = self.get_friendly_xinput_name(inc_converted) if 'XINPUT' in inc_converted else inc_converted
+                                dec_friendly = self.get_friendly_xinput_name(dec_converted) if 'XINPUT' in dec_converted else dec_converted
+                                label['target_button'] = f"{inc_friendly} | {dec_friendly}"
                     # Regular mapping handling for standard controls
-                    elif current_mode == 'xinput' and 'XINPUT' in mapping_info['mapping']:
+                    elif 'XINPUT' in mapping_info['mapping']:
                         # Extract the button part (e.g., XINPUT_1_X -> X Button)
                         label['target_button'] = self.get_friendly_xinput_name(mapping_info['mapping'])
-                    elif current_mode == 'keyboard' and 'KEYCODE' in mapping_info['mapping']:
-                        # Extract the key name for keyboard mappings
-                        key_name = mapping_info['mapping'].replace('KEYCODE_', '')
-                        label['target_button'] = f'Key {key_name}'
+                    # For JOYCODE mappings, convert to XInput
                     elif 'JOYCODE' in mapping_info['mapping']:
-                        # Check if the mapping contains an OR statement
-                        if " OR " in mapping_info['mapping']:
-                            # HERE IS WHERE WE NEED TO MODIFY THE CODE
-                            # Look for JOYCODE part within the OR statement
-                            parts = mapping_info['mapping'].split(" OR ")
-                            joycode_part = None
-                            
-                            # UPDATED: Modified to prioritize JOYCODE parts in joycode mode too
-                            # Try to find a JOYCODE part
-                            for part in parts:
-                                if "JOYCODE" in part:
-                                    joycode_part = part.strip()
-                                    # For joycode mode, use it directly
-                                    if current_mode == 'joycode':
-                                        label['target_button'] = self.format_mapping_display(joycode_part)
-                                        break
-                                    break
-                            
-                            # Use the JOYCODE part if found, otherwise use the first part
-                            if joycode_part and current_mode != 'joycode':  # Skip if already handled
-                                # Extract from the JOYCODE part
-                                parts = joycode_part.split('_')
-                                if len(parts) >= 3 and 'BUTTON' in parts[2]:
-                                    button_num = parts[2].replace('BUTTON', '')
-                                    label['target_button'] = f'Button {button_num}'
-                                else:
-                                    if len(parts) >= 3:
-                                        label['target_button'] = parts[2]
-                            else:
-                                # Fallback to first part only if we didn't set target_button yet
-                                if current_mode != 'joycode' or 'target_button' not in label:
-                                    first_part = parts[0].strip()
-                                    if "KEYCODE" in first_part:
-                                        # Handle KEYCODE (keyboard keys)
-                                        key_name = first_part.replace('KEYCODE_', '')
-                                        label['target_button'] = key_name
-                                    else:
-                                        label['target_button'] = first_part
+                        # Convert to XInput and get friendly name
+                        xinput_mapping = self.convert_mapping(mapping_info['mapping'], 'xinput')
+                        if 'XINPUT' in xinput_mapping:
+                            label['target_button'] = self.get_friendly_xinput_name(xinput_mapping)
                         else:
-                            # Regular JOYCODE without OR
-                            parts = mapping_info['mapping'].split('_')
-                            if len(parts) >= 3 and 'BUTTON' in parts[2]:
-                                button_num = parts[2].replace('BUTTON', '')
-                                label['target_button'] = f'Button {button_num}'
-                            else:
-                                if len(parts) >= 3:
-                                    label['target_button'] = parts[2]
+                            # Fallback to original format
+                            label['target_button'] = self.format_mapping_display(mapping_info['mapping'])
                     
                     # Add debug output
                     print(f"Applied mapping for {control_name}: {label['mapping']} from {label['mapping_source']}")
@@ -6484,24 +6381,36 @@ controller xbox t		= """
                 else:
                     label['display_style'] = 'standard'  # Default style for 'other' controls
                     
-                # Set display name based on control type for XInput mode
-                if self.use_xinput:
-                    # NEW CODE: Use target_button if available from custom mapping
-                    if 'target_button' in label:
-                        label['display_name'] = f'P1 {label["target_button"]}'
-                    elif control_name == 'P1_BUTTON1':
-                        label['display_name'] = 'P1 A Button'
-                    elif control_name == 'P1_BUTTON2':
-                        label['display_name'] = 'P1 B Button'
-                    elif control_name == 'P1_BUTTON3':
-                        label['display_name'] = 'P1 X Button'
-                    # ... rest of the display_name assignments ...
+                # Set display name based on XInput button conventions
+                # Always use target_button if available from custom mapping
+                if 'target_button' in label:
+                    label['display_name'] = f'P1 {label["target_button"]}'
+                elif control_name == 'P1_BUTTON1':
+                    label['display_name'] = 'P1 A Button'
+                elif control_name == 'P1_BUTTON2':
+                    label['display_name'] = 'P1 B Button'
+                elif control_name == 'P1_BUTTON3':
+                    label['display_name'] = 'P1 X Button'
+                elif control_name == 'P1_BUTTON4':
+                    label['display_name'] = 'P1 Y Button'
+                elif control_name == 'P1_BUTTON5':
+                    label['display_name'] = 'P1 LB Button'
+                elif control_name == 'P1_BUTTON6':
+                    label['display_name'] = 'P1 RB Button'
+                elif control_name == 'P1_BUTTON7':
+                    label['display_name'] = 'P1 LT Button'
+                elif control_name == 'P1_BUTTON8':
+                    label['display_name'] = 'P1 RT Button'
+                elif control_name == 'P1_JOYSTICK_UP':
+                    label['display_name'] = 'P1 LS Up'
+                elif control_name == 'P1_JOYSTICK_DOWN':
+                    label['display_name'] = 'P1 LS Down'
+                elif control_name == 'P1_JOYSTICK_LEFT':
+                    label['display_name'] = 'P1 LS Left'
+                elif control_name == 'P1_JOYSTICK_RIGHT':
+                    label['display_name'] = 'P1 LS Right'
                 else:
-                    # JOYCODE mode - use traditional names or custom target
-                    if 'target_button' in label:
-                        label['display_name'] = f'P1 {label["target_button"]}'
-                    else:
-                        label['display_name'] = self.format_control_name(control_name)
+                    label['display_name'] = self.format_control_name(control_name)
 
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
@@ -6549,11 +6458,11 @@ controller xbox t		= """
         self.visible_control_types = ["BUTTON"]
         self.hide_preview_buttons = False
         self.show_button_names = True
-        self.use_xinput = True
-        self.input_mode = 'xinput'  # New mode option
+        self.use_xinput = True  # Always set to True
+        self.input_mode = 'xinput'  # Always set to xinput
         self.xinput_only_mode = True
         
-        # Load custom settings if available
+        # Load custom settings if available (but ignore input_mode)
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
             try:
                 with open(self.settings_path, 'r') as f:
@@ -6582,17 +6491,7 @@ controller xbox t		= """
                             self.hide_buttons_toggle.select()
                         else:
                             self.hide_buttons_toggle.deselect()
-                
-                # Load input mode setting
-                if 'input_mode' in settings:
-                    self.input_mode = settings['input_mode']
-                    # For backwards compatibility
-                    self.use_xinput = (self.input_mode == 'xinput')
-                elif 'use_xinput' in settings:
-                    # Legacy setting
-                    self.use_xinput = bool(settings.get('use_xinput', True))
-                    self.input_mode = 'xinput' if self.use_xinput else 'joycode'
-                        
+                    
                 # Load show button names setting
                 if 'show_button_names' in settings:
                     self.show_button_names = bool(settings.get('show_button_names', True))
@@ -6601,13 +6500,6 @@ controller xbox t		= """
                 if 'xinput_only_mode' in settings:
                     self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
                     
-                    # Update toggle if it exists
-                    if hasattr(self, 'xinput_only_toggle'):
-                        if self.xinput_only_mode:
-                            self.xinput_only_toggle.select()
-                        else:
-                            self.xinput_only_toggle.deselect()
-                            
             except Exception as e:
                 print(f"Error loading settings: {e}")
         else:
@@ -6619,7 +6511,7 @@ controller xbox t		= """
             'visible_control_types': self.visible_control_types,
             'hide_preview_buttons': self.hide_preview_buttons,
             'show_button_names': self.show_button_names,
-            'input_mode': self.input_mode
+            'input_mode': 'xinput'  # Always return xinput
         }
 
     def save_settings(self):
@@ -6629,8 +6521,8 @@ controller xbox t		= """
             "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
             "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
             "show_button_names": getattr(self, 'show_button_names', True),
-            "input_mode": getattr(self, 'input_mode', 'xinput'),  # New mode setting
-            "use_xinput": getattr(self, 'use_xinput', True),  # Keep for backwards compatibility
+            "input_mode": "xinput",  # Always save as xinput
+            "use_xinput": True,  # Always save as True
             "xinput_only_mode": getattr(self, 'xinput_only_mode', True)
         }
         
@@ -6903,254 +6795,152 @@ controller xbox t		= """
         return self.convert_single_mapping(mapping, to_mode)
 
     def convert_single_mapping(self, mapping: str, to_mode: str) -> str:
-        """Convert a single mapping string between different input modes"""
-        # Define mapping dictionaries inside the method
-        xinput_mappings = {
-            # Standard buttons
-            'JOYCODE_1_BUTTON1': 'XINPUT_1_A',           # A Button
-            'JOYCODE_1_BUTTON2': 'XINPUT_1_B',           # B Button
-            'JOYCODE_1_BUTTON3': 'XINPUT_1_X',           # X Button
-            'JOYCODE_1_BUTTON4': 'XINPUT_1_Y',           # Y Button
-            'JOYCODE_1_BUTTON5': 'XINPUT_1_SHOULDER_L',  # Left Bumper
-            'JOYCODE_1_BUTTON6': 'XINPUT_1_SHOULDER_R',  # Right Bumper
-            'JOYCODE_1_BUTTON7': 'XINPUT_1_TRIGGER_L',   # Left Trigger
-            'JOYCODE_1_BUTTON8': 'XINPUT_1_TRIGGER_R',   # Right Trigger
-            'JOYCODE_1_BUTTON9': 'XINPUT_1_THUMB_L',     # Left Stick Button
-            'JOYCODE_1_BUTTON10': 'XINPUT_1_THUMB_R',    # Right Stick Button
-            
-            # D-pad
-            'JOYCODE_1_HATUP': 'XINPUT_1_DPAD_UP',       # D-Pad Up
-            'JOYCODE_1_HATDOWN': 'XINPUT_1_DPAD_DOWN',   # D-Pad Down
-            'JOYCODE_1_HATLEFT': 'XINPUT_1_DPAD_LEFT',   # D-Pad Left
-            'JOYCODE_1_HATRIGHT': 'XINPUT_1_DPAD_RIGHT', # D-Pad Right
-            
-            # Analog stick directions with _SWITCH suffix
-            'JOYCODE_1_YAXIS_UP_SWITCH': 'XINPUT_1_LEFTY_NEG',       # Left Stick Up
-            'JOYCODE_1_YAXIS_DOWN_SWITCH': 'XINPUT_1_LEFTY_POS',     # Left Stick Down
-            'JOYCODE_1_XAXIS_LEFT_SWITCH': 'XINPUT_1_LEFTX_NEG',     # Left Stick Left
-            'JOYCODE_1_XAXIS_RIGHT_SWITCH': 'XINPUT_1_LEFTX_POS',    # Left Stick Right
-            
-            # Right analog stick
-            'JOYCODE_1_RYAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTY_NEG',    # Right Stick Up
-            'JOYCODE_1_RYAXIS_POS_SWITCH': 'XINPUT_1_RIGHTY_POS',    # Right Stick Down
-            'JOYCODE_1_RXAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTX_NEG',    # Right Stick Left
-            'JOYCODE_1_RXAXIS_POS_SWITCH': 'XINPUT_1_RIGHTX_POS',    # Right Stick Right
-            
-            'JOYCODE_1_ZAXIS': 'XINPUT_1_TRIGGER_L',            # Left Trigger Axis
-            'JOYCODE_1_RZAXIS': 'XINPUT_1_TRIGGER_R',           # Right Trigger Axis
-            'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital
-            'JOYCODE_1_ZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital (opposite)
-            'JOYCODE_1_RZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital
-            'JOYCODE_1_RZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital (opposite)
-            
-            # Same for P2
-            'JOYCODE_2_BUTTON1': 'XINPUT_2_A',           # A Button
-            'JOYCODE_2_BUTTON2': 'XINPUT_2_B',           # B Button
-            'JOYCODE_2_BUTTON3': 'XINPUT_2_X',           # X Button
-            'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',           # Y Button
-            'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',  # Left Bumper
-            'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',  # Right Bumper
-            'JOYCODE_2_BUTTON7': 'XINPUT_2_TRIGGER_L',   # Left Trigger
-            'JOYCODE_2_BUTTON8': 'XINPUT_2_TRIGGER_R',   # Right Trigger
-            'JOYCODE_2_BUTTON9': 'XINPUT_2_THUMB_L',     # Left Stick Button
-            'JOYCODE_2_BUTTON10': 'XINPUT_2_THUMB_R',    # Right Stick Button
-            'JOYCODE_2_HATUP': 'XINPUT_2_DPAD_UP',       # D-Pad Up
-            'JOYCODE_2_HATDOWN': 'XINPUT_2_DPAD_DOWN',   # D-Pad Down
-            'JOYCODE_2_HATLEFT': 'XINPUT_2_DPAD_LEFT',   # D-Pad Left
-            'JOYCODE_2_HATRIGHT': 'XINPUT_2_DPAD_RIGHT', # D-Pad Right
-        }
-        
-        # Create reverse mapping for XINPUT to JOYCODE
-        joycode_mappings = {v: k for k, v in xinput_mappings.items()}
-        
-        # Keyboard mappings
-        keyboard_mappings = {
-            # JOYCODE to keyboard mappings
-            'JOYCODE_1_BUTTON1': 'KEYCODE_Z',           # A Button -> Z
-            'JOYCODE_1_BUTTON2': 'KEYCODE_X',           # B Button -> X
-            'JOYCODE_1_BUTTON3': 'KEYCODE_A',           # X Button -> A
-            'JOYCODE_1_BUTTON4': 'KEYCODE_S',           # Y Button -> S
-            'JOYCODE_1_BUTTON5': 'KEYCODE_Q',           # Left Bumper -> Q
-            'JOYCODE_1_BUTTON6': 'KEYCODE_W',           # Right Bumper -> W
-            'JOYCODE_1_BUTTON7': 'KEYCODE_1',           # Left Trigger -> 1
-            'JOYCODE_1_BUTTON8': 'KEYCODE_2',           # Right Trigger -> 2
-            'JOYCODE_1_BUTTON9': 'KEYCODE_E',           # Left Stick Button -> E
-            'JOYCODE_1_BUTTON10': 'KEYCODE_R',          # Right Stick Button -> R
-            
-            # D-pad to arrow keys
-            'JOYCODE_1_HATUP': 'KEYCODE_UP',            # D-Pad Up -> Up Arrow
-            'JOYCODE_1_HATDOWN': 'KEYCODE_DOWN',        # D-Pad Down -> Down Arrow
-            'JOYCODE_1_HATLEFT': 'KEYCODE_LEFT',        # D-Pad Left -> Left Arrow
-            'JOYCODE_1_HATRIGHT': 'KEYCODE_RIGHT',      # D-Pad Right -> Right Arrow
-            
-            # Analog stick directions
-            'JOYCODE_1_YAXIS_UP_SWITCH': 'KEYCODE_UP',     # Left Stick Up -> Up Arrow
-            'JOYCODE_1_YAXIS_DOWN_SWITCH': 'KEYCODE_DOWN', # Left Stick Down -> Down Arrow
-            'JOYCODE_1_XAXIS_LEFT_SWITCH': 'KEYCODE_LEFT', # Left Stick Left -> Left Arrow
-            'JOYCODE_1_XAXIS_RIGHT_SWITCH': 'KEYCODE_RIGHT', # Left Stick Right -> Right Arrow
-            
-            # Player 2 mappings
-            'JOYCODE_2_BUTTON1': 'KEYCODE_C',           # P2 A Button -> C
-            'JOYCODE_2_BUTTON2': 'KEYCODE_V',           # P2 B Button -> V
-            'JOYCODE_2_BUTTON3': 'KEYCODE_D',           # P2 X Button -> D
-            'JOYCODE_2_BUTTON4': 'KEYCODE_F',           # P2 Y Button -> F
-            'JOYCODE_2_BUTTON5': 'KEYCODE_E',           # P2 Left Bumper -> E
-            'JOYCODE_2_BUTTON6': 'KEYCODE_R',           # P2 Right Bumper -> R
-            'JOYCODE_2_BUTTON7': 'KEYCODE_3',           # P2 Left Trigger -> 3
-            'JOYCODE_2_BUTTON8': 'KEYCODE_4',           # P2 Right Trigger -> 4
-            'JOYCODE_2_HATUP': 'KEYCODE_I',             # P2 D-Pad Up -> I
-            'JOYCODE_2_HATDOWN': 'KEYCODE_K',           # P2 D-Pad Down -> K
-            'JOYCODE_2_HATLEFT': 'KEYCODE_J',           # P2 D-Pad Left -> J
-            'JOYCODE_2_HATRIGHT': 'KEYCODE_L',          # P2 D-Pad Right -> L
-            
-            # XInput to keyboard mappings - derived from joycode mappings
-            'XINPUT_1_A': 'KEYCODE_Z',                  # A Button -> Z
-            'XINPUT_1_B': 'KEYCODE_X',                  # B Button -> X
-            'XINPUT_1_X': 'KEYCODE_A',                  # X Button -> A
-            'XINPUT_1_Y': 'KEYCODE_S',                  # Y Button -> S
-            'XINPUT_1_SHOULDER_L': 'KEYCODE_Q',         # Left Bumper -> Q
-            'XINPUT_1_SHOULDER_R': 'KEYCODE_W',         # Right Bumper -> W
-            'XINPUT_1_TRIGGER_L': 'KEYCODE_1',          # Left Trigger -> 1
-            'XINPUT_1_TRIGGER_R': 'KEYCODE_2',          # Right Trigger -> 2
-            'XINPUT_1_THUMB_L': 'KEYCODE_E',            # Left Stick Button -> E
-            'XINPUT_1_THUMB_R': 'KEYCODE_R',            # Right Stick Button -> R
-            'XINPUT_1_DPAD_UP': 'KEYCODE_UP',           # D-Pad Up -> Up Arrow
-            'XINPUT_1_DPAD_DOWN': 'KEYCODE_DOWN',       # D-Pad Down -> Down Arrow
-            'XINPUT_1_DPAD_LEFT': 'KEYCODE_LEFT',       # D-Pad Left -> Left Arrow
-            'XINPUT_1_DPAD_RIGHT': 'KEYCODE_RIGHT',     # D-Pad Right -> Right Arrow
-            'XINPUT_1_LEFTY_NEG': 'KEYCODE_UP',         # Left Stick Up -> Up Arrow
-            'XINPUT_1_LEFTY_POS': 'KEYCODE_DOWN',       # Left Stick Down -> Down Arrow
-            'XINPUT_1_LEFTX_NEG': 'KEYCODE_LEFT',       # Left Stick Left -> Left Arrow
-            'XINPUT_1_LEFTX_POS': 'KEYCODE_RIGHT',      # Left Stick Right -> Right Arrow
-            
-            # Player 2 XInput mappings
-            'XINPUT_2_A': 'KEYCODE_C',                  # P2 A -> C
-            'XINPUT_2_B': 'KEYCODE_V',                  # P2 B -> V
-            'XINPUT_2_X': 'KEYCODE_D',                  # P2 X -> D
-            'XINPUT_2_Y': 'KEYCODE_F',                  # P2 Y -> F
-            'XINPUT_2_DPAD_UP': 'KEYCODE_I',            # P2 Up -> I
-            'XINPUT_2_DPAD_DOWN': 'KEYCODE_K',          # P2 Down -> K
-            'XINPUT_2_DPAD_LEFT': 'KEYCODE_J',          # P2 Left -> J
-            'XINPUT_2_DPAD_RIGHT': 'KEYCODE_L',         # P2 Right -> L
-        }
-        
-        # Debug information
-        print(f"Converting mapping: {mapping} to mode={to_mode}")
+        """Convert a mapping string to XInput format"""
+        # Always force to_mode to be 'xinput'
+        to_mode = 'xinput'
         
         # If mapping contains multiple options (separated by OR)
         if " OR " in mapping:
             parts = mapping.split(" OR ")
             
-            # First look for parts that match the target mode
+            # First look for parts that are already in XInput format
             for part in parts:
                 part = part.strip()
-                
-                # Check if this part already matches the target mode
-                if to_mode == 'xinput' and part.startswith('XINPUT'):
+                if part.startswith('XINPUT'):
                     print(f"  Found XINPUT part in OR statement: {part}")
                     return part
-                elif to_mode == 'joycode' and part.startswith('JOYCODE'):
-                    print(f"  Found JOYCODE part in OR statement: {part}")
-                    return part
-                elif to_mode == 'keyboard' and part.startswith('KEYCODE'):
-                    print(f"  Found KEYCODE part in OR statement: {part}")
-                    return part
             
-            # If no direct match, try to convert a compatible part
-            if to_mode == 'xinput':
-                # For xinput mode, try to convert JOYCODE parts
-                for part in parts:
-                    if part.startswith('JOYCODE') and part in xinput_mappings:
+            # No direct XInput mapping found, try to convert JOYCODE parts
+            for part in parts:
+                if part.startswith('JOYCODE'):
+                    # Define XInput mapping dictionary
+                    xinput_mappings = {
+                        # Standard buttons
+                        'JOYCODE_1_BUTTON1': 'XINPUT_1_A',           # A Button
+                        'JOYCODE_1_BUTTON2': 'XINPUT_1_B',           # B Button
+                        'JOYCODE_1_BUTTON3': 'XINPUT_1_X',           # X Button
+                        'JOYCODE_1_BUTTON4': 'XINPUT_1_Y',           # Y Button
+                        'JOYCODE_1_BUTTON5': 'XINPUT_1_SHOULDER_L',  # Left Bumper
+                        'JOYCODE_1_BUTTON6': 'XINPUT_1_SHOULDER_R',  # Right Bumper
+                        'JOYCODE_1_BUTTON7': 'XINPUT_1_TRIGGER_L',   # Left Trigger
+                        'JOYCODE_1_BUTTON8': 'XINPUT_1_TRIGGER_R',   # Right Trigger
+                        'JOYCODE_1_BUTTON9': 'XINPUT_1_THUMB_L',     # Left Stick Button
+                        'JOYCODE_1_BUTTON10': 'XINPUT_1_THUMB_R',    # Right Stick Button
+                        
+                        # D-pad
+                        'JOYCODE_1_HATUP': 'XINPUT_1_DPAD_UP',       # D-Pad Up
+                        'JOYCODE_1_HATDOWN': 'XINPUT_1_DPAD_DOWN',   # D-Pad Down
+                        'JOYCODE_1_HATLEFT': 'XINPUT_1_DPAD_LEFT',   # D-Pad Left
+                        'JOYCODE_1_HATRIGHT': 'XINPUT_1_DPAD_RIGHT', # D-Pad Right
+                        
+                        # Analog stick directions with _SWITCH suffix
+                        'JOYCODE_1_YAXIS_UP_SWITCH': 'XINPUT_1_LEFTY_NEG',       # Left Stick Up
+                        'JOYCODE_1_YAXIS_DOWN_SWITCH': 'XINPUT_1_LEFTY_POS',     # Left Stick Down
+                        'JOYCODE_1_XAXIS_LEFT_SWITCH': 'XINPUT_1_LEFTX_NEG',     # Left Stick Left
+                        'JOYCODE_1_XAXIS_RIGHT_SWITCH': 'XINPUT_1_LEFTX_POS',    # Left Stick Right
+                        
+                        # Right analog stick
+                        'JOYCODE_1_RYAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTY_NEG',    # Right Stick Up
+                        'JOYCODE_1_RYAXIS_POS_SWITCH': 'XINPUT_1_RIGHTY_POS',    # Right Stick Down
+                        'JOYCODE_1_RXAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTX_NEG',    # Right Stick Left
+                        'JOYCODE_1_RXAXIS_POS_SWITCH': 'XINPUT_1_RIGHTX_POS',    # Right Stick Right
+                        
+                        'JOYCODE_1_ZAXIS': 'XINPUT_1_TRIGGER_L',            # Left Trigger Axis
+                        'JOYCODE_1_RZAXIS': 'XINPUT_1_TRIGGER_R',           # Right Trigger Axis
+                        'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital
+                        'JOYCODE_1_ZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital (opposite)
+                        'JOYCODE_1_RZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital
+                        'JOYCODE_1_RZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital (opposite)
+                        
+                        # Same for P2
+                        'JOYCODE_2_BUTTON1': 'XINPUT_2_A',           # A Button
+                        'JOYCODE_2_BUTTON2': 'XINPUT_2_B',           # B Button
+                        'JOYCODE_2_BUTTON3': 'XINPUT_2_X',           # X Button
+                        'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',           # Y Button
+                        'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',  # Left Bumper
+                        'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',  # Right Bumper
+                        'JOYCODE_2_BUTTON7': 'XINPUT_2_TRIGGER_L',   # Left Trigger
+                        'JOYCODE_2_BUTTON8': 'XINPUT_2_TRIGGER_R',   # Right Trigger
+                        'JOYCODE_2_BUTTON9': 'XINPUT_2_THUMB_L',     # Left Stick Button
+                        'JOYCODE_2_BUTTON10': 'XINPUT_2_THUMB_R',    # Right Stick Button
+                        'JOYCODE_2_HATUP': 'XINPUT_2_DPAD_UP',       # D-Pad Up
+                        'JOYCODE_2_HATDOWN': 'XINPUT_2_DPAD_DOWN',   # D-Pad Down
+                        'JOYCODE_2_HATLEFT': 'XINPUT_2_DPAD_LEFT',   # D-Pad Left
+                        'JOYCODE_2_HATRIGHT': 'XINPUT_2_DPAD_RIGHT', # D-Pad Right
+                    }
+                    
+                    if part in xinput_mappings:
                         converted = xinput_mappings[part]
                         print(f"  Converting JOYCODE->XINPUT: {part} -> {converted}")
                         return converted
-            elif to_mode == 'joycode':
-                # For joycode mode, try to convert XINPUT parts
-                for part in parts:
-                    if part.startswith('XINPUT') and part in joycode_mappings:
-                        converted = joycode_mappings[part]
-                        print(f"  Converting XINPUT->JOYCODE: {part} -> {converted}")
-                        return converted
-            elif to_mode == 'keyboard':
-                # For keyboard mode, try to find a KEYCODE part first
-                for part in parts:
-                    if part.startswith('KEYCODE'):
-                        print(f"  Using KEYCODE part: {part}")
-                        return part
-                        
-                # Or convert from another mode if possible
-                for part in parts:
-                    if part.startswith('JOYCODE') and part in keyboard_mappings:
-                        converted = keyboard_mappings[part]
-                        print(f"  Converting JOYCODE->KEYBOARD: {part} -> {converted}")
-                        return converted
-                    elif part.startswith('XINPUT') and part in keyboard_mappings:
-                        converted = keyboard_mappings[part]
-                        print(f"  Converting XINPUT->KEYBOARD: {part} -> {converted}")
-                        return converted
             
-            # If all else fails, return the first part (original behavior)
+            # If no conversion found, return the first part
             print(f"  No suitable conversion found, using first part: {parts[0]}")
             return parts[0].strip()
         
-        # Simple conversion for a single mapping
-        source_mode = ''
+        # Simple direct conversion for JOYCODE mappings
         if mapping.startswith('JOYCODE'):
-            source_mode = 'joycode'
-        elif mapping.startswith('XINPUT'):
-            source_mode = 'xinput'
-        elif mapping.startswith('KEYCODE'):
-            source_mode = 'keyboard'
-        else:
-            # Unknown format, return as is
-            return mapping
-        
-        # Skip if it's already in the target mode
-        if source_mode == to_mode:
-            return mapping
-        
-        # Convert based on source and target
-        if source_mode == 'joycode' and to_mode == 'xinput':
+            # Define XInput mapping dictionary
+            xinput_mappings = {
+                # Standard buttons
+                'JOYCODE_1_BUTTON1': 'XINPUT_1_A',           # A Button
+                'JOYCODE_1_BUTTON2': 'XINPUT_1_B',           # B Button
+                'JOYCODE_1_BUTTON3': 'XINPUT_1_X',           # X Button
+                'JOYCODE_1_BUTTON4': 'XINPUT_1_Y',           # Y Button
+                'JOYCODE_1_BUTTON5': 'XINPUT_1_SHOULDER_L',  # Left Bumper
+                'JOYCODE_1_BUTTON6': 'XINPUT_1_SHOULDER_R',  # Right Bumper
+                'JOYCODE_1_BUTTON7': 'XINPUT_1_TRIGGER_L',   # Left Trigger
+                'JOYCODE_1_BUTTON8': 'XINPUT_1_TRIGGER_R',   # Right Trigger
+                'JOYCODE_1_BUTTON9': 'XINPUT_1_THUMB_L',     # Left Stick Button
+                'JOYCODE_1_BUTTON10': 'XINPUT_1_THUMB_R',    # Right Stick Button
+                
+                # D-pad
+                'JOYCODE_1_HATUP': 'XINPUT_1_DPAD_UP',       # D-Pad Up
+                'JOYCODE_1_HATDOWN': 'XINPUT_1_DPAD_DOWN',   # D-Pad Down
+                'JOYCODE_1_HATLEFT': 'XINPUT_1_DPAD_LEFT',   # D-Pad Left
+                'JOYCODE_1_HATRIGHT': 'XINPUT_1_DPAD_RIGHT', # D-Pad Right
+                
+                # Analog stick directions with _SWITCH suffix
+                'JOYCODE_1_YAXIS_UP_SWITCH': 'XINPUT_1_LEFTY_NEG',       # Left Stick Up
+                'JOYCODE_1_YAXIS_DOWN_SWITCH': 'XINPUT_1_LEFTY_POS',     # Left Stick Down
+                'JOYCODE_1_XAXIS_LEFT_SWITCH': 'XINPUT_1_LEFTX_NEG',     # Left Stick Left
+                'JOYCODE_1_XAXIS_RIGHT_SWITCH': 'XINPUT_1_LEFTX_POS',    # Left Stick Right
+                
+                # Right analog stick
+                'JOYCODE_1_RYAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTY_NEG',    # Right Stick Up
+                'JOYCODE_1_RYAXIS_POS_SWITCH': 'XINPUT_1_RIGHTY_POS',    # Right Stick Down
+                'JOYCODE_1_RXAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTX_NEG',    # Right Stick Left
+                'JOYCODE_1_RXAXIS_POS_SWITCH': 'XINPUT_1_RIGHTX_POS',    # Right Stick Right
+                
+                'JOYCODE_1_ZAXIS': 'XINPUT_1_TRIGGER_L',            # Left Trigger Axis
+                'JOYCODE_1_RZAXIS': 'XINPUT_1_TRIGGER_R',           # Right Trigger Axis
+                'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital
+                'JOYCODE_1_ZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_L', # Left Trigger Digital (opposite)
+                'JOYCODE_1_RZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital
+                'JOYCODE_1_RZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_R', # Right Trigger Digital (opposite)
+                
+                # Same for P2
+                'JOYCODE_2_BUTTON1': 'XINPUT_2_A',           # A Button
+                'JOYCODE_2_BUTTON2': 'XINPUT_2_B',           # B Button
+                'JOYCODE_2_BUTTON3': 'XINPUT_2_X',           # X Button
+                'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',           # Y Button
+                'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',  # Left Bumper
+                'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',  # Right Bumper
+                'JOYCODE_2_BUTTON7': 'XINPUT_2_TRIGGER_L',   # Left Trigger
+                'JOYCODE_2_BUTTON8': 'XINPUT_2_TRIGGER_R',   # Right Trigger
+                'JOYCODE_2_BUTTON9': 'XINPUT_2_THUMB_L',     # Left Stick Button
+                'JOYCODE_2_BUTTON10': 'XINPUT_2_THUMB_R',    # Right Stick Button
+                'JOYCODE_2_HATUP': 'XINPUT_2_DPAD_UP',       # D-Pad Up
+                'JOYCODE_2_HATDOWN': 'XINPUT_2_DPAD_DOWN',   # D-Pad Down
+                'JOYCODE_2_HATLEFT': 'XINPUT_2_DPAD_LEFT',   # D-Pad Left
+                'JOYCODE_2_HATRIGHT': 'XINPUT_2_DPAD_RIGHT', # D-Pad Right
+            }
+            
             if mapping in xinput_mappings:
                 print(f"  Converting JOYCODE->XINPUT: {mapping} -> {xinput_mappings[mapping]}")
                 return xinput_mappings[mapping]
-        elif source_mode == 'joycode' and to_mode == 'keyboard':
-            if mapping in keyboard_mappings:
-                print(f"  Converting JOYCODE->KEYBOARD: {mapping} -> {keyboard_mappings[mapping]}")
-                return keyboard_mappings[mapping]
-        elif source_mode == 'xinput' and to_mode == 'joycode':
-            if mapping in joycode_mappings:
-                print(f"  Converting XINPUT->JOYCODE: {mapping} -> {joycode_mappings[mapping]}")
-                return joycode_mappings[mapping]
-        elif source_mode == 'xinput' and to_mode == 'keyboard':
-            if mapping in keyboard_mappings:
-                print(f"  Converting XINPUT->KEYBOARD: {mapping} -> {keyboard_mappings[mapping]}")
-                return keyboard_mappings[mapping]
-        elif source_mode == 'keyboard' and to_mode == 'joycode':
-            # Find the keyboard mapping that matches
-            for joycode, keycode in keyboard_mappings.items():
-                if keycode == mapping and joycode.startswith('JOYCODE'):
-                    print(f"  Converting KEYBOARD->JOYCODE: {mapping} -> {joycode}")
-                    return joycode
-        elif source_mode == 'keyboard' and to_mode == 'xinput':
-            # Find the keyboard mapping that matches
-            for xinput, keycode in keyboard_mappings.items():
-                if keycode == mapping and xinput.startswith('XINPUT'):
-                    print(f"  Converting KEYBOARD->XINPUT: {mapping} -> {xinput}")
-                    return xinput
         
-        # If we got here, check if it's already in a format that includes parts of the target mode
-        if source_mode == 'joycode' and "SWITCH" in mapping:
-            for key, value in xinput_mappings.items():
-                if key in mapping:
-                    converted = xinput_mappings[key]
-                    if to_mode == 'xinput':
-                        return converted
-                    elif to_mode == 'keyboard' and converted in keyboard_mappings:
-                        return keyboard_mappings[converted]
-        
-        # No conversion found, return original
-        print(f"No direct conversion found for: {mapping} to {to_mode}")
+        # If already in XInput format or if no conversion found, return as is
         return mapping
 
     def format_control_name(self, control_name: str) -> str:
@@ -7218,55 +7008,34 @@ controller xbox t		= """
         return control_name
     
     def format_mapping_display(self, mapping: str) -> str:
-        """Format the mapping string for display using friendly names when available."""
+        """Format the mapping string for display using XInput friendly names."""
         
-        # Handle OR statements by finding the preferred part based on mode
+        # Handle OR statements by finding an XInput part
         if " OR " in mapping:
             parts = mapping.split(" OR ")
-            current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
             
-            # Find the preferred part based on current mode
-            preferred_part = None
-            if current_mode == 'xinput' or current_mode == 'joycode':
-                # For both xinput and joycode, prefer JOYCODE parts
-                for part in parts:
-                    if "JOYCODE" in part:
-                        preferred_part = part.strip()
-                        break
-            elif current_mode == 'keyboard':
-                # For keyboard mode, prefer KEYCODE parts
-                for part in parts:
-                    if "KEYCODE" in part:
-                        preferred_part = part.strip()
-                        break
+            # Find an XInput part if available
+            for part in parts:
+                if "XINPUT" in part:
+                    mapping = part.strip()
+                    break
             
-            # Use the preferred part if found, otherwise use the first part
-            if preferred_part:
-                mapping = preferred_part
-            else:
+            # If no XInput part found, use the first part
+            if " OR " in mapping:
                 mapping = parts[0].strip()
         
-        # Handle Keyboard mappings
-        if mapping.startswith("KEYCODE"):
-            key_name = mapping.replace("KEYCODE_", "")
-            # Special case for arrow keys
-            if key_name == "UP":
-                return "Keyboard: Up Arrow"
-            elif key_name == "DOWN":
-                return "Keyboard: Down Arrow"
-            elif key_name == "LEFT":
-                return "Keyboard: Left Arrow"
-            elif key_name == "RIGHT":
-                return "Keyboard: Right Arrow"
-            # For other keys, just show the key name
-            return f"Keyboard: {key_name}"
-        
         # Handle XInput mappings with helper
-        elif mapping.startswith("XINPUT"):
+        if mapping.startswith("XINPUT"):
             return self.get_friendly_xinput_name(mapping)
 
-        # Handle JOYCODE mappings
+        # Handle JOYCODE mappings - convert to XInput if possible
         elif "JOYCODE" in mapping:
+            # Try to convert to XInput
+            xinput_mapping = self.convert_mapping(mapping, 'xinput')
+            if xinput_mapping.startswith("XINPUT"):
+                return self.get_friendly_xinput_name(xinput_mapping)
+            
+            # If conversion failed, fallback to basic display
             if "YAXIS_UP" in mapping or "DPADUP" in mapping:
                 return "Joy Stick Up"
             elif "YAXIS_DOWN" in mapping or "DPADDOWN" in mapping:
@@ -7296,6 +7065,11 @@ controller xbox t		= """
                 else:
                     remainder = '_'.join(parts[3:])
                     return f"Joy {joy_num} {control_type} {remainder}"
+
+        # For keyboard mappings, convert to "Key X" format
+        elif mapping.startswith("KEYCODE"):
+            key_name = mapping.replace("KEYCODE_", "")
+            return f"Key {key_name}"
 
         # Fallback
         return mapping
@@ -7370,125 +7144,11 @@ controller xbox t		= """
                 # Ensure the selected item is visible
                 self.game_list.see(f"{line_index}.0")
 
-    def toggle_input_mode(self):
-        """Cycle between input modes: XInput → JOYCODE → Keyboard → XInput with enforced refresh"""
-        # Get current mode with explicit default
-        current_mode = getattr(self, 'input_mode', 'xinput')
-        print(f"Current input mode before toggle: {current_mode}")
-        
-        # Force explicit mode cycling
-        if current_mode == 'xinput':
-            new_mode = 'joycode'
-            mode_text = "JOYCODE Mode"
-            mode_color = "#888888"  # Gray for JOYCODE
-        elif current_mode == 'joycode':
-            new_mode = 'keyboard'
-            mode_text = "Keyboard Mode" 
-            mode_color = self.theme_colors["secondary"]  # Secondary color for Keyboard
-        else:  # 'keyboard' or any other value
-            new_mode = 'xinput'
-            mode_text = "XInput Mode"
-            mode_color = self.theme_colors["primary"]  # Primary color for XInput
-        
-        print(f"Switching to new input mode: {new_mode}")
-        
-        # Update the class attribute
-        self.input_mode = new_mode
-        
-        # Legacy compatibility - maintain use_xinput flag
-        self.use_xinput = (new_mode == 'xinput')
-        print(f"Updated use_xinput flag: {self.use_xinput}")
-        
-        # Update the button text and color
-        if hasattr(self, 'input_mode_button'):
-            self.input_mode_button.configure(
-                text=mode_text,
-                fg_color=mode_color,
-                hover_color=self.theme_colors["button_hover"]
-            )
-            print(f"Updated input mode button: {mode_text}")
-        
-        # Save setting to config file immediately
-        self.save_settings()
-        
-        # COMPLETE DISPLAY REFRESH
-        # First, clear the entire cache to ensure fresh data with new mapping type
-        if hasattr(self, 'rom_data_cache'):
-            self.rom_data_cache = {}
-            print(f"Cleared entire ROM data cache due to Input Mode change: {new_mode}")
-        
-        # Get the currently selected item regardless of how it was selected
-        current_rom = self.current_game
-        if current_rom:
-            print(f"Forcing complete refresh for current ROM: {current_rom}")
-            
-            # Clear existing controls
-            if hasattr(self, 'control_frame'):
-                for widget in self.control_frame.winfo_children():
-                    widget.destroy()
-            
-            # Force complete reload with explicit mode
-            # This bypasses caching mechanisms
-            try:
-                # Get fresh game data
-                game_data = None
-                
-                # Use database if available
-                if os.path.exists(self.db_path):
-                    game_data = self.get_game_data_from_db(current_rom)
-                
-                # Fall back to JSON lookup
-                if not game_data and hasattr(self, 'gamedata_json') and self.gamedata_json:
-                    # Check direct match
-                    if current_rom in self.gamedata_json:
-                        game_data = self.get_game_data(current_rom)
-                    # Check clone
-                    elif hasattr(self, 'parent_lookup') and current_rom in self.parent_lookup:
-                        parent_rom = self.parent_lookup[current_rom]
-                        if parent_rom in self.gamedata_json:
-                            game_data = self.get_game_data(current_rom)
-                
-                if game_data:
-                    # Process with custom mappings
-                    cfg_controls = {}
-                    if current_rom in self.custom_configs:
-                        # Parse the custom config
-                        cfg_controls = self.parse_cfg_controls(self.custom_configs[current_rom])
-                        
-                        # Convert to current mode explicitly
-                        cfg_controls = {
-                            control: self.convert_mapping(mapping, new_mode)
-                            for control, mapping in cfg_controls.items()
-                        }
-                        
-                        # Update game_data with custom mappings
-                        self.update_game_data_with_custom_mappings(game_data, cfg_controls)
-                
-                # Force display update
-                self.display_game_info(current_rom)
-                
-                # Re-select in listbox
-                if hasattr(self, 'game_listbox') and hasattr(self, 'game_list_data'):
-                    for i, (rom_name, _) in enumerate(self.game_list_data):
-                        if rom_name == current_rom:
-                            self.game_listbox.selection_clear(0, tk.END)
-                            self.game_listbox.selection_set(i)
-                            self.game_listbox.see(i)
-                            break
-                    
-            except Exception as e:
-                print(f"Error refreshing display after mode toggle: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Return the new mode for confirmation
-        return new_mode
-
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """Display controls using a canvas-based approach for significantly better performance"""
         row = start_row
         
-        # Get romname from game_dataf
+        # Get romname from game_data
         romname = game_data.get('romname', '')
         
         # Clear existing controls first
@@ -7596,10 +7256,7 @@ controller xbox t		= """
             anchor="w"
         ).pack(side="left")
         
-        # Add input mode indicator
-        mode_text = "XInput Mode" if self.use_xinput else "JOYCODE Mode"
-        mode_color = self.theme_colors["primary"] if self.use_xinput else "#888888"
-        
+        # Show 'XInput Mode' indicator (always showing XInput now)
         ctk.CTkLabel(
             indicator_frame,
             text="  |  Input Mode: ",
@@ -7609,9 +7266,9 @@ controller xbox t		= """
         
         ctk.CTkLabel(
             indicator_frame,
-            text=mode_text,
+            text="XInput Mode",
             font=("Arial", 13, "bold"),
-            text_color=mode_color,
+            text_color=self.theme_colors["primary"],
             anchor="w"
         ).pack(side="left")
         
@@ -7641,39 +7298,9 @@ controller xbox t		= """
         # Configure grid for full width expansion
         controls_card.columnconfigure(0, weight=1)
         
-        # Replace the XInput toggle with a cycling button in the display_controls_table method
-        xinput_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
-        xinput_frame.pack(fill="x", padx=15, pady=(15, 0))
-
-        # Determine current mode and set initial button properties
-        current_mode = getattr(self, 'input_mode', 'xinput')
-        if current_mode == 'xinput':
-            mode_text = "XInput Mode"
-            mode_color = self.theme_colors["primary"]
-        elif current_mode == 'joycode':
-            mode_text = "JOYCODE Mode"
-            mode_color = "#888888"
-        else:  # keyboard
-            mode_text = "Keyboard Mode"
-            mode_color = self.theme_colors["secondary"]
-
-        # Print the initial mode for debugging
-        print(f"Initial input mode button state: {current_mode} -> {mode_text}")
-
-        # Create the button with the correct initial state
-        self.input_mode_button = ctk.CTkButton(
-            xinput_frame,
-            text=mode_text,
-            command=self.toggle_input_mode,
-            fg_color=mode_color,
-            hover_color=self.theme_colors["button_hover"],
-            width=150  # Make it a bit wider for the text
-        )
-        self.input_mode_button.pack(anchor="w")
-        
         # Create a frame for title and edit button
         title_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
-        title_frame.pack(fill="x", padx=15, pady=(10, 10))
+        title_frame.pack(fill="x", padx=15, pady=(15, 10))
         
         # Title on the left
         ctk.CTkLabel(
@@ -7755,7 +7382,7 @@ controller xbox t		= """
                         elif "AD_STICK_Z" in control_name:
                             label['display_style'] = 'analog_input'
                     
-                    # Determine mapping information - rest of the code remains the same
+                    # Determine mapping information
                     is_custom = control_name in cfg_controls
                     is_default = not is_custom and hasattr(self, 'default_controls') and control_name in self.default_controls
                     
@@ -7765,10 +7392,8 @@ controller xbox t		= """
                     elif is_default:
                         mapping_source = "Default CFG"
                         default_mapping = self.default_controls[control_name]
-                        if self.use_xinput:
-                            mapping_value = self.convert_mapping(default_mapping, True)
-                        else:
-                            mapping_value = default_mapping
+                        # Always convert to XInput
+                        mapping_value = self.convert_mapping(default_mapping, 'xinput')
                     else:
                         mapping_source = "Game Data"
                         mapping_value = ""
@@ -7837,8 +7462,6 @@ controller xbox t		= """
         controls_frame = tk.Frame(canvas, background=self.theme_colors["card_bg"])  # Match the canvas background
         canvas_window = canvas.create_window((0, 0), window=controls_frame, anchor=tk.NW)
         
-        # Row alternating colors - remove this line as we're not using alternating colors anymore
-        
         # If there are no controls to display
         if not all_controls:
             empty_frame = tk.Frame(controls_frame, background=self.theme_colors["card_bg"], height=60)
@@ -7899,28 +7522,27 @@ controller xbox t		= """
                     # This is the existing code for OR statements
                     mapping_parts = mapping_value.split(" OR ")
                     
-                    # First, specifically look for JOYCODE parts when in XInput mode
+                    # First, specifically look for JOYCODE parts to convert to XINPUT
                     joycode_part = None
-                    if self.use_xinput:
-                        for part in mapping_parts:
-                            part = part.strip()
-                            if "JOYCODE" in part:
-                                joycode_part = part
-                                # Convert the JOYCODE part directly to XINPUT
-                                converted = self.convert_mapping(joycode_part, 'xinput')
-                                if "XINPUT" in converted:
-                                    primary_mapping = self.get_friendly_xinput_name(converted)
-                                    break
+                    for part in mapping_parts:
+                        part = part.strip()
+                        if "JOYCODE" in part:
+                            joycode_part = part
+                            # Convert the JOYCODE part directly to XINPUT
+                            converted = self.convert_mapping(joycode_part, 'xinput')
+                            if "XINPUT" in converted:
+                                primary_mapping = self.get_friendly_xinput_name(converted)
+                                break
                     
                     # Only proceed with normal processing if no JOYCODE part was found or converted
                     if not primary_mapping:
-                        # Get all formatted mappings for tooltip (existing code)
+                        # Get all formatted mappings for tooltip
                         for part in mapping_parts:
-                            if self.use_xinput and "XINPUT" in part:
+                            if "XINPUT" in part:
                                 primary_mapping = self.get_friendly_xinput_name(part)
-                            elif self.use_xinput and "JOYCODE" in part:
+                            elif "JOYCODE" in part:
                                 # Try to convert JOYCODE to XINPUT
-                                converted = self.convert_mapping(part, True)
+                                converted = self.convert_mapping(part, 'xinput')
                                 if "XINPUT" in converted:
                                     primary_mapping = self.get_friendly_xinput_name(converted)
                     
@@ -7934,8 +7556,16 @@ controller xbox t		= """
                     else:
                         display_text = primary_mapping
                 elif mapping_value:
-                    # Single mapping
-                    display_text = self.format_mapping_display(mapping_value)
+                    # Single mapping - always convert to XInput friendly name
+                    if "XINPUT" in mapping_value:
+                        display_text = self.get_friendly_xinput_name(mapping_value)
+                    else:
+                        # Convert to XInput first if possible
+                        converted = self.convert_mapping(mapping_value, 'xinput')
+                        if "XINPUT" in converted:
+                            display_text = self.get_friendly_xinput_name(converted)
+                        else:
+                            display_text = self.format_mapping_display(mapping_value)
                     all_mappings = [display_text]
                 else:
                     # No mapping - for analog controls show a description
@@ -8134,7 +7764,7 @@ controller xbox t		= """
                     if hasattr(self, 'rom_data_cache'):
                         self.rom_data_cache[romname] = cache_game_data
                 else:
-                    # Standard caching for non-XInput-only mode
+                    # Standard caching
                     cache_path = os.path.join(self.cache_dir, f"{romname}_cache.json")
                     with open(cache_path, 'w', encoding='utf-8') as f:
                         json.dump(game_data, f, indent=2)
