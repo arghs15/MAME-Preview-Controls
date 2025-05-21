@@ -49,6 +49,11 @@ class PreviewWindow(QMainWindow):
         self.rom_name = rom_name
         self.game_data = game_data
         self.initialize_conversion_maps()
+
+        # Initialize input mode - ADD THIS
+        self.use_xinput = game_data.get('input_mode') == 'xinput' if game_data else True
+        print(f"Input mode for {rom_name}: {'XInput' if self.use_xinput else 'DirectInput'}")
+
         # Set up path handling
         if hasattr(self, 'setup_directory_structure'):
             # Use the new directory structure setup method if available
@@ -2781,7 +2786,7 @@ class PreviewWindow(QMainWindow):
         """Convert JOYCODE mappings to XINPUT format for button prefix extraction."""
         if not mapping:
             return mapping
-                
+                    
         # Handle multiple mappings with ||| separator
         if " ||| " in mapping:
             parts = [part.strip() for part in mapping.split(" ||| ")]
@@ -2898,11 +2903,32 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'default_controls') and self.default_controls:
             game_data['has_default_cfg'] = True
         
+        print(f"\n*** Starting update_game_data_with_custom_mappings for {self.rom_name} ***")
+        
         # Process each control in the game data
         for player in game_data.get('players', []):
             for label in player.get('labels', []):
                 control_name = label['name']
                 
+                # Debug ALL controls to see what's being processed
+                print(f"Control: {control_name}, Value: {label['value']}, Mapping: {label.get('mapping', 'NONE')}")
+                
+                # Special debug for P1_PEDAL2
+                if control_name == "P1_PEDAL2":
+                    print(f"*** Found P1_PEDAL2 ***")
+                    print(f"Action: {label['value']}")
+                    print(f"Mapping: {label.get('mapping', 'NONE')}")
+                    print(f"Is Custom: {label.get('is_custom', False)}")
+                    print(f"Mapping source: {label.get('mapping_source', 'UNKNOWN')}")
+                    
+                    # Check if default controls exist and contain this control
+                    has_defaults = hasattr(self, 'default_controls')
+                    in_defaults = has_defaults and control_name in self.default_controls
+                    print(f"Has default_controls: {has_defaults}")
+                    print(f"P1_PEDAL2 in default_controls: {in_defaults}")
+                    if in_defaults:
+                        print(f"Default mapping: {self.default_controls[control_name]}")
+                        
                 # Get the functional category for this control (for positioning)
                 func_category = self.get_functional_category(control_name)
                 label['func_category'] = func_category
@@ -2926,7 +2952,7 @@ class PreviewWindow(QMainWindow):
                     label['is_custom'] = True
                     label['mapping_source'] = f"ROM CFG ({game_data['romname']}.cfg)"
                     label['cfg_mapping'] = True
-                    print(f"\n*** Starting update_game_data_with_custom_mappings for {self.rom_name} ***")
+                    
                 elif hasattr(self, 'default_controls') and control_name in self.default_controls:
                     default_mapping = self.default_controls[control_name]
                     print(f"Processing default mapping for {control_name}: {default_mapping}")
@@ -6649,18 +6675,20 @@ class PreviewWindow(QMainWindow):
                 
                 # Get button prefix based on control type
                 button_prefix = ""
-                if 'mapping' in control and control.get('is_custom', False):
-                    # For standard controls with custom mapping
+                if 'mapping' in control and control['mapping']:
+                    # Try to get prefix from ANY mapping (custom OR default)
                     button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
+                    print(f"Got prefix '{button_prefix}' for {control_name} with mapping '{control['mapping']}'")
                     
                     # If no prefix found and we have a DirectInput mapping, try to extract it
                     if not button_prefix and 'DINPUT_' in control['mapping']:
                         button_num = control['mapping'].replace('DINPUT_1_BUTTON', '')
                         if button_num.isdigit():
                             button_prefix = f"B{button_num}"
-                elif hasattr(self, 'get_button_prefix'):
-                    # Default fallback
-                    button_prefix = self.get_button_prefix(control_name)
+                else:
+                    # Only use fallback if no mapping exists
+                    if hasattr(self, 'get_button_prefix'):
+                        button_prefix = self.get_button_prefix(control_name)
                 
                 # Determine visibility based on control type
                 is_visible = True
@@ -6884,7 +6912,9 @@ class PreviewWindow(QMainWindow):
             "DINPUT_1_XAXIS_NEG": "X←",
             "DINPUT_1_XAXIS_POS": "X→",
             "DINPUT_1_YAXIS_NEG": "Y↑",
-            "DINPUT_1_YAXIS_POS": "Y↓"
+            "DINPUT_1_YAXIS_POS": "Y↓",
+            "DINPUT_1_ZAXIS": "Z-AXIS",      # DirectInput Z-axis
+            "DINPUT_1_RZAXIS": "RZ-AXIS",    # DirectInput RZ-axis
         }
         
         # MAME specialized control mappings
@@ -6940,23 +6970,19 @@ class PreviewWindow(QMainWindow):
             "JOYCODE_1_DPADLEFT": "D←",
             "JOYCODE_1_DPADRIGHT": "D→",
         }
-        
-        # Add complete axis mappings
-        axis_to_prefix = {
-            "JOYCODE_1_ZAXIS": "LT",         # Left Trigger full axis
-            "JOYCODE_1_RZAXIS": "RT",        # Right Trigger full axis
-            "JOYCODE_1_XAXIS": "LS←→",       # Left Stick X
-            "JOYCODE_1_YAXIS": "LS↑↓",       # Left Stick Y
-            "JOYCODE_1_RXAXIS": "RS←→",      # Right Stick X
-            "JOYCODE_1_RYAXIS": "RS↑↓"       # Right Stick Y
-        }
 
         # Add trigger/analog axis mappings
         trigger_to_prefix = {
             "JOYCODE_1_ZAXIS_NEG_SWITCH": "LT",
             "JOYCODE_1_RZAXIS_NEG_SWITCH": "RT",
             "JOYCODE_1_ZAXIS_POS_SWITCH": "LT+",  # If ever needed for full direction
-            "JOYCODE_1_RZAXIS_POS_SWITCH": "RT+"   # If ever needed for full direction
+            "JOYCODE_1_RZAXIS_POS_SWITCH": "RT+",   # If ever needed for full direction
+            "JOYCODE_1_ZAXIS": "LT",         # Left Trigger full axis
+            "JOYCODE_1_RZAXIS": "RT",        # Right Trigger full axis
+            "JOYCODE_1_XAXIS": "LS←→",       # Left Stick X
+            "JOYCODE_1_YAXIS": "LS↑↓",       # Left Stick Y
+            "JOYCODE_1_RXAXIS": "RS←→",      # Right Stick X
+            "JOYCODE_1_RYAXIS": "RS↑↓" 
         }
 
         # Keyboard-specific mappings
@@ -7005,10 +7031,26 @@ class PreviewWindow(QMainWindow):
             "KEYCODE_L": "L"
         }
         
-        print(f"Trying to get prefix from mapping: {mapping}")
-        # Add to all_mappings
-        all_mappings = {**xinput_to_prefix, **dinput_to_prefix, **mame_to_prefix, 
-                        **keyboard_to_prefix, **directional_to_prefix, **axis_to_prefix, **trigger_to_prefix}
+        # JOYCODE mappings - these work for BOTH DirectInput and XInput modes
+        joycode_to_prefix = {
+            # Buttons - use getattr with fallback to avoid AttributeError
+            "JOYCODE_1_BUTTON1": "A" if getattr(self, 'use_xinput', True) else "B1",
+            "JOYCODE_1_BUTTON2": "B" if getattr(self, 'use_xinput', True) else "B2",
+            "JOYCODE_1_BUTTON3": "X" if getattr(self, 'use_xinput', True) else "B3",
+            "JOYCODE_1_BUTTON4": "Y" if getattr(self, 'use_xinput', True) else "B4",
+            "JOYCODE_1_BUTTON5": "LB" if getattr(self, 'use_xinput', True) else "B5",
+            "JOYCODE_1_BUTTON6": "RB" if getattr(self, 'use_xinput', True) else "B6",
+            
+            # Axes - CRITICAL: These should work regardless of input mode
+            "JOYCODE_1_ZAXIS": "LT" if getattr(self, 'use_xinput', True) else "Z-AXIS",
+            "JOYCODE_1_RZAXIS": "RT" if getattr(self, 'use_xinput', True) else "RZ-AXIS",
+            "JOYCODE_1_ZAXIS_NEG_SWITCH": "LT",
+            "JOYCODE_1_RZAXIS_NEG_SWITCH": "RT",
+        }
+        
+        # Combine all mappings
+        all_mappings = {**xinput_to_prefix, **dinput_to_prefix, **joycode_to_prefix, 
+                        **keyboard_to_prefix, **directional_to_prefix}
         
         # NEW CODE: Handle multiple button assignments with ||| separator
         if "|||" in mapping:
