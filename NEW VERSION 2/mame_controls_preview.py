@@ -6733,9 +6733,8 @@ class PreviewWindow(QMainWindow):
         self.canvas.update()
         print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
 
-    # 2. Enhanced button prefix from mapping method
     def get_button_prefix_from_mapping(self, mapping):
-        """Get the button prefix based on mapping string, including specialized controls and keyboard"""
+        """Get the button prefix based on mapping string, including multiple button assignments"""
         # Standard XINPUT mappings
         xinput_to_prefix = {
             "XINPUT_1_A": "A",
@@ -6820,6 +6819,18 @@ class PreviewWindow(QMainWindow):
             "TRACKCODE_1_YAXIS_NEG_FAST": "TRK↑+"
         }
         
+        # Add directional joystick mappings
+        directional_to_prefix = {
+            "JOYCODE_1_XAXIS_RIGHT_SWITCH": "→",
+            "JOYCODE_1_XAXIS_LEFT_SWITCH": "←",
+            "JOYCODE_1_YAXIS_UP_SWITCH": "↑",
+            "JOYCODE_1_YAXIS_DOWN_SWITCH": "↓",
+            "JOYCODE_1_DPADUP": "D↑",
+            "JOYCODE_1_DPADDOWN": "D↓",
+            "JOYCODE_1_DPADLEFT": "D←",
+            "JOYCODE_1_DPADRIGHT": "D→"
+        }
+        
         # Keyboard-specific mappings
         keyboard_to_prefix = {
             # Arrow keys
@@ -6867,9 +6878,57 @@ class PreviewWindow(QMainWindow):
         }
         
         # Combine mapping dictionaries
-        all_mappings = {**xinput_to_prefix, **mame_to_prefix, **keyboard_to_prefix, **dinput_to_prefix}
+        all_mappings = {**xinput_to_prefix, **dinput_to_prefix, **mame_to_prefix, **keyboard_to_prefix, **directional_to_prefix}
         
-        # Check for direct match
+        # NEW CODE: Handle multiple button assignments with ||| separator
+        if "|||" in mapping:
+            parts = [part.strip() for part in mapping.split("|||")]
+            prefixes = []
+            
+            for part in parts:
+                # Look up the prefix for this part
+                if part in all_mappings:
+                    prefixes.append(all_mappings[part])
+                # Handle other special cases
+                elif "DINPUT_1_BUTTON" in part:
+                    try:
+                        button_num = int(part.replace("DINPUT_1_BUTTON", ""))
+                        prefixes.append(f"B{button_num}")
+                    except:
+                        pass
+                elif "JOYCODE_1_BUTTON" in part:
+                    try:
+                        button_num = int(part.replace("JOYCODE_1_BUTTON", ""))
+                        if button_num <= 10:
+                            standard_buttons = ["", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS"]
+                            if button_num < len(standard_buttons):
+                                prefixes.append(standard_buttons[button_num])
+                            else:
+                                prefixes.append(f"B{button_num}")
+                    except:
+                        pass
+            
+            # Special handling for common directional pairs
+            if len(prefixes) == 2:
+                # Left/Right pair
+                if "←" in prefixes and "→" in prefixes:
+                    return "←/→"  # Directional arrows
+                # Up/Down pair
+                elif "↑" in prefixes and "↓" in prefixes:
+                    return "↑/↓"  # Directional arrows
+                # D-pad pairs
+                elif "D←" in prefixes and "D→" in prefixes:
+                    return "D←/→"
+                elif "D↑" in prefixes and "D↓" in prefixes:
+                    return "D↑/↓"
+            
+            # Default case for other combinations
+            if prefixes:
+                return "/".join(prefixes)
+            
+            return ""  # No valid prefixes found
+        
+        # Check for direct match in standard mappings
         if mapping in all_mappings:
             return all_mappings[mapping]
         
