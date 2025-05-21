@@ -1920,7 +1920,7 @@ class PreviewWindow(QMainWindow):
         self.top_row.addWidget(self.xinput_controls_button)'''
 
         # Create specialized controls button with clearer labeling
-        self.controls_mode_button = QPushButton("XInput Controls")
+        self.controls_mode_button = QPushButton("Show All Controls")
         self.controls_mode_button.clicked.connect(self.toggle_controls_view)
         self.controls_mode_button.setStyleSheet(button_style)
         self.controls_mode_button.setToolTip("Toggle between Normal, XInput, and Specialized controls")
@@ -2974,7 +2974,7 @@ class PreviewWindow(QMainWindow):
             
             # Update button text for NEXT state (XInput)
             if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("XInput Controls")
+                self.controls_mode_button.setText("Show All Controls")
                 
         else:
             # If showing normal controls, switch to XInput
@@ -3223,11 +3223,10 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             return False
     
-    # 2. Update the show_all_xinput_controls method to only show standard XInput controls
     def show_all_xinput_controls(self):
-        """Show all standard XInput controls for global positioning"""
+        """Show all standard controls for global positioning with fixed prefixes"""
         
-        # Standard XInput controls for positioning - P1 ONLY
+        # Standard controls for positioning - P1 ONLY
         standard_controls = {
             # Analog sticks
             "P1_JOYSTICK_UP": "LS Up",
@@ -3240,24 +3239,24 @@ class PreviewWindow(QMainWindow):
             "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
             
             # Face buttons with DirectInput equivalents
-            "P1_BUTTON1": "P1_BUTTON1",
-            "P1_BUTTON2": "P1_BUTTON2",
-            "P1_BUTTON3": "P1_BUTTON3",
-            "P1_BUTTON4": "P1_BUTTON4",
+            "P1_BUTTON1": "Button 1",
+            "P1_BUTTON2": "Button 2",
+            "P1_BUTTON3": "Button 3",
+            "P1_BUTTON4": "Button 4",
             
             # Shoulder/trigger buttons
-            "P1_BUTTON5": "P1_BUTTON5",
-            "P1_BUTTON6": "P1_BUTTON6",
-            "P1_BUTTON7": "P1_BUTTON7",
-            "P1_BUTTON8": "P1_BUTTON8",
+            "P1_BUTTON5": "Button 5",
+            "P1_BUTTON6": "Button 6",
+            "P1_BUTTON7": "Button 7",
+            "P1_BUTTON8": "Button 8",
             
             # Thumbstick buttons
-            "P1_BUTTON9": "P1_BUTTON9",
-            "P1_BUTTON10": "P1_BUTTON10",
+            "P1_BUTTON9": "Button 9",
+            "P1_BUTTON10": "Button 10",
             
             # System buttons
-            "P1_START": "P1_START",
-            "P1_SELECT": "P1_SELECT",
+            "P1_START": "Start",
+            "P1_SELECT": "Select",
         }
         
         try:
@@ -3266,7 +3265,7 @@ class PreviewWindow(QMainWindow):
             from PyQt5.QtWidgets import QLabel, QSizePolicy
             import os
             
-            print("\n--- Showing standard XInput controls ---")
+            print("\n--- Showing standard controls with fixed prefixes ---")
             
             # CRITICAL FIX: First ensure fonts are properly loaded/registered
             if not hasattr(self, 'current_font') or self.current_font is None:
@@ -3320,16 +3319,16 @@ class PreviewWindow(QMainWindow):
             # CRITICAL FIX: Use font objects that already exist rather than creating new ones
             if hasattr(self, 'current_font') and self.current_font:
                 font = QFont(self.current_font)  # Create a copy to avoid modifying the original
-                print(f"Using existing current_font for XInput controls: {font.family()}")
+                print(f"Using existing current_font for controls: {font.family()}")
             elif hasattr(self, 'initialized_font') and self.initialized_font:
                 font = QFont(self.initialized_font)
-                print(f"Using initialized_font for XInput controls: {font.family()}")
+                print(f"Using initialized_font for controls: {font.family()}")
             else:
                 # Create a standard font as a last resort
                 font = QFont(font_family, font_size)
                 font.setBold(bold_strength)
                 font.setStyleStrategy(QFont.PreferMatch)  # Force exact matching
-                print(f"Created new font for XInput controls: {font.family()} (fallback)")
+                print(f"Created new font for controls: {font.family()} (fallback)")
             
             # NOW call calculate_max_text_width AFTER defining standard_controls and font
             max_text_width = self.calculate_max_text_width(
@@ -3348,29 +3347,6 @@ class PreviewWindow(QMainWindow):
             font_metrics = QFontMetrics(font)
             max_text_width = 0
             
-            # First determine the longest text to ensure consistent sizing
-            for control_name, action_text in standard_controls.items():
-                button_prefix = self.get_button_prefix(control_name)
-                if use_uppercase:
-                    action_text = action_text.upper()
-                
-                display_text = action_text
-                if show_button_prefix and button_prefix:
-                    display_text = f"{button_prefix}: {action_text}"
-                
-                # ADD THIS LINE to truncate long text
-                display_text = self.truncate_display_text(display_text)
-                
-                # Calculate width needed for this text
-                text_width = font_metrics.horizontalAdvance(display_text)
-                
-                # Add some padding to ensure no cut-off
-                text_width += 20  # 10px padding on each side
-                
-                max_text_width = max(max_text_width, text_width)
-            
-            print(f"Calculated maximum text width: {max_text_width}px")
-            
             # Default grid layout
             grid_x, grid_y = 0, 0
             
@@ -3380,8 +3356,9 @@ class PreviewWindow(QMainWindow):
                 if use_uppercase:
                     action_text = action_text.upper()
                 
-                # Get button prefix
-                button_prefix = self.get_button_prefix(control_name)
+                # SIMPLE SOLUTION: Just use a fixed prefix for all controls
+                # This way we don't need to detect the mode or handle all the different mapping types
+                button_prefix = "P1"  # Simple fixed prefix
                 
                 # Add prefix if enabled
                 display_text = action_text
@@ -3434,8 +3411,8 @@ class PreviewWindow(QMainWindow):
                 # Get font family to check if it's a custom font
                 font_family = label.font().family()
                 is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
-                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
-                                                    "Impact", "System"]
+                                                "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                "Impact", "System"]
 
                 # Determine base padding based on font type
                 base_padding = 50 if is_custom_font else 30
@@ -3569,15 +3546,15 @@ class PreviewWindow(QMainWindow):
             # Force a canvas update
             self.canvas.update()
             
-            print(f"Created and displayed {len(standard_controls)} standard XInput controls")
+            print(f"Created and displayed {len(standard_controls)} standard controls with fixed P1 prefixes")
             return True
             
         except Exception as e:
-            print(f"Error showing XInput controls: {e}")
+            print(f"Error showing controls: {e}")
             import traceback
             traceback.print_exc()
             return False
-    
+
     # 5. Update the toggle_xinput_controls method to handle the interaction with specialized controls
     def toggle_xinput_controls(self):
         """Toggle between normal game controls and standard XInput controls"""
