@@ -2876,16 +2876,18 @@ class MAMEControlConfig(ctk.CTk):
             cfg_controls = {}
             if rom_name in self.custom_configs:
                 # Parse the custom config
-                cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
-                
-                # Convert using current mode
-                cfg_controls = {
-                    control: self.convert_mapping(mapping, current_mode)
-                    for control, mapping in cfg_controls.items()
-                }
-                
-                # Update game_data with custom mappings
-                self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                cfg_content = self.custom_configs[rom_name]
+                # Add debug output to check if there are any mappings in the file
+                parsed_controls = self.parse_cfg_controls(cfg_content)
+                if parsed_controls:
+                    print(f"Found {len(parsed_controls)} control mappings in ROM CFG for {rom_name}")
+                    # Convert using current mode
+                    cfg_controls = {
+                        control: self.convert_mapping(mapping, current_mode)
+                        for control, mapping in parsed_controls.items()
+                    }
+                else:
+                    print(f"ROM CFG exists for {rom_name} but contains no control mappings")
 
             # Update game title
             source_text = f" ({game_data.get('source', 'unknown')})"
@@ -7496,19 +7498,30 @@ controller xbox t		= """
         # Add indicators for config sources and input mode
         indicator_frame = ctk.CTkFrame(info_card, fg_color="transparent")
         indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
-        
-        # Check which sources are active
-        has_rom_cfg = romname in self.custom_configs
+
+        # First check if ROM CFG actually contains control mappings
+        has_rom_cfg = False
         has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
         has_gamedata = bool(game_data.get('players', []))
-        
-        # Determine the primary source
-        if has_rom_cfg:
+
+        # See if this ROM has a custom config with actual control mappings
+        if romname in self.custom_configs:
+            # Parse the custom config to check if it has any control mappings
+            parsed_controls = self.parse_cfg_controls(self.custom_configs[romname])
+            if parsed_controls:
+                has_rom_cfg = True
+                print(f"ROM {romname} has {len(parsed_controls)} control mappings in its cfg file")
+
+        # Determine the primary source based on controls actually used
+        if has_rom_cfg and cfg_controls:
             primary_source = "ROM CFG"
+            primary_color = self.theme_colors["success"]
         elif has_default_cfg:
             primary_source = "Default CFG"
+            primary_color = self.theme_colors["primary"]
         else:
             primary_source = "Game Data"
+            primary_color = "#888888"
         
         # Display source indicator
         ctk.CTkLabel(
@@ -7940,6 +7953,17 @@ controller xbox t		= """
                             display_text = "Analog Controls"
                         all_mappings = [display_text]
                 
+                # Determine actual mapping source by checking if mapping exists
+                if control_name in cfg_controls and cfg_controls[control_name].strip() not in ["", "NONE"]:
+                    source = f"ROM CFG ({romname}.cfg)"
+                    source_color = self.theme_colors["success"]  # Green for ROM CFG
+                elif hasattr(self, 'default_controls') and control_name in self.default_controls:
+                    source = "Default CFG"
+                    source_color = self.theme_colors["primary"]  # Primary color for Default CFG
+                else:
+                    source = "Game Data"  
+                    source_color = "#888888"  # Gray for Game Data
+                
                 # Create row container with consistent background
                 row_height = 40
                 row_frame = tk.Frame(
@@ -8002,16 +8026,18 @@ controller xbox t		= """
                 
                 # Column 4: Mapping Source - with appropriate styling based on source
                 # Determine source color based on type
+                # Column 4: Mapping Source - with more compact display
+                display_source = source
                 if "ROM CFG" in source:
-                    source_color = self.theme_colors["success"]  # Green for ROM CFG
+                    display_source = "ROM CFG"
                 elif "Default CFG" in source:
-                    source_color = self.theme_colors["primary"]  # Primary color for Default CFG
+                    display_source = "Default CFG"
                 else:
-                    source_color = "#888888"  # Gray for Game Data
-                    
+                    display_source = "Game Data"
+
                 label4 = tk.Label(
                     row_frame,
-                    text=source,
+                    text=display_source,
                     font=("Arial", 12),
                     anchor="w",
                     justify="left",
@@ -8019,6 +8045,40 @@ controller xbox t		= """
                     foreground=source_color
                 )
                 label4.place(x=x_positions[3], y=10, width=col_widths[3])
+
+                # Add tooltip to show full source on hover (only for ROM CFG)
+                if "ROM CFG" in source:
+                    def show_tooltip(event, full_text=source):
+                        tooltip = tk.Toplevel(row_frame)
+                        tooltip.wm_overrideredirect(True)
+                        tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+                        tooltip.configure(background="#333333", bd=1, relief="solid")
+                        
+                        padding_frame = tk.Frame(tooltip, background="#333333", bd=2)
+                        padding_frame.pack()
+                        
+                        tip_label = tk.Label(
+                            padding_frame, 
+                            text=full_text, 
+                            background="#333333", 
+                            foreground="white",
+                            font=("Arial", 11),
+                            justify="left"
+                        )
+                        tip_label.pack()
+                        
+                        # Store reference and schedule cleanup
+                        label4.tooltip = tooltip
+                        row_frame.after(3000, tooltip.destroy)
+
+                    def hide_tooltip(event):
+                        if hasattr(label4, "tooltip") and label4.tooltip:
+                            label4.tooltip.destroy()
+                            label4.tooltip = None
+
+                    # Bind hover events
+                    label4.bind("<Enter>", lambda e: show_tooltip(e))
+                    label4.bind("<Leave>", hide_tooltip)
         
         # Update the canvas scroll region
         def update_canvas_width(event=None):
