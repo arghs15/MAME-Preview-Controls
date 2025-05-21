@@ -1786,9 +1786,9 @@ class MAMEControlConfig(ctk.CTk):
             debug_print(f"ERROR creating layout: {e}")
             traceback.print_exc()
             messagebox.showerror("Layout Error", f"Failed to create layout: {e}")
-
+    
     def create_sidebar(self):
-        """Create sidebar with category tabs including a new Clones category"""
+        """Create sidebar with enhanced category filters including specialized control types"""
         # Create sidebar frame
         self.sidebar = ctk.CTkFrame(self, width=220, fg_color=self.theme_colors["sidebar_bg"], corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
@@ -1878,13 +1878,62 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.sidebar_tabs["custom_config"].pack(fill="x", padx=5, pady=2)
         
-        # Add NEW "Clones" tab
+        # Add "Clone ROMs" tab
         self.sidebar_tabs["clones"] = CustomSidebarTab(
             tabs_frame, 
             text="Clone ROMs",
             command=lambda: set_tab_active("clones")
         )
         self.sidebar_tabs["clones"].pack(fill="x", padx=5, pady=2)
+        
+        # NEW CATEGORY: Special Controls section divider
+        special_label = ctk.CTkLabel(
+            tabs_frame,
+            text="SPECIAL CONTROLS",
+            font=("Arial", 11),
+            text_color=self.theme_colors["text_dimmed"]
+        )
+        special_label.pack(anchor="w", padx=15, pady=(20, 5))
+        
+        # Add "No Buttons" tab
+        self.sidebar_tabs["no_buttons"] = CustomSidebarTab(
+            tabs_frame, 
+            text="No Buttons",
+            command=lambda: set_tab_active("no_buttons")
+        )
+        self.sidebar_tabs["no_buttons"].pack(fill="x", padx=5, pady=2)
+        
+        # Add "Specialized Input" tab
+        self.sidebar_tabs["specialized"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Specialized Input",
+            command=lambda: set_tab_active("specialized")
+        )
+        self.sidebar_tabs["specialized"].pack(fill="x", padx=5, pady=2)
+        
+        # Add "Analog Controls" tab
+        self.sidebar_tabs["analog"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Analog Controls",
+            command=lambda: set_tab_active("analog")
+        )
+        self.sidebar_tabs["analog"].pack(fill="x", padx=5, pady=2)
+        
+        # Add "Multi-Player" tab
+        self.sidebar_tabs["multiplayer"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Multi-Player",
+            command=lambda: set_tab_active("multiplayer")
+        )
+        self.sidebar_tabs["multiplayer"].pack(fill="x", padx=5, pady=2)
+        
+        # Add "Single-Player" tab
+        self.sidebar_tabs["singleplayer"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Single-Player Only",
+            command=lambda: set_tab_active("singleplayer")
+        )
+        self.sidebar_tabs["singleplayer"].pack(fill="x", padx=5, pady=2)
         
         # Tools section divider
         tools_label = ctk.CTkLabel(
@@ -2620,8 +2669,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-       
-        """Update game list based on current sidebar category selection with virtual list and preserved selection"""
+        """Update game list based on current sidebar category selection with enhanced filtering options"""
         # Remember currently selected ROM if any
         previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
         
@@ -2634,6 +2682,13 @@ class MAMEControlConfig(ctk.CTk):
         with_custom_config = []
         generic_controls = []
         clone_roms = []  # List for clone ROMs
+        
+        # NEW CATEGORIES
+        no_buttons_roms = []    # ROMs with controls but no buttons
+        specialized_roms = []   # ROMs with specialized inputs (trackball, lightgun, etc.)
+        analog_roms = []        # ROMs with analog controls
+        multiplayer_roms = []   # ROMs with more than 1 player
+        singleplayer_roms = []  # ROMs with exactly 1 player
         
         # Build parent->clone lookup if needed
         if not hasattr(self, 'parent_lookup') or not self.parent_lookup:
@@ -2666,6 +2721,62 @@ class MAMEControlConfig(ctk.CTk):
             if game_data:
                 with_controls.append(rom)
                 
+                # Check player count for single/multiplayer categories
+                player_count = int(game_data.get('numPlayers', 1))
+                if player_count == 1:
+                    singleplayer_roms.append(rom)
+                elif player_count > 1:
+                    multiplayer_roms.append(rom)
+                
+                # NEW: Check for specialized controls
+                has_specialized = False
+                has_analog = False
+                has_buttons = False
+                
+                # Specialized input detection
+                specialized_types = [
+                    "TRACKBALL", "LIGHTGUN", "MOUSE", "DIAL", "PADDLE", 
+                    "POSITIONAL", "GAMBLE", "AD_STICK"
+                ]
+                
+                # Analog input detection
+                analog_types = [
+                    "AD_STICK", "DIAL", "PADDLE", "PEDAL", "POSITIONAL"
+                ]
+                
+                # Check each player's controls
+                for player in game_data.get('players', []):
+                    for label in player.get('labels', []):
+                        control_name = label['name']
+                        
+                        # Check for buttons
+                        if "BUTTON" in control_name:
+                            has_buttons = True
+                        
+                        # Check for specialized controls
+                        for specialized_type in specialized_types:
+                            if specialized_type in control_name:
+                                has_specialized = True
+                                break
+                                
+                        # Check for analog controls
+                        for analog_type in analog_types:
+                            if analog_type in control_name:
+                                has_analog = True
+                                break
+                
+                # Add to specialized category if it has specialized controls
+                if has_specialized:
+                    specialized_roms.append(rom)
+                    
+                # Add to analog category if it has analog controls
+                if has_analog:
+                    analog_roms.append(rom)
+                    
+                # Add to no_buttons category if it has controls but no buttons
+                if not has_buttons:
+                    no_buttons_roms.append(rom)
+                    
                 # Check if controls are generic
                 has_custom_controls = False
                 for player in game_data.get('players', []):
@@ -2701,8 +2812,19 @@ class MAMEControlConfig(ctk.CTk):
             display_roms = with_custom_config
         elif self.current_view == "generic":
             display_roms = generic_controls
-        elif self.current_view == "clones":  # Handle the "clones" category
+        elif self.current_view == "clones":
             display_roms = sorted(clone_roms)
+        # NEW CATEGORIES
+        elif self.current_view == "no_buttons":
+            display_roms = no_buttons_roms
+        elif self.current_view == "specialized":
+            display_roms = specialized_roms
+        elif self.current_view == "analog":
+            display_roms = analog_roms
+        elif self.current_view == "multiplayer":
+            display_roms = multiplayer_roms
+        elif self.current_view == "singleplayer":
+            display_roms = singleplayer_roms
         
         # Apply search filter if needed
         search_text = ""
@@ -2784,7 +2906,13 @@ class MAMEControlConfig(ctk.CTk):
             "missing": "ROMs Missing Controls",
             "custom_config": "ROMs with Custom Config",
             "generic": "ROMs with Generic Controls",
-            "clones": "Clone ROMs"  # Add title for clones category
+            "clones": "Clone ROMs",
+            # NEW CATEGORIES
+            "no_buttons": "ROMs with No Buttons",
+            "specialized": "Specialized Input",
+            "analog": "Analog Controls",
+            "multiplayer": "Multi-Player ROMs",
+            "singleplayer": "Single-Player ROMs"
         }
         
         # Update the list panel title if method exists
