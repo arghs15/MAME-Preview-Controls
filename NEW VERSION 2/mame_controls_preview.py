@@ -271,6 +271,54 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    def distribute_controls_vertically(self):
+        """Distribute visible controls evenly in the vertical space they occupy"""
+        # Get all visible control labels
+        visible_controls = []
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data and control_data['label'].isVisible():
+                visible_controls.append((control_name, control_data['label']))
+        
+        # Sort controls by Y position
+        visible_controls.sort(key=lambda item: item[1].y())
+        
+        if len(visible_controls) < 3:
+            self.show_toast_notification("Need at least 3 visible controls to distribute")
+            return False
+        
+        # Get top and bottom boundaries
+        top_label = visible_controls[0][1]
+        bottom_label = visible_controls[-1][1]
+        top_y = top_label.y()
+        bottom_y = bottom_label.y()
+        total_height = bottom_y - top_y
+        
+        # Calculate even spacing
+        steps = len(visible_controls) - 1
+        step_size = total_height / steps
+        
+        # Store changes for notification
+        changes_made = 0
+        
+        # Reposition all controls except first and last (to maintain boundaries)
+        for i in range(1, len(visible_controls) - 1):
+            control_name, label = visible_controls[i]
+            current_y = label.y()
+            target_y = int(top_y + (i * step_size))
+            
+            # Only move if position would change significantly
+            if abs(current_y - target_y) > 2:
+                label.move(label.x(), target_y)
+                changes_made += 1
+        
+        # Show toast notification with results
+        if changes_made > 0:
+            self.show_toast_notification(f"Distributed {changes_made} controls evenly between boundaries")
+        else:
+            self.show_toast_notification("Controls already evenly distributed")
+        
+        return True
+    
     def show_toast_notification(self, message, duration=2000):
         """Show a brief notification that automatically disappears after specified duration (ms)"""
         from PyQt5.QtWidgets import QLabel
@@ -1890,16 +1938,19 @@ class PreviewWindow(QMainWindow):
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.close)
         self.close_button.setStyleSheet(button_style)
+        self.close_button.setToolTip("Close the preview window (ESC key)")
         self.top_row.addWidget(self.close_button)
         
         self.global_save_button = QPushButton("Global Save")
         self.global_save_button.clicked.connect(lambda: self.save_positions(is_global=True))
         self.global_save_button.setStyleSheet(button_style)
+        self.global_save_button.setToolTip("Save current layout for all games\nUse this for standard layouts")
         self.top_row.addWidget(self.global_save_button)
         
         self.rom_save_button = QPushButton("ROM Save")
         self.rom_save_button.clicked.connect(lambda: self.save_positions(is_global=False))
         self.rom_save_button.setStyleSheet(button_style)
+        self.rom_save_button.setToolTip(f"Save layout specifically for {self.rom_name}\nOverrides global layout for this game only")
         self.top_row.addWidget(self.rom_save_button)
 
         # In your create_floating_button_frame method, add another button:
@@ -1912,6 +1963,7 @@ class PreviewWindow(QMainWindow):
         self.text_settings_button = QPushButton("Text Settings")
         self.text_settings_button.clicked.connect(self.show_text_settings)
         self.text_settings_button.setStyleSheet(button_style)
+        self.text_settings_button.setToolTip("Configure text appearance\nFont, size, color, gradients, and more")
         self.top_row.addWidget(self.text_settings_button)
         
         '''self.xinput_controls_button = QPushButton("Show All XInput")
@@ -1923,14 +1975,15 @@ class PreviewWindow(QMainWindow):
         self.controls_mode_button = QPushButton("Show All Controls")
         self.controls_mode_button.clicked.connect(self.toggle_controls_view)
         self.controls_mode_button.setStyleSheet(button_style)
-        self.controls_mode_button.setToolTip("Toggle between Normal, XInput, and Specialized controls")
+        self.controls_mode_button.setToolTip("Toggle between control views:\nNormal → All Buttons → Directionals → Normal")
         self.top_row.addWidget(self.controls_mode_button)
 
         # Second row buttons
-        self.toggle_texts_button = QPushButton("Hide Texts")
+        '''self.toggle_texts_button = QPushButton("Hide Texts")
         self.toggle_texts_button.clicked.connect(self.toggle_texts)
         self.toggle_texts_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.toggle_texts_button)
+        self.toggle_texts_button.setToolTip("Show/hide control text labels\nHides all text except directional controls")
+        self.bottom_row.addWidget(self.toggle_texts_button)'''
         
         # Create the joystick button with better initial text
         #self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
@@ -1950,7 +2003,7 @@ class PreviewWindow(QMainWindow):
         self.prefix_button = QPushButton(prefix_text)
         self.prefix_button.clicked.connect(self.toggle_button_prefixes)
         self.prefix_button.setStyleSheet(button_style)
-        self.prefix_button.setToolTip("Toggle button prefixes (e.g., A: Jump)")
+        self.prefix_button.setToolTip("Toggle button prefixes\nE.g., 'A: Jump' vs 'Jump'")
         self.bottom_row.addWidget(self.prefix_button)
         
         # Logo toggle
@@ -1958,24 +2011,42 @@ class PreviewWindow(QMainWindow):
         self.logo_button = QPushButton(logo_text)
         self.logo_button.clicked.connect(self.toggle_logo)
         self.logo_button.setStyleSheet(button_style)
+        self.logo_button.setToolTip(
+            f"Show/hide the game logo\n"
+            f"Files in preview\\logos\\{self.rom_name}.png override standard locations\n"
+            f"Priority: preview\\logos > collections\\medium_artwork\\logo\{self.rom_name}.png"
+        )
         self.top_row.addWidget(self.logo_button)
         
         self.center_logo_button = QPushButton("Center Logo")
         self.center_logo_button.clicked.connect(self.center_logo)
         self.center_logo_button.setStyleSheet(button_style)
-        self.center_logo_button.setToolTip("Center logo in the canvas") 
+        self.center_logo_button.setToolTip("Center logo horizontally\nMaintains vertical position")
         self.bottom_row.addWidget(self.center_logo_button)
+        
+        # Add Distribute Vertically button with enhanced tooltip
+        self.distribute_button = QPushButton("Distribute Vertically")
+        self.distribute_button.clicked.connect(self.distribute_controls_vertically)
+        self.distribute_button.setStyleSheet(button_style)
+        self.distribute_button.setToolTip(
+            "Evenly distribute visible controls vertically\n"
+            "Keeps topmost and bottommost controls in place\n"
+            "and repositions controls in between with equal spacing"
+        )
+        self.bottom_row.addWidget(self.distribute_button)
         
         # Screen toggle with number indicator
         self.screen_button = QPushButton(f"Screen {getattr(self, 'current_screen', 1)}")
         self.screen_button.clicked.connect(self.toggle_screen)
         self.screen_button.setStyleSheet(button_style)
+        self.screen_button.setToolTip("Toggle between screens\nMoves preview to next monitor")
         self.bottom_row.addWidget(self.screen_button)
         
         # Add save image button
         self.save_image_button = QPushButton("Save Image")
         self.save_image_button.clicked.connect(self.save_image)
         self.save_image_button.setStyleSheet(button_style)
+        self.save_image_button.setToolTip("Save current view as PNG image\nStored in preview/screenshots folder")
         self.bottom_row.addWidget(self.save_image_button)
         
         # IMPROVED: Add dragging functionality to the drag handle only
@@ -2007,12 +2078,14 @@ class PreviewWindow(QMainWindow):
         self.snap_button = QPushButton("Disable Snap" if self.snapping_enabled else "Enable Snap", self)
         self.snap_button.clicked.connect(self.toggle_snapping)
         self.snap_button.setStyleSheet(button_style)
+        self.snap_button.setToolTip("Toggle snapping when dragging controls\nHold Shift to temporarily disable snapping")
         self.bottom_row.addWidget(self.snap_button)
 
         # Add Grid Toggle Button
         self.grid_button = QPushButton("Show Grid")
         self.grid_button.clicked.connect(self.toggle_alignment_grid)
         self.grid_button.setStyleSheet(button_style)
+        self.grid_button.setToolTip("Show/hide alignment grid\nUse for precise positioning")
         self.bottom_row.addWidget(self.grid_button)
 
         # Determine button frame position
@@ -2631,8 +2704,11 @@ class PreviewWindow(QMainWindow):
         else:
             # Set initial button text based on visibility setting
             self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
-            self.bezel_button.setToolTip(f"Toggle bezel visibility: {bezel_path}")
-            print(f"Bezel available at: {bezel_path}")
+            self.bezel_button.setToolTip(
+                f"Show/hide bezel overlay\n"
+                f"Files in preview\\bezels\\{self.rom_name}.png override standard locations\n"
+                f"Priority: preview\\bezels > mame\\artwork\\{self.rom_name}"
+            )
             
             # If bezel should be visible based on settings, show it
             if self.bezel_visible:
@@ -4988,6 +5064,9 @@ class PreviewWindow(QMainWindow):
 
     def handle_key_press(self, event):
         """Handle key press events"""
+        from PyQt5.QtCore import Qt
+        
+        # Close on Escape
         if event.key() == Qt.Key_Escape:
             # Close the window
             self.close()
@@ -4996,6 +5075,11 @@ class PreviewWindow(QMainWindow):
             if getattr(self, 'standalone_mode', False):
                 # Give a short delay before quitting to allow cleanup
                 QTimer.singleShot(100, QApplication.quit)
+        
+        # Distribute vertically with Ctrl+D
+        elif event.key() == Qt.Key_D and event.modifiers() & Qt.ControlModifier:
+            self.distribute_controls_vertically()
+            event.accept()
     
     # Make sure the window is full screen without borders
     def set_fullscreen(self):
