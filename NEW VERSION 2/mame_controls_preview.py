@@ -2996,7 +2996,7 @@ class PreviewWindow(QMainWindow):
         # Directional controls for positioning - P1 ONLY
         directional_controls = {
             # Left stick
-            "P1_JOYSTICK_UP": "Left Stick Test Up",
+            "P1_JOYSTICK_UP": "LS Up",
             "P1_JOYSTICK_DOWN": "LS Down",
             "P1_JOYSTICK_LEFT": "LS Left",
             "P1_JOYSTICK_RIGHT": "LS Right",
@@ -3006,12 +3006,6 @@ class PreviewWindow(QMainWindow):
             "P1_JOYSTICKRIGHT_DOWN": "RS Down",
             "P1_JOYSTICKRIGHT_LEFT": "RS Left",
             "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
-            
-            # D-pad
-            "P1_DPAD_UP": "D-Pad Up",
-            "P1_DPAD_DOWN": "D-Pad Down",
-            "P1_DPAD_LEFT": "D-Pad Left",
-            "P1_DPAD_RIGHT": "D-Pad Right",
         }
         
         try:
@@ -3191,16 +3185,6 @@ class PreviewWindow(QMainWindow):
                             x, y = 600, 160 + y_offset
                         elif 'RIGHT' in control_name:
                             x, y = 800, 160 + y_offset
-                            
-                    elif 'DPAD_' in control_name:  # D-pad
-                        if 'UP' in control_name:
-                            x, y = 300, 300 + y_offset
-                        elif 'DOWN' in control_name:
-                            x, y = 300, 420 + y_offset
-                        elif 'LEFT' in control_name:
-                            x, y = 200, 360 + y_offset
-                        elif 'RIGHT' in control_name:
-                            x, y = 400, 360 + y_offset
                     
                     original_pos = QPoint(x, y - y_offset)
                 
@@ -3245,6 +3229,7 @@ class PreviewWindow(QMainWindow):
         
         # Standard XInput controls for positioning - P1 ONLY
         standard_controls = {
+            # Analog sticks
             "P1_JOYSTICK_UP": "LS Up",
             "P1_JOYSTICK_DOWN": "LS Down",
             "P1_JOYSTICK_LEFT": "LS Left",
@@ -3253,22 +3238,26 @@ class PreviewWindow(QMainWindow):
             "P1_JOYSTICKRIGHT_DOWN": "RS Down",
             "P1_JOYSTICKRIGHT_LEFT": "RS Left",
             "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
-            "P1_BUTTON1": "A Button",
-            "P1_BUTTON2": "B Button",
-            "P1_BUTTON3": "X Button",
-            "P1_BUTTON4": "Y Button",
-            "P1_BUTTON5": "LB",
-            "P1_BUTTON6": "RB",
-            "P1_BUTTON7": "LT",
-            "P1_BUTTON8": "RT",
-            "P1_BUTTON9": "LS Button",
-            "P1_BUTTON10": "RS Button",
-            "P1_START": "Start Button",
-            "P1_SELECT": "Select Button",
-            "P1_DPAD_UP": "D-Pad Up",
-            "P1_DPAD_DOWN": "D-Pad Down",
-            "P1_DPAD_LEFT": "D-Pad Left",
-            "P1_DPAD_RIGHT": "D-Pad Right",
+            
+            # Face buttons with DirectInput equivalents
+            "P1_BUTTON1": "P1_BUTTON1",
+            "P1_BUTTON2": "P1_BUTTON2",
+            "P1_BUTTON3": "P1_BUTTON3",
+            "P1_BUTTON4": "P1_BUTTON4",
+            
+            # Shoulder/trigger buttons
+            "P1_BUTTON5": "P1_BUTTON5",
+            "P1_BUTTON6": "P1_BUTTON6",
+            "P1_BUTTON7": "P1_BUTTON7",
+            "P1_BUTTON8": "P1_BUTTON8",
+            
+            # Thumbstick buttons
+            "P1_BUTTON9": "P1_BUTTON9",
+            "P1_BUTTON10": "P1_BUTTON10",
+            
+            # System buttons
+            "P1_START": "P1_START",
+            "P1_SELECT": "P1_SELECT",
         }
         
         try:
@@ -3531,16 +3520,6 @@ class PreviewWindow(QMainWindow):
                             x, y = 350, 250 + y_offset
                         elif 'RIGHT' in control_name:
                             x, y = 550, 250 + y_offset
-                    elif 'DPAD' in control_name:
-                        # D-pad controls
-                        if 'UP' in control_name:
-                            x, y = 750, 100 + y_offset
-                        elif 'DOWN' in control_name:
-                            x, y = 750, 160 + y_offset
-                        elif 'LEFT' in control_name:
-                            x, y = 650, 130 + y_offset
-                        elif 'RIGHT' in control_name:
-                            x, y = 850, 130 + y_offset
                     elif 'START' in control_name:
                         x, y = 700, 220 + y_offset
                     elif 'SELECT' in control_name:
@@ -6066,12 +6045,6 @@ class PreviewWindow(QMainWindow):
             # Gambling controls
             'P1_GAMBLE_HIGH': 'HIGH',
             'P1_GAMBLE_LOW': 'LOW',
-            
-            # D-pad controls
-            'P1_DPAD_UP': 'D↑',
-            'P1_DPAD_DOWN': 'D↓',
-            'P1_DPAD_LEFT': 'D←',
-            'P1_DPAD_RIGHT': 'D→',
         }
         
         # Combine standard and specialized prefixes
