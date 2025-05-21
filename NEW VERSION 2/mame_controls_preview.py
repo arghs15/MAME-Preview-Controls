@@ -3123,7 +3123,7 @@ class PreviewWindow(QMainWindow):
         return readable
     
     def toggle_controls_view(self):
-        """Toggle between control views: Normal -> XInput -> Directionals -> Normal"""
+        """Toggle between control views: Normal -> XInput -> Directionals -> Specialized -> Normal"""
         # Check what's currently showing
         showing_xinput = hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls
         showing_specialized = hasattr(self, 'showing_specialized_controls') and self.showing_specialized_controls
@@ -3134,13 +3134,22 @@ class PreviewWindow(QMainWindow):
             self.showing_all_xinput_controls = False
             self.show_all_directional_controls()
             
+            # Update button text for NEXT state (specialized)
+            if hasattr(self, 'controls_mode_button'):
+                self.controls_mode_button.setText("Specialized Controls")
+        
+        elif showing_directionals:
+            # Switch to specialized controls
+            self.showing_all_directionals = False
+            self.show_specialized_controls()
+            
             # Update button text for NEXT state (normal)
             if hasattr(self, 'controls_mode_button'):
                 self.controls_mode_button.setText("Normal Controls")
         
-        elif showing_directionals:
+        elif showing_specialized:
             # Switch back to normal game controls
-            self.showing_all_directionals = False
+            self.showing_specialized_controls = False
             
             # Clear ALL existing controls first
             for control_name in list(self.control_labels.keys()):
