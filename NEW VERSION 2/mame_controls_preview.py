@@ -6961,10 +6961,19 @@ class PreviewWindow(QMainWindow):
         
         # Add directional joystick mappings
         directional_to_prefix = {
+            # Left stick mappings (already present)
             "JOYCODE_1_XAXIS_RIGHT_SWITCH": "→",
             "JOYCODE_1_XAXIS_LEFT_SWITCH": "←",
             "JOYCODE_1_YAXIS_UP_SWITCH": "↑",
             "JOYCODE_1_YAXIS_DOWN_SWITCH": "↓",
+            
+            # RIGHT STICK MAPPINGS (MISSING - ADD THESE)
+            "JOYCODE_1_RXAXIS_POS_SWITCH": "RS→",   # Right stick right
+            "JOYCODE_1_RXAXIS_NEG_SWITCH": "RS←",   # Right stick left  
+            "JOYCODE_1_RYAXIS_NEG_SWITCH": "RS↑",   # Right stick up
+            "JOYCODE_1_RYAXIS_POS_SWITCH": "RS↓",   # Right stick down
+            
+            # D-pad mappings (already present)
             "JOYCODE_1_DPADUP": "D↑",
             "JOYCODE_1_DPADDOWN": "D↓",
             "JOYCODE_1_DPADLEFT": "D←",
