@@ -1800,10 +1800,11 @@ class MAMEControlConfig(ctk.CTk):
         debug_print("Creating application layout...")
         
         try:
-            # Configure main grid with 2 columns (sidebar, main content)
+            # Configure main grid with 2 columns (sidebar, main content) and 2 rows (content, toolbar)
             self.grid_columnconfigure(0, weight=0)     # Sidebar (fixed width)
             self.grid_columnconfigure(1, weight=1)     # Main content (expands)
-            self.grid_rowconfigure(0, weight=1)        # Single row spans the height
+            self.grid_rowconfigure(0, weight=1)        # Main content area (expands)
+            self.grid_rowconfigure(1, weight=0)        # Bottom toolbar (fixed height)
             debug_print("Main grid configuration set")
 
             # Create main content frame first
@@ -1824,11 +1825,376 @@ class MAMEControlConfig(ctk.CTk):
             # Now create sidebar - IMPORTANT: Create sidebar after game_list exists
             self.create_sidebar()
             
+            # Create bottom toolbar spanning both columns
+            self.create_bottom_toolbar()
+            
             debug_print("Layout creation complete")
         except Exception as e:
             debug_print(f"ERROR creating layout: {e}")
             traceback.print_exc()
             messagebox.showerror("Layout Error", f"Failed to create layout: {e}")
+
+    def create_bottom_toolbar(self):
+        """Create bottom toolbar with app controls and file access buttons"""
+        try:
+            # Create toolbar frame spanning both sidebar and main content
+            self.bottom_toolbar = ctk.CTkFrame(
+                self, 
+                height=50, 
+                fg_color=self.theme_colors["card_bg"], 
+                corner_radius=0
+            )
+            self.bottom_toolbar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=0, pady=0)
+            self.bottom_toolbar.pack_propagate(False)  # Keep fixed height
+            
+            # Create left section for file operations
+            left_section = ctk.CTkFrame(self.bottom_toolbar, fg_color="transparent")
+            left_section.pack(side="left", fill="y", padx=15, pady=8)
+            
+            # ROM CFG button
+            self.open_rom_cfg_button = ctk.CTkButton(
+                left_section,
+                text="Open ROM CFG",
+                command=self.open_selected_rom_cfg,
+                width=120,
+                height=34,
+                font=("Arial", 12),
+                fg_color=self.theme_colors["primary"],
+                hover_color=self.theme_colors["button_hover"],
+                corner_radius=4
+            )
+            self.open_rom_cfg_button.pack(side="left", padx=(0, 10))
+            
+            # Default CFG button  
+            self.open_default_cfg_button = ctk.CTkButton(
+                left_section,
+                text="Open Default CFG",
+                command=self.open_default_cfg,
+                width=130,
+                height=34,
+                font=("Arial", 12),
+                fg_color=self.theme_colors["secondary"],
+                hover_color=self.theme_colors["primary"],
+                corner_radius=4
+            )
+            self.open_default_cfg_button.pack(side="left", padx=(0, 10))
+            
+            # Add separator
+            separator = ctk.CTkFrame(
+                left_section, 
+                width=2, 
+                height=30, 
+                fg_color=self.theme_colors["text_dimmed"]
+            )
+            separator.pack(side="left", padx=10)
+            
+            # Center section for status or additional controls (optional)
+            center_section = ctk.CTkFrame(self.bottom_toolbar, fg_color="transparent")
+            center_section.pack(side="left", fill="both", expand=True, padx=10, pady=8)
+            
+            # Status indicator (shows current ROM if selected)
+            self.toolbar_status = ctk.CTkLabel(
+                center_section,
+                text="No ROM selected",
+                font=("Arial", 11),
+                text_color=self.theme_colors["text_dimmed"],
+                anchor="w"
+            )
+            self.toolbar_status.pack(side="left", fill="x", expand=True, padx=10)
+            
+            # Create right section for app controls
+            right_section = ctk.CTkFrame(self.bottom_toolbar, fg_color="transparent")
+            right_section.pack(side="right", fill="y", padx=15, pady=8)
+            
+            # Restart app button
+            self.restart_button = ctk.CTkButton(
+                right_section,
+                text="Restart App",
+                command=self.restart_application,
+                width=100,
+                height=34,
+                font=("Arial", 12),
+                fg_color=self.theme_colors["secondary"],
+                hover_color=self.theme_colors["primary"],
+                corner_radius=4
+            )
+            self.restart_button.pack(side="right", padx=(10, 0))
+            
+            # Close app button
+            self.close_button = ctk.CTkButton(
+                right_section,
+                text="Close App",
+                command=self.close_application,
+                width=90,
+                height=34,
+                font=("Arial", 12),
+                fg_color=self.theme_colors["danger"],
+                hover_color="#c82333",  # Darker red
+                corner_radius=4
+            )
+            self.close_button.pack(side="right", padx=(10, 0))
+            
+            # Update ROM CFG button state based on current selection
+            self.update_toolbar_status()
+            
+            debug_print("Bottom toolbar created successfully")
+            
+        except Exception as e:
+            debug_print(f"ERROR creating bottom toolbar: {e}")
+            traceback.print_exc()
+
+    def update_toolbar_status(self):
+        """Update the toolbar status and button states based on current ROM selection"""
+        try:
+            if hasattr(self, 'current_game') and self.current_game:
+                # Update status text
+                self.toolbar_status.configure(text=f"Selected: {self.current_game}")
+                
+                # Check if ROM has a CFG file
+                cfg_path = os.path.join(self.mame_dir, "cfg", f"{self.current_game}.cfg")
+                if os.path.exists(cfg_path):
+                    self.open_rom_cfg_button.configure(
+                        text="Open ROM CFG",
+                        state="normal",
+                        fg_color=self.theme_colors["success"]  # Green for available
+                    )
+                else:
+                    self.open_rom_cfg_button.configure(
+                        text="No ROM CFG",
+                        state="normal",
+                        fg_color=self.theme_colors["text_dimmed"]  # Gray for not available
+                    )
+            else:
+                # No ROM selected
+                self.toolbar_status.configure(text="No ROM selected")
+                self.open_rom_cfg_button.configure(
+                    text="Open ROM CFG",
+                    state="disabled",
+                    fg_color=self.theme_colors["text_dimmed"]
+                )
+            
+            # Check default CFG availability
+            default_cfg_path = os.path.join(self.mame_dir, "cfg", "default.cfg")
+            if os.path.exists(default_cfg_path):
+                self.open_default_cfg_button.configure(
+                    state="normal",
+                    fg_color=self.theme_colors["secondary"]
+                )
+            else:
+                self.open_default_cfg_button.configure(
+                    state="disabled",
+                    fg_color=self.theme_colors["text_dimmed"]
+                )
+                
+        except Exception as e:
+            debug_print(f"Error updating toolbar status: {e}")
+
+    def open_selected_rom_cfg(self):
+        """Open the CFG file for the currently selected ROM in the default editor"""
+        try:
+            if not hasattr(self, 'current_game') or not self.current_game:
+                messagebox.showinfo("No ROM Selected", "Please select a ROM first.")
+                return
+            
+            cfg_path = os.path.join(self.mame_dir, "cfg", f"{self.current_game}.cfg")
+            
+            if not os.path.exists(cfg_path):
+                messagebox.showinfo(
+                    "CFG File Not Found", 
+                    f"No CFG file found for {self.current_game}.\n\n"
+                    f"Expected location: {cfg_path}\n\n"
+                    f"CFG files are created by MAME when you customize controls in-game."
+                )
+                return
+                # Ask if user wants to create the file
+                '''if messagebox.askyesno(
+                    "CFG File Not Found", 
+                    f"No CFG file found for {self.current_game}.\n\n"
+                    f"Would you like to create a new CFG file?\n\n"
+                    f"This will create: {os.path.basename(cfg_path)}",
+                    icon="question"
+                ):
+                    self.create_new_rom_cfg(cfg_path)
+                return'''
+            
+            # Open the file in the default editor
+            self.open_file_in_editor(cfg_path)
+            
+            # Update status
+            self.update_status_message(f"Opened CFG file for {self.current_game}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open ROM CFG file:\n{str(e)}")
+            debug_print(f"Error opening ROM CFG: {e}")
+
+    def create_new_rom_cfg(self, cfg_path):
+        """Create a new CFG file for the ROM with basic structure"""
+        try:
+            # Create a basic CFG structure
+            cfg_content = '''<?xml version="1.0"?>
+    <mameconfig version="10">
+        <system name="{rom_name}">
+            <input>
+                <remap origcode="KEYCODE_5" newcode="KEYCODE_1" />
+                <remap origcode="KEYCODE_6" newcode="KEYCODE_2" />
+            </input>
+        </system>
+    </mameconfig>'''.format(rom_name=self.current_game)
+            
+            # Ensure cfg directory exists
+            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+            
+            # Write the file
+            with open(cfg_path, 'w', encoding='utf-8') as f:
+                f.write(cfg_content)
+            
+            # Open the newly created file
+            self.open_file_in_editor(cfg_path)
+            
+            # Update toolbar
+            self.update_toolbar_status()
+            
+            messagebox.showinfo(
+                "CFG File Created", 
+                f"Created new CFG file for {self.current_game}.\n\n"
+                f"The file has been opened in your default editor."
+            )
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create CFG file:\n{str(e)}")
+            debug_print(f"Error creating CFG file: {e}")
+
+    def open_default_cfg(self):
+        """Open the default.cfg file in the default editor"""
+        try:
+            default_cfg_path = os.path.join(self.mame_dir, "cfg", "default.cfg")
+            
+            if not os.path.exists(default_cfg_path):
+                messagebox.showwarning(
+                    "Default CFG Not Found", 
+                    f"Default CFG file not found at:\n{default_cfg_path}\n\n"
+                    f"This file is typically created by MAME when you first run it."
+                )
+                return
+            
+            # Open the file in the default editor
+            self.open_file_in_editor(default_cfg_path)
+            
+            # Update status
+            self.update_status_message("Opened default.cfg file")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open default CFG file:\n{str(e)}")
+            debug_print(f"Error opening default CFG: {e}")
+
+    def open_file_in_editor(self, file_path):
+        """Open a file in the system's default editor"""
+        try:
+            import subprocess
+            import platform
+            
+            system = platform.system()
+            
+            if system == "Windows":
+                # Windows - use start command
+                subprocess.run(['start', '', file_path], shell=True, check=True)
+            elif system == "Darwin":  # macOS
+                # macOS - use open command
+                subprocess.run(['open', file_path], check=True)
+            elif system == "Linux":
+                # Linux - use xdg-open
+                subprocess.run(['xdg-open', file_path], check=True)
+            else:
+                # Fallback for other systems
+                subprocess.run(['notepad', file_path] if system == "Windows" else ['nano', file_path], check=True)
+            
+            debug_print(f"Opened file in editor: {file_path}")
+            
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"Failed to open file with system editor: {e}")
+        except FileNotFoundError:
+            raise Exception("No suitable editor found on the system")
+        except Exception as e:
+            raise Exception(f"Unexpected error opening file: {e}")
+
+    def restart_application(self):
+        """Restart the application"""
+        try:
+            debug_print("Restarting application...")
+            
+            # Save current settings before restart
+            self.save_settings()
+            
+            # Clean shutdown
+            self.cleanup_before_exit()
+            
+            # Restart the application
+            import subprocess
+            import sys
+            
+            if getattr(sys, 'frozen', False):
+                # Running as compiled executable
+                subprocess.Popen([sys.executable] + sys.argv[1:])
+            else:
+                # Running as script
+                subprocess.Popen([sys.executable] + sys.argv)
+            
+            # Exit current instance
+            self.destroy()
+            sys.exit(0)
+                
+        except Exception as e:
+            messagebox.showerror("Restart Error", f"Failed to restart application:\n{str(e)}")
+            debug_print(f"Error restarting application: {e}")
+
+    def close_application(self):
+        """Close the application"""
+        try:
+            debug_print("Closing application...")
+            self.on_closing()
+                
+        except Exception as e:
+            debug_print(f"Error closing application: {e}")
+            # Force close even if there's an error
+            try:
+                self.destroy()
+            except:
+                pass
+
+    def cleanup_before_exit(self):
+        """Perform cleanup operations before exiting"""
+        try:
+            debug_print("Performing cleanup before exit...")
+            
+            # Save current settings
+            if hasattr(self, 'save_settings'):
+                self.save_settings()
+            
+            # Stop async loader
+            if hasattr(self, 'async_loader'):
+                self.async_loader.stop_worker()
+            
+            # Cancel any pending timers
+            for attr_name in dir(self):
+                attr = getattr(self, attr_name)
+                if attr_name.endswith('_timer') and hasattr(attr, 'cancel'):
+                    try:
+                        attr.cancel()
+                    except:
+                        pass
+            
+            # Terminate any preview processes
+            if hasattr(self, 'preview_processes'):
+                for process in self.preview_processes:
+                    try:
+                        process.terminate()
+                    except:
+                        pass
+            
+            debug_print("Cleanup completed")
+            
+        except Exception as e:
+            debug_print(f"Error during cleanup: {e}")
     
     def create_sidebar(self):
         """Create sidebar with enhanced category filters including specialized control types"""
@@ -2472,6 +2838,10 @@ class MAMEControlConfig(ctk.CTk):
                 # Store the selected ROM
                 self.current_game = rom_name
                 
+                # After setting self.current_game, update toolbar
+                if hasattr(self, 'update_toolbar_status'):
+                    self.update_toolbar_status()
+
                 # Store selected line (for compatibility)
                 self.selected_line = index + 1  # 1-indexed for backward compatibility
                 
@@ -2978,6 +3348,10 @@ class MAMEControlConfig(ctk.CTk):
     def display_game_info(self, rom_name):
         """Display game information and controls"""
         try:
+            # Update toolbar status when a new ROM is selected
+            if hasattr(self, 'update_toolbar_status'):
+                self.update_toolbar_status()
+                
             # Get game data
             game_data = self.get_game_data(rom_name)
             
