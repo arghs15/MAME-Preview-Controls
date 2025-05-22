@@ -849,30 +849,3 @@ class MAMEControlConfig:
             import traceback
             traceback.print_exc()
             return False
-
-    def apply_font_scaling(self, font_family, font_size):
-        """Apply scaling factor for certain fonts that appear small"""
-        # Scaling factors for various fonts
-        scaling_factors = {
-            "Times New Roman": 1.5,
-            "Times": 1.5,
-            "Georgia": 1.4,
-            "Garamond": 1.7,
-            "Baskerville": 1.6,
-            "Palatino": 1.5,
-            "Courier New": 1.3,
-            "Courier": 1.3,
-            "Consolas": 1.2,
-            "Cambria": 1.4
-        }
-        
-        # Apply scaling if font needs it
-        scale = scaling_factors.get(font_family, 1.0)
-        adjusted_font_size = int(font_size * scale)
-        
-        print(f"Font size adjustment: {font_family} - original: {font_size}, adjusted: {adjusted_font_size} (scale: {scale})")
-        return adjusted_font_size
-
-    def hide(self):
-        """Placeholder for hiding the window"""
-        pass

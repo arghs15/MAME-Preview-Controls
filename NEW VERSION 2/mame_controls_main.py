@@ -10,6 +10,16 @@ import signal
 import sys
 import argparse
 import traceback
+# Add this to the very top of mame_controls_main.py:
+import builtins
+
+# Performance mode - disable all printing
+PERFORMANCE_MODE = True
+
+if PERFORMANCE_MODE:
+    def no_print(*args, **kwargs):
+        pass
+    builtins.print = no_print
 
 # Add this function somewhere in your mame_controls_main.py file
 def cleanup_on_exit():

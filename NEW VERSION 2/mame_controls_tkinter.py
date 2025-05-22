@@ -72,31 +72,6 @@ def get_mame_parent_dir(app_path=None):
         # We're already in the MAME directory
         return app_path
 
-# Global debug flag
-DEBUG_MODE = False  # Set to False to disable all debug output
-
-def debug_print(message):
-    """Print debug message with timestamp only if DEBUG_MODE is True"""
-    if not DEBUG_MODE:
-        return
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"[DEBUG {timestamp}] {message}")
-
-def debug_path_info():
-    """Print path debugging information only if DEBUG_MODE is True"""
-    if not DEBUG_MODE:
-        return
-    debug_print("=== PATH DEBUGGING ===")
-    debug_print(f"Current working directory: {os.getcwd()}")
-    debug_print(f"Script location: {os.path.dirname(os.path.abspath(__file__))}")
-    debug_print(f"Python path: {sys.path}")
-    debug_print(f"OS environment PATH: {os.environ.get('PATH', '')}")
-    debug_print("====== MODULES ======")
-    for name, module in sorted(sys.modules.items()):
-        if hasattr(module, '__file__') and module.__file__:
-            debug_print(f"{name}: {module.__file__}")
-    debug_print("====================")
-
 class AsyncLoader:
     """Handles asynchronous loading of data to improve UI responsiveness"""
     def __init__(self, callback=None):
@@ -342,8 +317,6 @@ class PositionManager:
 
 class MAMEControlConfig(ctk.CTk):
     def __init__(self, preview_only=False, initially_hidden=False):
-        debug_print("Starting MAMEControlConfig initialization")
-        debug_path_info()
 
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
@@ -352,7 +325,6 @@ class MAMEControlConfig(ctk.CTk):
         try:
             # Initialize with super().__init__ but don't show the window yet
             super().__init__()
-            debug_print("Super initialization complete")
 
             # Always withdraw the main window until loading is complete
             self.withdraw()
@@ -395,7 +367,6 @@ class MAMEControlConfig(ctk.CTk):
             self.fullscreen = False  # Track fullscreen state
             ctk.set_appearance_mode("dark")
             ctk.set_default_color_theme("dark-blue")
-            debug_print("Window configuration complete")
             
             # Bind F11 key for fullscreen toggle
             self.bind("<F11>", self.toggle_fullscreen)
@@ -405,17 +376,13 @@ class MAMEControlConfig(ctk.CTk):
             self.highlight_tag = "highlight"
             
             if not self.mame_dir:
-                debug_print("ERROR: MAME directory not found!")
                 if hasattr(self, 'splash_window') and self.splash_window:
                     self.splash_window.destroy()
                 messagebox.showerror("Error", "MAME directory not found!")
                 self.quit()
                 return
 
-            # Create the layout (still hidden)
-            debug_print("Creating layout...")
             self.create_layout()
-            debug_print("Layout created")
             
             # Start loading process with slight delay to ensure splash is shown
             self.after(100, self._start_loading_process)
@@ -423,9 +390,7 @@ class MAMEControlConfig(ctk.CTk):
             # Set the WM_DELETE_WINDOW protocol
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-            debug_print("Initialization complete")
         except Exception as e:
-            debug_print(f"CRITICAL ERROR in initialization: {e}")
             traceback.print_exc()
             if hasattr(self, 'splash_window') and self.splash_window:
                 self.splash_window.destroy()
@@ -433,7 +398,6 @@ class MAMEControlConfig(ctk.CTk):
     
     def create_loading_overlay(self):
         """Create a loading overlay that covers the entire window"""
-        debug_print("Creating loading overlay")
         
         # Create the overlay frame
         self.loading_overlay = ctk.CTkFrame(self, fg_color=self.theme_colors["background"])
@@ -478,11 +442,9 @@ class MAMEControlConfig(ctk.CTk):
         
         # Force update to ensure overlay is rendered
         self.update_idletasks()
-        debug_print("Loading overlay created")
 
     def _start_loading_process(self):
         """Begin the sequential loading process with separate splash window"""
-        debug_print("Starting loading process")
         
         # Update splash message
         self.update_splash_message("Loading settings...")
@@ -518,7 +480,6 @@ class MAMEControlConfig(ctk.CTk):
             # Schedule secondary data loading
             self.after(100, self._load_secondary_data)
         except Exception as e:
-            debug_print(f"Error loading essential data: {e}")
             traceback.print_exc()
             self.update_splash_message(f"Error: {str(e)}")
             
@@ -546,7 +507,6 @@ class MAMEControlConfig(ctk.CTk):
         
         # Check if all tasks are complete
         if self.async_loader.task_queue.empty() and self.async_loader.result_queue.empty():
-            debug_print("All async tasks completed")
             self.after(500, self._finish_loading)
         else:
             # Not done yet, check again soon
@@ -554,7 +514,6 @@ class MAMEControlConfig(ctk.CTk):
 
     def _finish_loading(self):
         """Finish loading and show the main application"""
-        debug_print("Finishing loading process")
         
         # Update message for the final step
         self.update_splash_message("Starting application...")
@@ -570,7 +529,6 @@ class MAMEControlConfig(ctk.CTk):
     def show_application(self):
         """Show the application window on the same monitor as the splash"""
         try:
-            debug_print("Preparing to show application window...")
             
             # Close splash window
             if hasattr(self, 'splash_window') and self.splash_window:
@@ -605,7 +563,6 @@ class MAMEControlConfig(ctk.CTk):
             self.geometry(f"{win_width}x{win_height}+{x}+{y}")
             
             # Show the main window
-            debug_print(f"Showing application window on monitor at {monitor.x},{monitor.y} with size {monitor.width}x{monitor.height}")
             self.deiconify()
             
             # Auto maximize after showing
@@ -614,10 +571,8 @@ class MAMEControlConfig(ctk.CTk):
             # Force another update to ensure complete rendering
             self.update_idletasks()
             
-            debug_print("Application fully loaded and visible")
                 
         except Exception as e:
-            debug_print(f"Error showing application: {e}")
             import traceback
             traceback.print_exc()
             
@@ -629,7 +584,6 @@ class MAMEControlConfig(ctk.CTk):
 
     def _remove_loading_overlay(self):
         """Remove the loading overlay to reveal the fully loaded application"""
-        debug_print("Removing loading overlay")
         
         if hasattr(self, 'loading_overlay') and self.loading_overlay.winfo_exists():
             self.loading_overlay.destroy()
@@ -641,15 +595,12 @@ class MAMEControlConfig(ctk.CTk):
         
         # Ensure window is maximized
         self.state('zoomed')
-        
-        debug_print("Application fully loaded and visible")
 
     def update_loading_message(self, message):
         """Update the loading message text"""
         if hasattr(self, 'loading_message') and self.loading_message.winfo_exists():
             self.loading_message.configure(text=message)
             self.update_idletasks()
-            debug_print(f"Loading message: {message}")
     
     def get_current_monitor(self):
         """Get the monitor where the window is or should be displayed"""
@@ -728,7 +679,6 @@ class MAMEControlConfig(ctk.CTk):
                     y = launch_monitor.y + (launch_monitor.height - splash_height) // 2
                     
                 except Exception as e:
-                    debug_print(f"Error determining launch monitor: {e}")
                     # Fallback to primary monitor
                     monitors = get_monitors()
                     primary_monitor = monitors[0]
@@ -832,7 +782,6 @@ class MAMEControlConfig(ctk.CTk):
             return splash
                 
         except Exception as e:
-            debug_print(f"Error creating splash window: {e}")
             return None
     
     def update_splash_message(self, message):
@@ -1797,7 +1746,6 @@ class MAMEControlConfig(ctk.CTk):
 
     def create_layout(self):
         """Create the modern application layout with sidebar and content panels"""
-        debug_print("Creating application layout...")
         
         try:
             # Configure main grid with 2 columns (sidebar, main content) and 2 rows (content, toolbar)
@@ -1805,7 +1753,6 @@ class MAMEControlConfig(ctk.CTk):
             self.grid_columnconfigure(1, weight=1)     # Main content (expands)
             self.grid_rowconfigure(0, weight=1)        # Main content area (expands)
             self.grid_rowconfigure(1, weight=0)        # Bottom toolbar (fixed height)
-            debug_print("Main grid configuration set")
 
             # Create main content frame first
             self.main_content = ctk.CTkFrame(self, fg_color=self.theme_colors["background"], corner_radius=0)
@@ -1828,9 +1775,7 @@ class MAMEControlConfig(ctk.CTk):
             # Create bottom toolbar spanning both columns
             self.create_bottom_toolbar()
             
-            debug_print("Layout creation complete")
         except Exception as e:
-            debug_print(f"ERROR creating layout: {e}")
             traceback.print_exc()
             messagebox.showerror("Layout Error", f"Failed to create layout: {e}")
 
@@ -1937,10 +1882,7 @@ class MAMEControlConfig(ctk.CTk):
             # Update ROM CFG button state based on current selection
             self.update_toolbar_status()
             
-            debug_print("Bottom toolbar created successfully")
-            
         except Exception as e:
-            debug_print(f"ERROR creating bottom toolbar: {e}")
             traceback.print_exc()
 
     def update_toolbar_status(self):
@@ -1987,7 +1929,7 @@ class MAMEControlConfig(ctk.CTk):
                 )
                 
         except Exception as e:
-            debug_print(f"Error updating toolbar status: {e}")
+            print(f"Error updating toolbar status: {e}")
 
     def open_selected_rom_cfg(self):
         """Open the CFG file for the currently selected ROM in the default editor"""
@@ -2025,7 +1967,6 @@ class MAMEControlConfig(ctk.CTk):
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open ROM CFG file:\n{str(e)}")
-            debug_print(f"Error opening ROM CFG: {e}")
 
     def create_new_rom_cfg(self, cfg_path):
         """Create a new CFG file for the ROM with basic structure"""
@@ -2062,7 +2003,6 @@ class MAMEControlConfig(ctk.CTk):
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create CFG file:\n{str(e)}")
-            debug_print(f"Error creating CFG file: {e}")
 
     def open_default_cfg(self):
         """Open the default.cfg file in the default editor"""
@@ -2085,7 +2025,6 @@ class MAMEControlConfig(ctk.CTk):
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open default CFG file:\n{str(e)}")
-            debug_print(f"Error opening default CFG: {e}")
 
     def open_file_in_editor(self, file_path):
         """Open a file in the system's default editor"""
@@ -2108,8 +2047,6 @@ class MAMEControlConfig(ctk.CTk):
                 # Fallback for other systems
                 subprocess.run(['notepad', file_path] if system == "Windows" else ['nano', file_path], check=True)
             
-            debug_print(f"Opened file in editor: {file_path}")
-            
         except subprocess.CalledProcessError as e:
             raise Exception(f"Failed to open file with system editor: {e}")
         except FileNotFoundError:
@@ -2120,7 +2057,6 @@ class MAMEControlConfig(ctk.CTk):
     def restart_application(self):
         """Restart the application"""
         try:
-            debug_print("Restarting application...")
             
             # Save current settings before restart
             self.save_settings()
@@ -2145,16 +2081,13 @@ class MAMEControlConfig(ctk.CTk):
                 
         except Exception as e:
             messagebox.showerror("Restart Error", f"Failed to restart application:\n{str(e)}")
-            debug_print(f"Error restarting application: {e}")
 
     def close_application(self):
         """Close the application"""
         try:
-            debug_print("Closing application...")
             self.on_closing()
                 
         except Exception as e:
-            debug_print(f"Error closing application: {e}")
             # Force close even if there's an error
             try:
                 self.destroy()
@@ -2164,7 +2097,6 @@ class MAMEControlConfig(ctk.CTk):
     def cleanup_before_exit(self):
         """Perform cleanup operations before exiting"""
         try:
-            debug_print("Performing cleanup before exit...")
             
             # Save current settings
             if hasattr(self, 'save_settings'):
@@ -2191,10 +2123,9 @@ class MAMEControlConfig(ctk.CTk):
                     except:
                         pass
             
-            debug_print("Cleanup completed")
             
         except Exception as e:
-            debug_print(f"Error during cleanup: {e}")
+            print(f"Error during cleanup: {e}")
     
     def create_sidebar(self):
         """Create sidebar with enhanced category filters including specialized control types"""
@@ -2471,22 +2402,6 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.preview_button.pack(side="right", padx=10)
         
-        # 2. XInput Only Mode toggle (will appear to the left of Preview Controls)
-        '''self.xinput_only_toggle = ctk.CTkSwitch(
-            toggle_frame,
-            text="XInput Only Mode",
-            command=self.toggle_xinput_only_mode,
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"]
-        )
-        # Set default state based on current xinput_only_mode value
-        if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
-            self.xinput_only_toggle.select()
-        else:
-            self.xinput_only_toggle.deselect()
-        
-        self.xinput_only_toggle.pack(side="right", padx=10)'''
-        
         # 3. Hide buttons toggle (will appear to the left of XInput only toggle)
         self.hide_buttons_toggle = ctk.CTkSwitch(
             toggle_frame,
@@ -2502,77 +2417,6 @@ class MAMEControlConfig(ctk.CTk):
             self.hide_buttons_toggle.deselect()
         
         self.hide_buttons_toggle.pack(side="right", padx=10)
-
-    '''def toggle_xinput_only_mode(self):
-        """Handle toggling between showing all controls or only XInput controls"""
-        if hasattr(self, 'xinput_only_toggle'):
-            # Get the current toggle state
-            self.xinput_only_mode = self.xinput_only_toggle.get()
-            print(f"XInput Only Mode set to: {self.xinput_only_mode}")
-            
-            # Save the setting
-            self.save_settings()
-            
-            # Clear cache to ensure fresh data with the new setting
-            self.clear_xinput_mode_cache()
-            
-            # Refresh the current game display if one is selected
-            if self.current_game and hasattr(self, 'selected_line') and self.selected_line is not None:
-                # Store the current scroll position if possible
-                scroll_pos = None
-                if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                    scroll_pos = self.control_frame._scrollbar.get()
-                
-                # Clear existing controls
-                if hasattr(self, 'control_frame'):
-                    for widget in self.control_frame.winfo_children():
-                        widget.destroy()
-                        
-                # Update the game info
-                try:
-                    if hasattr(self, 'game_listbox'):
-                        # For listbox implementation, simply refresh using current_game
-                        self.display_game_info(self.current_game)
-                        
-                        # Make sure the correct item is still selected in listbox
-                        for i, (rom_name, _) in enumerate(self.game_list_data):
-                            if rom_name == self.current_game:
-                                self.game_listbox.selection_clear(0, tk.END)
-                                self.game_listbox.selection_set(i)
-                                self.game_listbox.see(i)
-                                break
-                    else:
-                        # Fall back to old approach with mock event
-                        class MockEvent:
-                            def __init__(self_mock, line_num):
-                                # Default position
-                                self_mock.x = 10
-                                self_mock.y = 10
-                                
-                                # Try to get better position if possible
-                                if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
-                                    # Calculate position to hit the middle of the line
-                                    bbox = self.game_list._textbox.bbox(f"{line_num}.0")
-                                    if bbox:
-                                        self_mock.x = bbox[0] + 5  # A bit to the right of line start
-                                        self_mock.y = bbox[1] + 5  # A bit below line top
-                        
-                        # Create the mock event targeting our current line
-                        mock_event = MockEvent(self.selected_line)
-                        
-                        # Force a full refresh of the display
-                        self.on_game_select(mock_event)
-                    
-                    # Restore scroll position if we saved it
-                    if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                        try:
-                            self.control_frame._scrollbar.set(*scroll_pos)
-                        except:
-                            pass
-                except Exception as e:
-                    print(f"Error refreshing display after toggling XInput Only Mode: {e}")
-                    import traceback
-                    traceback.print_exc()'''
     
     def clear_xinput_mode_cache(self):
         """Clear cache when toggling XInput Only Mode"""
@@ -4020,12 +3864,6 @@ controller xbox t		= """
         }
         return mapping_dict.get(control_name, (None, None))
     
-    '''#######################################################################
-    CONFIF EDIT GAMES IN GAMEDATA.JSON
-    - GAMEDATA JSON NEEDS OT BE IN MAME ROOT FODLER
-    ##########################################################################
-    '''
-    
     def analyze_controls(self):
         """Comprehensive analysis of ROM controls with improved visual styling and clone count"""
         try:
@@ -4669,17 +4507,6 @@ controller xbox t		= """
         # Row alternating colors
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
         
-        # Title for standard controls
-        '''standard_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
-        standard_header.pack(fill="x", pady=(0, 10))
-        
-        ctk.CTkLabel(
-            standard_header,
-            text="Standard Controls",
-            font=("Arial", 13, "bold"),
-            text_color="#ffffff"
-        ).pack(padx=10, pady=5)'''
-        
         # Create entry fields for each standard control
         for i, (control_name, display_name) in enumerate(standard_controls):
             # Create a frame for each control with alternating background
@@ -4717,17 +4544,6 @@ controller xbox t		= """
             
             # Store the entry widget in our dictionary
             control_entries[control_name] = action_entry
-        
-        # Add a header for specialized controls
-        '''specialized_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
-        specialized_header.pack(fill="x", pady=(20, 10))
-        
-        ctk.CTkLabel(
-            specialized_header,
-            text="Specialized MAME Controls",
-            font=("Arial", 13, "bold"),
-            text_color="#ffffff"
-        ).pack(padx=10, pady=5)'''
         
         # Create entry fields for specialized controls
         for i, (control_name, display_name) in enumerate(specialized_controls):
@@ -4774,16 +4590,6 @@ controller xbox t		= """
                 additional_controls.append((control_name, action))
         
         if additional_controls:
-            # Add a header for additional controls
-            '''additional_header = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["primary"], corner_radius=4)
-            additional_header.pack(fill="x", pady=(20, 10))
-            
-            ctk.CTkLabel(
-                additional_header,
-                text="Additional Controls",
-                font=("Arial", 13, "bold"),
-                text_color="#ffffff"
-            ).pack(padx=10, pady=5)'''
             
             # Create entry fields for additional controls
             for i, (control_name, action) in enumerate(additional_controls):
@@ -9327,13 +9133,10 @@ controller xbox t		= """
     # Update scan_roms_directory method 
     def scan_roms_directory(self):
         """Scan the roms directory for available games with improved path handling"""
-        debug_print("Scanning ROMs directory...")
         
         roms_dir = os.path.join(self.mame_dir, "roms")
-        debug_print(f"Looking for ROMs in: {roms_dir}")
         
         if not os.path.exists(roms_dir):
-            debug_print(f"ERROR: ROMs directory not found: {roms_dir}")
             messagebox.showwarning("No ROMs Found", f"ROMs directory not found: {roms_dir}")
             self.available_roms = set()
             return
@@ -9359,15 +9162,15 @@ controller xbox t		= """
                 rom_count += 1
                 
                 if rom_count <= 5:  # Print first 5 ROMs as sample
-                    debug_print(f"Found ROM: {base_name}")
+                    print(f"Found ROM: {base_name}")
             
-            debug_print(f"Total ROMs found: {len(self.available_roms)}")
+            print(f"Total ROMs found: {len(self.available_roms)}")
             if len(self.available_roms) > 0:
-                debug_print(f"Sample of available ROMs: {list(self.available_roms)[:5]}")
+                print(f"Sample of available ROMs: {list(self.available_roms)[:5]}")
             else:
-                debug_print("WARNING: No ROMs were found!")
+                print("WARNING: No ROMs were found!")
         except Exception as e:
-            debug_print(f"Error scanning ROMs directory: {e}")
+            print(f"Error scanning ROMs directory: {e}")
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to scan ROMs directory: {e}")
     
@@ -9498,29 +9301,6 @@ controller xbox t		= """
             return "PEDAL" in self.visible_control_types
         return True
 
-    def apply_font_scaling(self, font_family, font_size):
-        """Apply scaling factor for certain fonts that appear small"""
-        # Scaling factors for various fonts
-        scaling_factors = {
-            "Times New Roman": 1.5,
-            "Times": 1.5,
-            "Georgia": 1.4,
-            "Garamond": 1.7,
-            "Baskerville": 1.6,
-            "Palatino": 1.5,
-            "Courier New": 1.3,
-            "Courier": 1.3,
-            "Consolas": 1.2,
-            "Cambria": 1.4
-        }
-        
-        # Apply scaling if font needs it
-        scale = scaling_factors.get(font_family, 1.0)
-        adjusted_font_size = int(font_size * scale)
-        
-        print(f"Font size adjustment: {font_family} - original: {font_size}, adjusted: {adjusted_font_size} (scale: {scale})")
-        return adjusted_font_size
-    
     def export_image_headless(self, output_path, format="png"):
         """Export preview image in headless mode using existing save_image functionality with bezel settings"""
         try:
@@ -11284,23 +11064,6 @@ controller xbox t		= """
         except Exception as e:
             print(f"Error updating status message: {e}")
             return False
-
-    def context_menu_on_text(self, event, menu_items):
-        """Show a context menu for text widgets"""
-        try:
-            menu = tk.Menu(self, tearoff=0)
-            
-            # Add menu items
-            for label, command in menu_items:
-                menu.add_command(label=label, command=command)
-            
-            # Show the menu
-            menu.tk_popup(event.x_root, event.y_root)
-            
-            return menu
-        except Exception as e:
-            print(f"Error showing context menu: {e}")
-            return None
 
     def customize_tooltips(self):
         """Apply custom styling to tooltips"""
