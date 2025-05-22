@@ -1471,14 +1471,36 @@ class MAMEControlConfig(ctk.CTk):
                 all_ports = input_elem.findall('port')
                 print(f"Found {len(all_ports)} total ports in config")
 
+                # DEBUG: Print ALL port types found
+                print("=== ALL PORT TYPES FOUND ===")
+                for port in all_ports:
+                    control_type = port.get('type')
+                    if control_type:
+                        print(f"Port type: {control_type}")
+                print("=== END PORT TYPES ===")
+
                 # Process all port elements regardless of type
                 for port in all_ports:
                     control_type = port.get('type')
                     if control_type:  # Any control type
+                        
+                        # DEBUG: Print detailed info for paddle-related controls
+                        if "PADDLE" in control_type.upper() or "STEER" in control_type.upper():
+                            print(f"=== PADDLE/STEERING CONTROL FOUND ===")
+                            print(f"Control type: {control_type}")
+                            
+                            # Print all sequences for this control
+                            all_sequences = port.findall('./newseq')
+                            for seq in all_sequences:
+                                seq_type = seq.get('type', 'unknown')
+                                seq_text = seq.text if seq.text else "None"
+                                print(f"  Sequence type: {seq_type}, text: {seq_text}")
+                            print("=== END PADDLE/STEERING INFO ===")
+                        
                         # Special handling for directional controls that might use increment/decrement
                         special_control = any(substr in control_type for substr in 
                                             ["PADDLE", "DIAL", "TRACKBALL", "MOUSE", "LIGHTGUN", 
-                                            "AD_STICK", "PEDAL", "POSITIONAL", "GAMBLE"])
+                                            "AD_STICK", "PEDAL", "POSITIONAL", "GAMBLE", "STEER"])
 
                         if special_control:
                             # Look for increment and decrement sequences
@@ -1486,26 +1508,47 @@ class MAMEControlConfig(ctk.CTk):
                             dec_newseq = port.find('./newseq[@type="decrement"]')
                             std_newseq = port.find('./newseq[@type="standard"]')
 
+                            mapping_found = False
+
                             # FIXED: Handle case where only increment exists
                             if inc_newseq is not None and inc_newseq.text and inc_newseq.text.strip() != "NONE":
                                 if (dec_newseq is None or not dec_newseq.text or dec_newseq.text.strip() == "NONE"):
                                     inc_mapping = get_preferred_mapping(inc_newseq.text.strip())
                                     controls[control_type] = inc_mapping
                                     print(f"Found increment-only mapping: {control_type} -> {inc_mapping}")
+                                    mapping_found = True
                                 elif dec_newseq is not None and dec_newseq.text and dec_newseq.text.strip() != "NONE":
                                     inc_mapping = get_preferred_mapping(inc_newseq.text.strip())
                                     dec_mapping = get_preferred_mapping(dec_newseq.text.strip())
                                     combined_mapping = f"{inc_mapping} ||| {dec_mapping}"
                                     controls[control_type] = combined_mapping
                                     print(f"Found directional mapping: {control_type} -> {combined_mapping}")
+                                    mapping_found = True
                             elif dec_newseq is not None and dec_newseq.text and dec_newseq.text.strip() != "NONE":
                                 dec_mapping = get_preferred_mapping(dec_newseq.text.strip())
                                 controls[control_type] = dec_mapping
                                 print(f"Found decrement-only mapping: {control_type} -> {dec_mapping}")
+                                mapping_found = True
                             elif std_newseq is not None and std_newseq.text and std_newseq.text.strip() != "NONE":
                                 mapping = get_preferred_mapping(std_newseq.text.strip())
                                 controls[control_type] = mapping
                                 print(f"Found standard mapping for special control: {control_type} -> {mapping}")
+                                mapping_found = True
+
+                            # If no standard mapping types found, look for any other sequence
+                            if not mapping_found:
+                                all_sequences = port.findall('./newseq')
+                                for seq in all_sequences:
+                                    seq_type = seq.get('type', 'unknown')
+                                    if seq.text and seq.text.strip() != "NONE":
+                                        mapping = get_preferred_mapping(seq.text.strip())
+                                        controls[control_type] = mapping
+                                        print(f"Found {seq_type} sequence mapping for {control_type} -> {mapping}")
+                                        mapping_found = True
+                                        break  # Use the first valid mapping found
+                                
+                                if not mapping_found:
+                                    print(f"WARNING: No mapping found for special control: {control_type}")
                         else:
                             # Regular handling for standard sequence (non-special controls)
                             newseq = port.find('./newseq[@type="standard"]')
@@ -1516,6 +1559,26 @@ class MAMEControlConfig(ctk.CTk):
             else:
                 print("No input element found in XML")
 
+            # DEBUG: Create potential mappings for common paddle control names
+            paddle_aliases = {
+                "P1_PADDLE": None,
+                "PADDLE": None,
+                "PADDLE_1": None,
+                "P1_STEER": None,
+                "STEERING": None,
+                "STEERING_1": None
+            }
+            
+            print("=== CHECKING FOR PADDLE ALIASES ===")
+            for control_name in controls.keys():
+                for alias in paddle_aliases.keys():
+                    if alias.lower() in control_name.lower() or control_name.lower() in alias.lower():
+                        print(f"Potential paddle alias found: {control_name} might be {alias}")
+                        # If we found a paddle-like control but P1_PADDLE doesn't exist, create the mapping
+                        if "P1_PADDLE" not in controls and ("PADDLE" in control_name.upper() or "STEER" in control_name.upper()):
+                            controls["P1_PADDLE"] = controls[control_name]
+                            print(f"Created P1_PADDLE mapping from {control_name}: {controls[control_name]}")
+
         except ET.ParseError as e:
             print(f"XML parsing failed with error: {str(e)}")
             print("First 100 chars of content:", repr(cfg_content[:100]))
@@ -1524,8 +1587,8 @@ class MAMEControlConfig(ctk.CTk):
 
         print(f"Found {len(controls)} control mappings")
         if controls:
-            print("Sample mappings:")
-            for k, v in list(controls.items())[:6]:  # Show up to 6 mappings
+            print("All mappings found:")
+            for k, v in controls.items():
                 print(f"  {k}: {v}")
 
         return controls
@@ -1571,67 +1634,47 @@ class MAMEControlConfig(ctk.CTk):
             import xml.etree.ElementTree as ET
             from io import StringIO
 
-            # Always use xinput for mappings
-            mapping_mode = "xinput"
-
-            # Local helper to prioritize xinput mappings
             def get_preferred_mapping(mapping_str: str) -> str:
                 if not mapping_str:
                     return "NONE"
-                
                 parts = [p.strip() for p in mapping_str.strip().split("OR")]
-                
-                # First look for XInput parts
                 for part in parts:
                     if "XINPUT" in part:
                         return part
-                
-                # Then look for JOYCODE parts to convert
                 for part in parts:
                     if "JOYCODE" in part:
-                        # Try to convert to XInput
-                        xinput_mapping = self.convert_mapping(part, 'xinput')
-                        if xinput_mapping.startswith("XINPUT"):
-                            return xinput_mapping
-                        return part
-                
-                # If no matching part, return the first one
+                        xinput = self.convert_mapping(part, "xinput")
+                        return xinput if xinput.startswith("XINPUT") else part
                 return parts[0] if parts else mapping_str.strip()
 
-            # Parse the XML content
-            parser = ET.XMLParser(encoding='utf-8')
-            tree = ET.parse(StringIO(cfg_content), parser)
+            tree = ET.parse(StringIO(cfg_content), ET.XMLParser(encoding='utf-8'))
             root = tree.getroot()
-
-            # Find the input section
             input_elem = root.find('.//input')
+
             if input_elem is not None:
-                print("Found input element in default.cfg")
                 for port in input_elem.findall('port'):
-                    control_type = port.get('type')
-                    if control_type:  # Include all control types
-                        print(f"Found control: {control_type}")
-                        newseq = port.find('./newseq[@type="standard"]')
-                        if newseq is not None and newseq.text:
-                            full_mapping = newseq.text.strip()
-                            mapping = get_preferred_mapping(full_mapping)
-                            controls[control_type] = mapping
+                    ctype = port.get('type')
+                    if not ctype:
+                        continue
 
-                print(f"Parsed {len(controls)} controls from default.cfg")
+                    std = port.find('./newseq[@type="standard"]')
+                    inc = port.find('./newseq[@type="increment"]')
+                    dec = port.find('./newseq[@type="decrement"]')
 
-                # Print some sample mappings
-                sample_controls = list(controls.items())[:5]
-                for control, mapping in sample_controls:
-                    print(f"  {control}: {mapping}")
-            else:
-                print("No input element found in default.cfg")
-
+                    if inc is not None and dec is not None and inc.text and dec.text:
+                        inc_map = get_preferred_mapping(inc.text.strip())
+                        dec_map = get_preferred_mapping(dec.text.strip())
+                        controls[ctype] = f"{inc_map} ||| {dec_map}"
+                    elif inc is not None and inc.text:
+                        controls[ctype] = get_preferred_mapping(inc.text.strip())
+                    elif dec is not None and dec.text:
+                        controls[ctype] = get_preferred_mapping(dec.text.strip())
+                    elif std is not None and std.text:
+                        controls[ctype] = get_preferred_mapping(std.text.strip())
         except Exception as e:
             print(f"Error parsing default.cfg: {e}")
-            import traceback
-            traceback.print_exc()
-
         return controls
+
 
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen state"""
@@ -6328,34 +6371,6 @@ controller xbox t		= """
         if hasattr(self, 'default_controls') and self.default_controls:
             game_data['has_default_cfg'] = True
         
-        # Insert debug code here to check for missing mappings
-        required_buttons = ["P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", "P1_BUTTON5", "P1_BUTTON6"]
-        for btn in required_buttons:
-            if btn in cfg_controls:
-                print(f"Found {btn} in custom mappings: {cfg_controls[btn]}")
-            else:
-                print(f"WARNING: {btn} missing from custom mappings")
-                # Add default mapping if available
-                if hasattr(self, 'default_controls') and btn in self.default_controls:
-                    # Convert to current input mode
-                    mapping = self.default_controls[btn]
-                    mapping = self.convert_mapping(mapping, self.input_mode)
-                    print(f"  Adding default mapping for {btn}: {mapping}")
-                    cfg_controls[btn] = mapping
-        
-        # Define the functional categories for organizing controls
-        functional_categories = {
-            'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL'],
-            'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
-            'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
-            'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
-            'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
-            'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
-            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z'],
-            'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
-            'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
-        }
-        
         # Combine ROM-specific and default mappings
         all_mappings = {}
         
@@ -6372,8 +6387,36 @@ controller xbox t		= """
             converted_mapping = self.convert_mapping(mapping, self.input_mode)
             all_mappings[control] = {'mapping': converted_mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
         
+        # IMPORTANT: Now check each control in the game data and ensure it gets a mapping
+        for player in game_data.get('players', []):
+            for label in player.get('labels', []):
+                control_name = label['name']
+                
+                # Debug output for paddle specifically
+                if control_name == 'P1_PADDLE':
+                    print(f"*** Processing P1_PADDLE ***")
+                    print(f"  In cfg_controls: {control_name in cfg_controls}")
+                    print(f"  In default_controls: {control_name in getattr(self, 'default_controls', {})}")
+                    print(f"  In all_mappings: {control_name in all_mappings}")
+                    if control_name in all_mappings:
+                        print(f"  Mapping: {all_mappings[control_name]['mapping']}")
+                        print(f"  Source: {all_mappings[control_name]['source']}")
+        
         # Add current input mode to game_data
         game_data['input_mode'] = self.input_mode
+        
+        # Define the functional categories for organizing controls
+        functional_categories = {
+            'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_DIAL'],
+            'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
+            'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
+            'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
+            'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
+            'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
+            'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_PADDLE', 'P1_AD_STICK_Z'],
+            'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
+            'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
+        }
         
         # Process each control in the game data
         for player in game_data.get('players', []):
@@ -6424,6 +6467,8 @@ controller xbox t		= """
                     elif 'START' in control_name or 'SELECT' in control_name or 'COIN' in control_name:
                         func_category = 'system_control'
                     elif 'PEDAL' in control_name:
+                        func_category = 'analog_input'
+                    elif 'PADDLE' in control_name:
                         func_category = 'analog_input'
                 
                 # Store the functional category
@@ -7958,6 +8003,7 @@ controller xbox t		= """
                 is_analog_control = ("AD_STICK" in control_name or 
                                     "DIAL" in control_name or 
                                     "PEDAL" in control_name or 
+                                    "PADDLE" in control_name or 
                                     "TRACKBALL" in control_name or
                                     "LIGHTGUN" in control_name or
                                     "MOUSE" in control_name)
@@ -8073,6 +8119,8 @@ controller xbox t		= """
                             display_text = "Throttle Controls"
                         elif "DIAL" in control_name:
                             display_text = "Dial Controls"
+                        elif "PADDLE" in control_name:
+                            display_text = "Paddle Controls"
                         elif "PEDAL" in control_name:
                             display_text = "Pedal Controls"
                         elif "TRACKBALL" in control_name or "MOUSE" in control_name or "LIGHTGUN" in control_name:
