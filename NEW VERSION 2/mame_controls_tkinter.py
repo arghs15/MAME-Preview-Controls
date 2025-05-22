@@ -7971,6 +7971,92 @@ controller xbox t		= """
         controls_frame = tk.Frame(canvas, background=self.theme_colors["card_bg"])  # Match the canvas background
         canvas_window = canvas.create_window((0, 0), window=controls_frame, anchor=tk.NW)
         
+        # Helper function to check if text fits in allocated width
+        def text_fits_width(text, font, width):
+            """Check if text fits within the given width"""
+            try:
+                # Create a temporary label to measure text
+                temp_label = tk.Label(controls_frame, text=text, font=font)
+                temp_label.update_idletasks()
+                text_width = temp_label.winfo_reqwidth()
+                temp_label.destroy()
+                return text_width <= width
+            except:
+                return True  # If measurement fails, assume it fits
+        
+        def truncate_text_with_ellipsis(text, font, max_width):
+            """Truncate text to fit within max_width and add ellipsis if needed"""
+            if text_fits_width(text, font, max_width):
+                return text, False  # Text fits, no truncation needed
+            
+            # Binary search to find the longest text that fits
+            ellipsis = "..."
+            left, right = 0, len(text)
+            best_fit = ""
+            
+            while left <= right:
+                mid = (left + right) // 2
+                test_text = text[:mid] + ellipsis
+                
+                if text_fits_width(test_text, font, max_width):
+                    best_fit = test_text
+                    left = mid + 1
+                else:
+                    right = mid - 1
+            
+            return best_fit if best_fit else ellipsis, True  # Return truncated text and truncation flag
+        
+        def create_tooltip(parent_widget, full_text):
+            """Create a tooltip that shows the full text on hover"""
+            tooltip_window = None
+            
+            def show_tooltip(event):
+                nonlocal tooltip_window
+                if tooltip_window:
+                    return  # Tooltip already showing
+                    
+                x = event.x_root + 10
+                y = event.y_root + 10
+                
+                # Create tooltip window
+                tooltip_window = tk.Toplevel(parent_widget)
+                tooltip_window.wm_overrideredirect(True)
+                tooltip_window.wm_geometry(f"+{x}+{y}")
+                tooltip_window.configure(background="#333333", bd=1, relief="solid")
+                
+                # Create content frame with padding
+                content_frame = tk.Frame(tooltip_window, background="#333333", bd=0)
+                content_frame.pack(padx=5, pady=5)
+                
+                # Add the full text
+                tip_label = tk.Label(
+                    content_frame,
+                    text=full_text,
+                    background="#333333",
+                    foreground="white",
+                    font=("Arial", 11),
+                    justify="left",
+                    wraplength=400  # Allow wrapping for very long text
+                )
+                tip_label.pack()
+                
+                # Auto-destroy after 5 seconds
+                tooltip_window.after(5000, hide_tooltip)
+            
+            def hide_tooltip(event=None):
+                nonlocal tooltip_window
+                if tooltip_window:
+                    try:
+                        tooltip_window.destroy()
+                    except:
+                        pass
+                    tooltip_window = None
+            
+            # Bind hover events
+            parent_widget.bind("<Enter>", show_tooltip)
+            parent_widget.bind("<Leave>", hide_tooltip)
+            parent_widget.bind("<Button-1>", hide_tooltip)  # Hide on click
+        
         # If there are no controls to display
         if not all_controls:
             empty_frame = tk.Frame(controls_frame, background=self.theme_colors["card_bg"], height=60)
@@ -8153,8 +8239,17 @@ controller xbox t		= """
                 # Column 1: Raw MAME Control Name (new column!)
                 control_name = control['name']
                 
-                # Column 2: Display Name (Controller Input)
+                # Column 2: Display Name (Controller Input) - THE ENHANCED COLUMN
                 display_name = control.get('display_name', self.format_control_name(control['name']))
+                
+                # Check if the controller input text needs truncation
+                controller_input_font = ("Arial", 13)
+                original_display_text = display_text if display_text else ("Analog Control" if is_analog_control else "")
+                truncated_text, was_truncated = truncate_text_with_ellipsis(
+                    original_display_text, 
+                    controller_input_font, 
+                    col_widths[1] - 10  # Account for padding
+                )
                 
                 # Column 3: Game Action
                 action = control['action']
@@ -8176,17 +8271,23 @@ controller xbox t		= """
                 )
                 label1.place(x=x_positions[0], y=10, width=col_widths[0])
                 
-                # Column 2: Controller Input with hover tooltip
+                # Column 2: Controller Input with hover tooltip - ENHANCED VERSION
                 label2 = tk.Label(
                     row_frame,
-                    text=display_text if display_text else ("Analog Control" if is_analog_control else ""),
-                    font=("Arial", 13),
+                    text=truncated_text,
+                    font=controller_input_font,
                     anchor="w",
                     justify="left",
                     background=bg_color,
                     foreground=self.theme_colors["primary"]
                 )
                 label2.place(x=x_positions[1], y=10, width=col_widths[1])
+                
+                # Add tooltip if text was truncated
+                if was_truncated and original_display_text:
+                    create_tooltip(label2, original_display_text)
+                    # Visual indicator that there's more content (subtle color change)
+                    label2.configure(foreground=self.theme_colors["secondary"])
                 
                 # Column 3: Game Action
                 label3 = tk.Label(
