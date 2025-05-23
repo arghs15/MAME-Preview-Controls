@@ -6,30 +6,13 @@ import re
 import time
 from typing import Dict, Optional, Set, List, Tuple
 import xml.etree.ElementTree as ET
-
-def get_application_path():
-    """Get the base path for the application (handles PyInstaller bundling)"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as script
-        return os.path.dirname(os.path.abspath(__file__))
-
-def get_mame_parent_dir(app_path=None):
-    """
-    Get the parent directory where MAME, ROMs, and artwork are located.
-    If we're in the preview folder, the parent is the MAME directory.
-    """
-    if app_path is None:
-        app_path = get_application_path()
-    
-    # If we're in the preview folder, the parent is the MAME directory
-    if os.path.basename(app_path).lower() == "preview":
-        return os.path.dirname(app_path)
-    else:
-        # We're already in the MAME directory
-        return app_path
+from mame_utils import (
+    get_application_path, 
+    get_mame_parent_dir, 
+    find_file_in_standard_locations,
+    load_json_file,
+    save_json_file
+)
 
 class PositionManager:
     """A simplified position manager for the PyQt implementation"""
@@ -94,6 +77,52 @@ class MAMEControlConfig:
                 os.path.exists(self.settings_dir) and 
                 os.path.exists(self.info_dir))
 
+    # Add this inside class MAMEControlConfig in BOTH files:
+    def find_file_in_standard_locations(self, filename, subdirs=None, copy_to_settings=False):
+        """Wrapper to use the utility function with instance directories"""
+        copy_to = None
+        if copy_to_settings and hasattr(self, 'settings_dir'):
+            copy_to = os.path.join(self.settings_dir, filename)
+        
+        return find_file_in_standard_locations(
+            filename, 
+            subdirs=subdirs,
+            app_dir=self.app_dir,
+            mame_dir=self.mame_dir,
+            copy_to=copy_to
+        )
+
+    def find_mame_directory(self) -> Optional[str]:
+        """Find the MAME directory containing necessary files"""
+        # First, check if we can find gamedata.json
+        gamedata_locations = self.find_file_in_standard_locations(
+            "gamedata.json", 
+            subdirs=[["preview"], ["preview", "settings"]]
+        )
+        
+        if gamedata_locations:
+            # Return the parent directory of where we found gamedata.json
+            parent_dir = os.path.dirname(gamedata_locations)
+            if parent_dir.endswith("preview") or parent_dir.endswith("settings"):
+                return os.path.dirname(parent_dir)
+            return parent_dir
+        
+        # Check common MAME install paths as fallback
+        common_paths = [
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), "MAME"),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), "MAME"),
+            "C:\\MAME",
+            "D:\\MAME"
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                print(f"Found MAME directory: {path}")
+                return path
+        
+        print("Error: MAME directory not found")
+        return None
+    
     def load_settings(self):
         """Load settings from JSON file in settings directory"""
         # Set sensible defaults
@@ -178,15 +207,24 @@ class MAMEControlConfig:
         if hasattr(self, 'gamedata_json') and self.gamedata_json:
             return self.gamedata_json  # Already loaded
         
-        # Ensure the file exists
-        if not os.path.exists(self.gamedata_path):
-            print(f"ERROR: gamedata.json not found at {self.gamedata_path}")
+        # Use the new method to find gamedata.json
+        gamedata_path = self.find_file_in_standard_locations(
+            "gamedata.json",
+            subdirs=[["settings"], ["preview", "settings"]],
+            copy_to_settings=True
+        )
+        
+        if not gamedata_path:
+            print(f"ERROR: gamedata.json not found")
             self.gamedata_json = {}
             self.parent_lookup = {}
             return {}
-                
+        
+        # Now use the found path
+        self.gamedata_path = gamedata_path
+        
         try:
-            with open(self.gamedata_path, 'r', encoding='utf-8') as f:
+            with open(gamedata_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             # Process the data for main games and clones
@@ -211,31 +249,6 @@ class MAMEControlConfig:
             self.gamedata_json = {}
             self.parent_lookup = {}
             return {}
-
-    def get_gamedata_path(self):
-        """Get the path to the gamedata.json file based on new folder structure"""
-        # Always store gamedata.json in settings directory
-        settings_path = os.path.join(self.settings_dir, "gamedata.json")
-        
-        # If file doesn't exist in settings dir, check legacy locations
-        if not os.path.exists(settings_path):
-            legacy_paths = [
-                os.path.join(self.mame_dir, "gamedata.json"),
-                os.path.join(self.mame_dir, "preview", "gamedata.json")
-            ]
-            
-            for legacy_path in legacy_paths:
-                if os.path.exists(legacy_path):
-                    print(f"Found gamedata.json at legacy path: {legacy_path}")
-                    print(f"Copying to new location: {settings_path}")
-                    import shutil
-                    shutil.copy2(legacy_path, settings_path)
-                    break
-        
-        # Create directory if it doesn't exist (redundant but safe)
-        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-        
-        return settings_path
 
     def load_text_positions(self, rom_name):
         """Load text positions from settings directory"""
@@ -437,12 +450,13 @@ class MAMEControlConfig:
         print(f"Starting standalone preview for ROM: {rom_name}")
         start_time = time.time()
         
-        # Find the MAME directory (already in __init__)
-        if not hasattr(self, 'mame_dir') or not self.mame_dir:
-            self.mame_dir = self.find_mame_directory()
-            if not self.mame_dir:
-                print("Error: MAME directory not found!")
-                return
+        # Initialize directory structure first
+        self.app_dir = get_application_path()
+        self.mame_dir = get_mame_parent_dir(self.app_dir)
+        
+        if not self.mame_dir:
+            print("Error: MAME directory not found!")
+            return
         
         print(f"Using MAME directory: {self.mame_dir}")
         
@@ -736,54 +750,6 @@ class MAMEControlConfig:
         monitor_thread.start()
         print(f"Monitor thread started with check interval {check_interval}s")
 
-    def find_mame_directory(self) -> Optional[str]:
-        """Find the MAME directory containing necessary files"""
-        # 1. Check application directory
-        app_dir = get_application_path()
-        app_gamedata = os.path.join(app_dir, "gamedata.json")
-        app_preview_gamedata = os.path.join(app_dir, "preview", "gamedata.json")
-
-        if os.path.exists(app_gamedata):
-            print(f"Using bundled gamedata.json: {app_dir}")
-            return app_dir
-        elif os.path.exists(app_preview_gamedata):
-            print(f"Using external preview/gamedata.json: {app_dir}")
-            return app_dir
-
-        # 2. Check current script directory
-        current_dir = os.path.abspath(os.path.dirname(__file__))
-        current_gamedata = os.path.join(current_dir, "gamedata.json")
-        current_preview_gamedata = os.path.join(current_dir, "preview", "gamedata.json")
-
-        if os.path.exists(current_gamedata):
-            print(f"Found MAME directory: {current_dir}")
-            return current_dir
-        elif os.path.exists(current_preview_gamedata):
-            print(f"Found MAME directory via preview/gamedata.json: {current_dir}")
-            return current_dir
-
-        # 3. Check common MAME install paths
-        common_paths = [
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), "MAME"),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), "MAME"),
-            "C:\\MAME",
-            "D:\\MAME"
-        ]
-
-        for path in common_paths:
-            gamedata_path = os.path.join(path, "gamedata.json")
-            preview_gamedata_path = os.path.join(path, "preview", "gamedata.json")
-
-            if os.path.exists(gamedata_path):
-                print(f"Found MAME directory: {path}")
-                return path
-            elif os.path.exists(preview_gamedata_path):
-                print(f"Found MAME directory via preview/gamedata.json: {path}")
-                return path
-
-        print("Error: gamedata.json not found in known locations")
-        return None
-
     def get_game_data(self, rom_name):
         """Simplified mock implementation to support preview functionality"""
         # In the slimmed down version, return basic game data structure
@@ -805,47 +771,3 @@ class MAMEControlConfig:
         # Add to cache for future
         self.rom_data_cache[rom_name] = basic_data
         return basic_data
-
-    def export_image_headless(self, output_path, format="png"):
-        """Export preview image in headless mode"""
-        try:
-            print(f"Exporting preview image to {output_path}")
-            
-            # This is a placeholder for the actual implementation in PyQt
-            # In a real implementation, this would render the preview window to an image
-            
-            from PyQt5.QtGui import QImage, QPainter
-            from PyQt5.QtCore import Qt
-            
-            # Create a new image with the same size as the canvas
-            if hasattr(self, 'canvas'):
-                image = QImage(
-                    self.canvas.width(),
-                    self.canvas.height(),
-                    QImage.Format_ARGB32
-                )
-                image.fill(Qt.transparent)
-                
-                # Create painter
-                painter = QPainter(image)
-                painter.setRenderHint(QPainter.Antialiasing)
-                painter.setRenderHint(QPainter.TextAntialiasing)
-                painter.setRenderHint(QPainter.SmoothPixmapTransform)
-                
-                # Render the canvas
-                self.canvas.render(painter)
-                
-                # End painting
-                painter.end()
-                
-                # Save the image
-                result = image.save(output_path, format.upper())
-                return result
-            else:
-                print("ERROR: canvas not available for export")
-                return False
-        except Exception as e:
-            print(f"Error in export_image_headless: {e}")
-            import traceback
-            traceback.print_exc()
-            return False

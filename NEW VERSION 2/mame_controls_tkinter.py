@@ -18,6 +18,13 @@ from functools import lru_cache
 import tkinter as tk
 from tkinter import ttk, messagebox
 from screeninfo import get_monitors
+from mame_utils import (
+    get_application_path, 
+    get_mame_parent_dir, 
+    find_file_in_standard_locations,
+    load_json_file,
+    save_json_file
+)
 
 # Theme settings for the application
 THEME_COLORS = {
@@ -45,32 +52,6 @@ def get_monitor_for_point(x, y):
             monitor.y <= y < monitor.y + monitor.height):
             return monitor
     return get_monitors()[0]  # fallback to primary
-
-
-# Add these helper functions if not already present
-def get_application_path():
-    """Get the base path for the application (handles PyInstaller bundling)"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as script
-        return os.path.dirname(os.path.abspath(__file__))
-
-def get_mame_parent_dir(app_path=None):
-    """
-    Get the parent directory where MAME, ROMs, and artwork are located.
-    If we're in the preview folder, the parent is the MAME directory.
-    """
-    if app_path is None:
-        app_path = get_application_path()
-    
-    # If we're in the preview folder, the parent is the MAME directory
-    if os.path.basename(app_path).lower() == "preview":
-        return os.path.dirname(app_path)
-    else:
-        # We're already in the MAME directory
-        return app_path
 
 class AsyncLoader:
     """Handles asynchronous loading of data to improve UI responsiveness"""
@@ -1246,6 +1227,52 @@ class MAMEControlConfig(ctk.CTk):
                 os.path.exists(self.settings_dir) and 
                 os.path.exists(self.info_dir))
     
+    # Add this inside class MAMEControlConfig in BOTH files:
+    def find_file_in_standard_locations(self, filename, subdirs=None, copy_to_settings=False):
+        """Wrapper to use the utility function with instance directories"""
+        copy_to = None
+        if copy_to_settings and hasattr(self, 'settings_dir'):
+            copy_to = os.path.join(self.settings_dir, filename)
+        
+        return find_file_in_standard_locations(
+            filename, 
+            subdirs=subdirs,
+            app_dir=self.app_dir,
+            mame_dir=self.mame_dir,
+            copy_to=copy_to
+        )
+
+    def find_mame_directory(self) -> Optional[str]:
+        """Find the MAME directory containing necessary files"""
+        # First, check if we can find gamedata.json
+        gamedata_locations = self.find_file_in_standard_locations(
+            "gamedata.json", 
+            subdirs=[["preview"], ["preview", "settings"]]
+        )
+        
+        if gamedata_locations:
+            # Return the parent directory of where we found gamedata.json
+            parent_dir = os.path.dirname(gamedata_locations)
+            if parent_dir.endswith("preview") or parent_dir.endswith("settings"):
+                return os.path.dirname(parent_dir)
+            return parent_dir
+        
+        # Check common MAME install paths as fallback
+        common_paths = [
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), "MAME"),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), "MAME"),
+            "C:\\MAME",
+            "D:\\MAME"
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                print(f"Found MAME directory: {path}")
+                return path
+        
+        print("Error: MAME directory not found")
+        return None
+    
     def check_db_update_needed(self):
         """Check if the SQLite database needs to be updated based on gamedata.json timestamp"""
         # Ensure gamedata.json exists first
@@ -1634,115 +1661,6 @@ class MAMEControlConfig(ctk.CTk):
         """Exit fullscreen mode"""
         self.fullscreen = False
         self.attributes('-fullscreen', False)
-
-    def find_mame_directory(self) -> Optional[str]:
-        """Find the MAME directory containing necessary files"""
-        # 1. Check application directory
-        app_dir = get_application_path()
-        app_gamedata = os.path.join(app_dir, "gamedata.json")
-        app_preview_gamedata = os.path.join(app_dir, "preview", "gamedata.json")
-
-        if os.path.exists(app_gamedata):
-            print(f"Using bundled gamedata.json: {app_dir}")
-            return app_dir
-        elif os.path.exists(app_preview_gamedata):
-            print(f"Using external preview/gamedata.json: {app_dir}")
-            return app_dir
-
-        # 2. Check current script directory
-        current_dir = os.path.abspath(os.path.dirname(__file__))
-        current_gamedata = os.path.join(current_dir, "gamedata.json")
-        current_preview_gamedata = os.path.join(current_dir, "preview", "gamedata.json")
-
-        if os.path.exists(current_gamedata):
-            print(f"Found MAME directory: {current_dir}")
-            return current_dir
-        elif os.path.exists(current_preview_gamedata):
-            print(f"Found MAME directory via preview/gamedata.json: {current_dir}")
-            return current_dir
-
-        # 3. Check common MAME install paths (and their preview folders)
-        common_paths = [
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), "MAME"),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), "MAME"),
-            "C:\\MAME",
-            "D:\\MAME"
-        ]
-
-        for path in common_paths:
-            gamedata_path = os.path.join(path, "gamedata.json")
-            preview_gamedata_path = os.path.join(path, "preview", "gamedata.json")
-
-            if os.path.exists(gamedata_path):
-                print(f"Found MAME directory: {path}")
-                return path
-            elif os.path.exists(preview_gamedata_path):
-                print(f"Found MAME directory via preview/gamedata.json: {path}")
-                return path
-
-        print("Error: gamedata.json not found in known locations")
-        return None
-
-    def toggle_xinput(self):
-        """Handle toggling between JOYCODE and XInput mappings"""
-        if hasattr(self, 'xinput_toggle'):
-            # Get the current toggle state
-            self.use_xinput = self.xinput_toggle.get()
-            print(f"XInput toggle set to: {self.use_xinput}")
-            
-            # Save the setting
-            self.save_settings()
-            
-            # Clear cache to ensure fresh data with new mapping type
-            if hasattr(self, 'rom_data_cache'):
-                print("Clearing ROM data cache due to XInput mode change")
-                self.rom_data_cache = {}
-            
-            # Refresh the current game display if one is selected
-            if self.current_game:
-                # Clear existing controls
-                if hasattr(self, 'control_frame'):
-                    for widget in self.control_frame.winfo_children():
-                        widget.destroy()
-                
-                # For listbox-based interface, directly call display_game_info
-                if hasattr(self, 'game_listbox'):
-                    # Store current scroll position if possible
-                    scroll_pos = None
-                    if hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                        scroll_pos = self.control_frame._scrollbar.get()
-                    
-                    # Directly refresh the display with the current game
-                    self.display_game_info(self.current_game)
-                    
-                    # Restore scroll position if we saved it
-                    if scroll_pos and hasattr(self, 'control_frame') and hasattr(self.control_frame, '_scrollbar'):
-                        try:
-                            self.control_frame._scrollbar.set(*scroll_pos)
-                        except:
-                            pass
-                else:
-                    # Fall back to the old text widget approach
-                    # Create a mock event with coordinates for the selected line
-                    class MockEvent:
-                        def __init__(self_mock, line_num):
-                            # Default position
-                            self_mock.x = 10
-                            self_mock.y = 10
-                            
-                            # Try to get better position if possible
-                            if hasattr(self, 'game_list') and hasattr(self.game_list, '_textbox') and hasattr(self.game_list._textbox, 'bbox'):
-                                # Calculate position to hit the middle of the line
-                                bbox = self.game_list._textbox.bbox(f"{line_num}.0")
-                                if bbox:
-                                    self_mock.x = bbox[0] + 5  # A bit to the right of line start
-                                    self_mock.y = bbox[1] + 5  # A bit below line top
-                    
-                    # Create the mock event targeting our current line
-                    mock_event = MockEvent(self.selected_line)
-                    
-                    # Force a full refresh of the display
-                    self.on_game_select(mock_event)
 
     def create_layout(self):
         """Create the modern application layout with sidebar and content panels"""
@@ -3440,39 +3358,6 @@ class MAMEControlConfig(ctk.CTk):
         )
         button.pack(side="left", padx=5, pady=5)
         return button
-
-    def debug_parse_cfg(self, rom_name):
-        """Debug helper to parse a custom cfg file and print the results"""
-        if rom_name not in self.custom_configs:
-            print(f"No custom config found for {rom_name}")
-            return {}
-        
-        cfg_content = self.custom_configs[rom_name]
-        print(f"Parsing cfg for {rom_name}:")
-        print(f"First 100 chars: {cfg_content[:100]}")
-        
-        try:
-            # Parse the controls
-            controls = self.parse_cfg_controls(cfg_content)
-            
-            # Print the results
-            print(f"Found {len(controls)} mappings:")
-            for control, mapping in controls.items():
-                print(f"  {control}: {mapping}")
-                
-            # Convert to XInput if needed
-            if self.use_xinput:
-                print("Converting to XInput:")
-                for control, mapping in controls.items():
-                    xinput = self.convert_mapping(mapping, True)
-                    print(f"  {control}: {mapping} -> {xinput}")
-            
-            return controls
-        except Exception as e:
-            print(f"Error parsing cfg: {e}")
-            import traceback
-            traceback.print_exc()
-            return {}
     
     def _filter_rom_list(self, rom_list, search_text):
         """Filter a list of ROMs based on search text"""
@@ -3695,86 +3580,86 @@ class MAMEControlConfig(ctk.CTk):
     
     def load_default_template(self):
         """Load the default.conf template with updated path handling"""
-        # Look in the info directory
+        # Look in the info directory first
         template_path = os.path.join(self.info_dir, "default.conf")
         
-        print(f"\nLooking for default template at: {template_path}")
+        if os.path.exists(template_path):
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception as e:
+                print(f"Error loading template: {e}")
         
-        try:
-            with open(template_path, 'r', encoding='utf-8') as f:
-                template_content = f.read()
-                print(f"Successfully loaded template ({len(template_content)} characters)")
-                return template_content
-        except Exception as e:
-            print(f"Error loading template: {e}")
-            
-            # Try legacy paths
-            legacy_paths = [
-                os.path.join(self.preview_dir, "settings", "info", "default.conf"),
-                os.path.join(self.preview_dir, "info", "default.conf"),  # This is now the primary path
-                os.path.join(self.app_dir, "info", "default.conf")
-            ]
-            
-            for legacy_path in legacy_paths:
-                print(f"Trying legacy path: {legacy_path}")
+        # Try to find in other locations
+        found_path = self.find_file_in_standard_locations(
+            "default.conf",
+            subdirs=[["settings", "info"], ["preview", "settings", "info"], ["info"]],
+            copy_to_settings=False  # We'll copy to info_dir instead
+        )
+        
+        if found_path:
+            try:
+                with open(found_path, 'r', encoding='utf-8') as f:
+                    template_content = f.read()
+                
+                # Copy to info directory for future use
                 try:
-                    with open(legacy_path, 'r', encoding='utf-8') as f:
-                        template_content = f.read()
-                    
-                    # Also migrate the template to the new location
-                    try:
-                        os.makedirs(os.path.dirname(template_path), exist_ok=True)
-                        with open(template_path, 'w', encoding='utf-8') as f:
-                            f.write(template_content)
-                        print(f"Migrated template to: {template_path}")
-                    except Exception as migrate_err:
-                        print(f"Error migrating template: {migrate_err}")
-                    
-                    print(f"Successfully loaded template from legacy path ({len(template_content)} characters)")
-                    return template_content
-                except Exception as alt_e:
-                    print(f"Error loading from legacy path: {alt_e}")
-            
-        # Last resort: create a default template on the fly
+                    os.makedirs(self.info_dir, exist_ok=True)
+                    with open(template_path, 'w', encoding='utf-8') as f:
+                        f.write(template_content)
+                    print(f"Migrated template to: {template_path}")
+                except Exception as e:
+                    print(f"Error migrating template: {e}")
+                
+                return template_content
+            except Exception as e:
+                print(f"Error reading template: {e}")
+        
+        # Last resort: create default template
         print("Creating default template content")
-        default_content = """controller D-pad		= 
-controller D-pad t		= 
-controller L-stick		= 
-controller L-stick t	= 
-controller R-stick		= 
-controller R-stick t	= 
-controller A			= 
-controller A t			= 
-controller B			= 
-controller B t			= 
-controller X			= 
-controller X t			= 
-controller Y			= 
-controller Y t			= 
-controller LB			= 
-controller LB t			= 
-controller LT			= 
-controller LT t			= 
-controller RB			= 
-controller RB t			= 
-controller RT			= 
-controller RT t			= 
-controller start		= 
-controller start t		=
-controller select		= 
-controller select t		=
-controller xbox			= 
-controller xbox t		= """
-        # Try to save this for future use
+        default_content = self._get_default_template_content()
+        
+        # Try to save for future use
         try:
-            os.makedirs(os.path.dirname(template_path), exist_ok=True)
+            os.makedirs(self.info_dir, exist_ok=True)
             with open(template_path, 'w', encoding='utf-8') as f:
                 f.write(default_content)
             print(f"Created new default template at: {template_path}")
-        except Exception as save_e:
-            print(f"Could not save default template: {save_e}")
-            
+        except Exception as e:
+            print(f"Could not save default template: {e}")
+        
         return default_content
+
+    def _get_default_template_content(self):
+        """Get default template content"""
+        return """controller D-pad		= 
+    controller D-pad t		= 
+    controller L-stick		= 
+    controller L-stick t	= 
+    controller R-stick		= 
+    controller R-stick t	= 
+    controller A			= 
+    controller A t			= 
+    controller B			= 
+    controller B t			= 
+    controller X			= 
+    controller X t			= 
+    controller Y			= 
+    controller Y t			= 
+    controller LB			= 
+    controller LB t			= 
+    controller LT			= 
+    controller LT t			= 
+    controller RB			= 
+    controller RB t			= 
+    controller RT			= 
+    controller RT t			= 
+    controller start		= 
+    controller start t		=
+    controller select		= 
+    controller select t		=
+    controller xbox			= 
+    controller xbox t		= """
     
     def generate_game_config(self, game_data: dict) -> str:
         """Generate config file content for a specific game"""
@@ -5141,7 +5026,7 @@ controller xbox t		= """
                     return
                     
                 # Get existing gamedata.json
-                gamedata_path = self.get_gamedata_path()
+                gamedata_path = self.gamedata_path
                 try:
                     with open(gamedata_path, 'r', encoding='utf-8') as f:
                         gamedata = json.load(f)
@@ -5542,7 +5427,7 @@ controller xbox t		= """
                 
         try:
             # Load the gamedata.json file
-            gamedata_path = self.get_gamedata_path()
+            gamedata_path = self.gamedata_path
             with open(gamedata_path, 'r', encoding='utf-8') as f:
                 gamedata = json.load(f)
             
@@ -6212,31 +6097,27 @@ controller xbox t		= """
         # If not found in database, fall back to the original method
         return self.get_game_data(romname)
     
-    # Updated get_gamedata_path method to work when exe is in preview folder
     def get_gamedata_path(self):
         """Get the path to the gamedata.json file based on new folder structure"""
-        # Always store gamedata.json in settings directory
+        # Always prefer settings directory
         settings_path = os.path.join(self.settings_dir, "gamedata.json")
         
-        # If the file doesn't exist in settings dir, check if it exists in mame root
-        # and copy it to the settings dir
-        if not os.path.exists(settings_path):
-            legacy_paths = [
-                os.path.join(self.mame_dir, "gamedata.json"),
-                os.path.join(self.mame_dir, "preview", "gamedata.json")
-            ]
-            
-            for legacy_path in legacy_paths:
-                if os.path.exists(legacy_path):
-                    print(f"Found gamedata.json at legacy path: {legacy_path}")
-                    print(f"Copying to new location: {settings_path}")
-                    import shutil
-                    shutil.copy2(legacy_path, settings_path)
-                    break
+        # If already exists in settings, use it
+        if os.path.exists(settings_path):
+            return settings_path
         
-        # Create directory if it doesn't exist (redundant but safe)
-        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        # Otherwise, find and copy to settings
+        found_path = self.find_file_in_standard_locations(
+            "gamedata.json",
+            subdirs=[["preview"], ["settings"]],
+            copy_to_settings=True
+        )
         
+        if found_path:
+            return found_path
+        
+        # If not found anywhere, return the settings path anyway
+        # (caller will need to handle the missing file)
         return settings_path
     
     def create_game_list_with_edit(self, parent_frame, game_list, title_text):
@@ -6990,7 +6871,7 @@ controller xbox t		= """
             game_alternating = alternating_var.get()
             
             # Load the gamedata.json file using centralized path
-            gamedata_path = self.get_gamedata_path()
+            gamedata_path = self.gamedata_path
             with open(gamedata_path, 'r', encoding='utf-8') as f:
                 gamedata = json.load(f)
             
@@ -9222,19 +9103,28 @@ controller xbox t		= """
     
     # Update load_gamedata_json method
     def load_gamedata_json(self):
-        """Load gamedata.json from the canonical settings location and build parent-child relationships"""
+        """Load gamedata.json from the canonical settings location"""
         if hasattr(self, 'gamedata_json') and self.gamedata_json:
             return self.gamedata_json  # Already loaded
         
-        # Ensure the file exists
-        if not os.path.exists(self.gamedata_path):
-            print(f"ERROR: gamedata.json not found at {self.gamedata_path}")
+        # Use the new method to find gamedata.json
+        gamedata_path = self.find_file_in_standard_locations(
+            "gamedata.json",
+            subdirs=[["settings"], ["preview", "settings"]],
+            copy_to_settings=True
+        )
+        
+        if not gamedata_path:
+            print(f"ERROR: gamedata.json not found")
             self.gamedata_json = {}
             self.parent_lookup = {}
             return {}
-                
+        
+        # Now use the found path
+        self.gamedata_path = gamedata_path
+        
         try:
-            with open(self.gamedata_path, 'r', encoding='utf-8') as f:
+            with open(gamedata_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             # Process the data for main games and clones

@@ -1,0 +1,2 @@
+-joycode mode defaults to dinput. mode is only used for reference in the main gui. Not really needed otherwise. Will remove it.
+

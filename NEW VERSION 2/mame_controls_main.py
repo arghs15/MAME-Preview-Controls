@@ -12,9 +12,10 @@ import argparse
 import traceback
 # Add this to the very top of mame_controls_main.py:
 import builtins
+from mame_utils import get_application_path, get_mame_parent_dir
 
 # Performance mode - disable all printing
-PERFORMANCE_MODE = True
+PERFORMANCE_MODE = False
 
 if PERFORMANCE_MODE:
     def no_print(*args, **kwargs):
@@ -50,37 +51,33 @@ def cleanup_on_exit():
     
     print("Cleanup complete.")
 
-# Add this line at the end of your import section
 atexit.register(cleanup_on_exit)
 
-def get_application_path():
-    """Get the base path for the application (handles PyInstaller bundling)"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = os.path.dirname(sys.executable)
-        # If executable is in preview folder, use base_path
-        # Otherwise, create preview subfolder
-        if os.path.basename(base_path) != "preview":
-            base_path = os.path.join(base_path, "preview")
-        return base_path
-    else:
-        # Running as script
-        return os.path.dirname(os.path.abspath(__file__))
-
-def get_mame_parent_dir(app_path=None):
+def validate_mame_directory(mame_dir):
     """
-    Get the parent directory where MAME, ROMs, and artwork are located.
-    If we're in the preview folder, the parent is the MAME directory.
+    Validate that the directory is a valid MAME installation
+    Returns True if valid, False if not
     """
-    if app_path is None:
-        app_path = get_application_path()
+    if not os.path.exists(mame_dir):
+        print(f"MAME directory not found: {mame_dir}")
+        return False
+        
+    # Check for essential MAME folders/files
+    required_items = ["roms", "mame.exe", "mame64.exe", "mame"]
+    found_items = []
     
-    # If we're in the preview folder, the parent is the MAME directory
-    if os.path.basename(app_path) == "preview":
-        return os.path.dirname(app_path)
-    else:
-        # We're already in the MAME directory
-        return app_path
+    for item in required_items:
+        if os.path.exists(os.path.join(mame_dir, item)):
+            found_items.append(item)
+    
+    # If we found at least one required item, consider it valid
+    if found_items:
+        print(f"MAME directory validated: {mame_dir}")
+        print(f"Found MAME components: {', '.join(found_items)}")
+        return True
+    
+    print(f"Directory exists but doesn't appear to be a MAME installation: {mame_dir}")
+    return False
 
 def validate_mame_directory(mame_dir):
     """
