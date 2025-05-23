@@ -167,7 +167,9 @@ class CustomSidebarTab(ctk.CTkFrame):
 
 class MAMEControlConfig(ctk.CTk):
     def __init__(self, preview_only=False, initially_hidden=False):
-
+        # FEATURE TOGGLES - Set to False to disable features
+        self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
+        self.ALLOW_ADD_NEW_GAME = False     # Set to True to enable "Add New Game" tab
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -2783,16 +2785,17 @@ class MAMEControlConfig(ctk.CTk):
                     text_color=self.theme_colors["text_dimmed"]
                 ).pack(anchor="w", padx=15, pady=(5, 5))
                 
-                # Add button to create controls
-                add_button = ctk.CTkButton(
-                    missing_card,
-                    text="Add Control Configuration",
-                    command=lambda r=rom_name: self.show_control_editor(r),
-                    fg_color=self.theme_colors["primary"],
-                    hover_color=self.theme_colors["button_hover"],
-                    height=35
-                )
-                add_button.pack(anchor="w", padx=15, pady=(5, 15))
+                # Add button to create controls - only if adding new games is allowed
+                if self.ALLOW_ADD_NEW_GAME:  # or if False: to disable
+                    add_button = ctk.CTkButton(
+                        missing_card,
+                        text="Add Control Configuration",
+                        command=lambda r=rom_name: self.show_control_editor(r),
+                        fg_color=self.theme_colors["primary"],
+                        hover_color=self.theme_colors["button_hover"],
+                        height=35
+                    )
+                    add_button.pack(anchor="w", padx=15, pady=(5, 15))
                 
                 return
 
@@ -3457,8 +3460,9 @@ class MAMEControlConfig(ctk.CTk):
                                         clone_game_list, "Clone ROMs")
             
             # Add a new tab for adding games
-            add_game_tab = tabview.add("Add New Game")
-            self.create_add_game_panel(add_game_tab)
+            if self.ALLOW_ADD_NEW_GAME:  # Toggle add new game feature
+                add_game_tab = tabview.add("Add New Game")
+                self.create_add_game_panel(add_game_tab)
             
             # Add export button
             def export_analysis():
@@ -4119,238 +4123,242 @@ class MAMEControlConfig(ctk.CTk):
                 control_entries[control_name] = action_entry
         
         # Add a section for custom controls with enhanced styling
-        custom_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-        custom_card.pack(fill="x", padx=0, pady=(0, 15))
-        
-        ctk.CTkLabel(
-            custom_card, 
-            text="Custom Controls (Optional)", 
-            font=("Arial", 16, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        # Frame to hold custom control entries
-        custom_controls_frame = ctk.CTkFrame(custom_card, fg_color="transparent")
-        custom_controls_frame.pack(fill="x", padx=15, pady=(0, 15))
-        
-        # List to track custom controls
-        custom_control_rows = []
-        
-        def update_all_dropdowns(changed_control, add=False):
-            """
-            Update all dropdown menus when a control is added or removed
+        if self.ALLOW_CUSTOM_CONTROLS:  # Toggle custom controls feature
+            custom_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+            custom_card.pack(fill="x", padx=0, pady=(0, 15))
             
-            Parameters:
-            - changed_control: The control name that was added or removed
-            - add: True if the control should be added to dropdowns, False if it should be removed
-            """
-            # Only process if it's a valid control name
-            if not changed_control or changed_control == "OTHER (Type custom name)":
-                return
+            ctk.CTkLabel(
+                custom_card, 
+                text="Custom Controls (Optional)", 
+                font=("Arial", 16, "bold")
+            ).pack(anchor="w", padx=15, pady=(15, 10))
+            
+            # Frame to hold custom control entries
+            custom_controls_frame = ctk.CTkFrame(custom_card, fg_color="transparent")
+            custom_controls_frame.pack(fill="x", padx=15, pady=(0, 15))
+            
+            # List to track custom controls
+            custom_control_rows = []
+            
+            def update_all_dropdowns(changed_control, add=False):
+                """
+                Update all dropdown menus when a control is added or removed
                 
-            for row_data in custom_control_rows:
-                if 'dropdown' not in row_data or not row_data['dropdown'].winfo_exists():
-                    continue
+                Parameters:
+                - changed_control: The control name that was added or removed
+                - add: True if the control should be added to dropdowns, False if it should be removed
+                """
+                # Only process if it's a valid control name
+                if not changed_control or changed_control == "OTHER (Type custom name)":
+                    return
                     
-                dropdown = row_data['dropdown']
-                current_options = dropdown.cget("values")
-                current_value = row_data['control_var'].get()
-                
-                # Skip updating this dropdown if it's the one that changed
-                if current_value == changed_control and not add:
-                    continue
-                    
-                if add:
-                    # Add the control back to the options if it's not already there
-                    if changed_control not in current_options:
-                        # Insert the control in alphabetical order (keeping "OTHER" at the end)
-                        new_options = list(current_options)
-                        if "OTHER (Type custom name)" in new_options:
-                            new_options.remove("OTHER (Type custom name)")
-                            
-                        new_options.append(changed_control)
-                        new_options.sort()  # Sort alphabetically
-                        new_options.append("OTHER (Type custom name)")  # Keep OTHER at the end
+                for row_data in custom_control_rows:
+                    if 'dropdown' not in row_data or not row_data['dropdown'].winfo_exists():
+                        continue
                         
-                        # Update the dropdown
-                        dropdown.configure(values=new_options)
-                else:
-                    # Remove the control from the options
-                    if changed_control in current_options:
-                        new_options = [opt for opt in current_options if opt != changed_control]
-                        dropdown.configure(values=new_options)
-        
-        def add_custom_control_row():
-            row_frame = ctk.CTkFrame(custom_controls_frame, fg_color=self.theme_colors["background"], corner_radius=4)
-            row_frame.pack(fill="x", pady=2)
-            
-            # Configure columns
-            row_frame.columnconfigure(0, weight=1)  # Control name
-            row_frame.columnconfigure(1, weight=1)  # Action entry
-            row_frame.columnconfigure(2, weight=0)  # Remove button
-            
-            # Define comprehensive list of all possible MAME controls
-            all_control_options = [
-                # Standard buttons from 1-12
-                "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", 
-                "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
-                "P1_BUTTON9", "P1_BUTTON10", "P1_BUTTON11", "P1_BUTTON12",
-                # System buttons
-                "P1_START", "P1_SELECT", "P1_COIN",
-                # Joysticks
-                "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT",
-                # Right joystick
-                "P1_JOYSTICKRIGHT_UP", "P1_JOYSTICKRIGHT_DOWN", "P1_JOYSTICKRIGHT_LEFT", "P1_JOYSTICKRIGHT_RIGHT",
-                # D-Pad
-                "P1_DPAD_UP", "P1_DPAD_DOWN", "P1_DPAD_LEFT", "P1_DPAD_RIGHT",
-                # Specialized controls
-                "P1_DIAL", "P1_DIAL_V", "P1_PADDLE", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
-                "P1_MOUSE_X", "P1_MOUSE_Y", "P1_LIGHTGUN_X", "P1_LIGHTGUN_Y",
-                "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z",
-                "P1_PEDAL", "P1_PEDAL2", "P1_POSITIONAL",
-                "P1_GAMBLE_HIGH", "P1_GAMBLE_LOW",
-                # Player 2 controls
-                "P2_BUTTON1", "P2_BUTTON2", "P2_BUTTON3", "P2_BUTTON4",
-                "P2_JOYSTICK_UP", "P2_JOYSTICK_DOWN", "P2_JOYSTICK_LEFT", "P2_JOYSTICK_RIGHT",
-                "P2_START", "P2_SELECT",
-            ]
-            
-            # Get list of already assigned controls
-            already_assigned = []
-            
-            # From standard controls
-            for control_name, entry in control_entries.items():
-                if isinstance(entry, ctk.CTkEntry) and entry.get().strip():
-                    already_assigned.append(control_name)
-            
-            # From custom controls
-            for row_data in custom_control_rows:
-                if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
-                    control = row_data['control_var'].get()
-                    if control and control != "OTHER (Type custom name)":
-                        already_assigned.append(control)
-                elif 'custom_entry' in row_data and row_data['custom_entry'].winfo_exists():
-                    control = row_data['custom_entry'].get().strip()
-                    if control:
-                        already_assigned.append(control)
-            
-            # Filter out already assigned controls
-            available_controls = [c for c in all_control_options if c not in already_assigned]
-            
-            # Always add the custom option at the end
-            control_options = available_controls + ["OTHER (Type custom name)"]
-            
-            # Control name dropdown
-            control_var = tk.StringVar()
-            if control_options:
-                control_var.set(control_options[0])  # Set the first available option as default
-            
-            control_dropdown = ctk.CTkComboBox(
-                row_frame,
-                width=250,
-                values=control_options,
-                variable=control_var,
-                fg_color=self.theme_colors["card_bg"],
-                button_color=self.theme_colors["primary"],
-                button_hover_color=self.theme_colors["secondary"],
-                dropdown_fg_color=self.theme_colors["card_bg"]
-            )
-            control_dropdown.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
-            
-            # Custom control entry (initially hidden)
-            custom_control_entry = ctk.CTkEntry(
-                row_frame,
-                width=250,
-                placeholder_text="Enter custom control name",
-                fg_color=self.theme_colors["card_bg"]
-            )
-            custom_control_entry.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
-            custom_control_entry.grid_remove()  # Initially hidden
-            
-            # Function to handle dropdown changes
-            def on_dropdown_change(*args):
-                old_value = getattr(control_var, "_last_value", None)
-                new_value = control_var.get()
-                
-                # Store the current value for next time
-                control_var._last_value = new_value
-                
-                if new_value == "OTHER (Type custom name)":
-                    # Hide dropdown, show custom entry
-                    control_dropdown.grid_remove()
-                    custom_control_entry.grid()
-                    custom_control_entry.focus_set()
-                elif old_value != new_value:
-                    # Control selection changed, update other dropdowns
-                    update_all_dropdowns(new_value, add=False)  # Remove from other dropdowns
-                    if old_value and old_value != "OTHER (Type custom name)":
-                        update_all_dropdowns(old_value, add=True)  # Add old value back to other dropdowns
-
-            # Bind the change event
-            control_var.trace_add("write", on_dropdown_change)
-            
-            # Action entry
-            action_entry = ctk.CTkEntry(
-                row_frame, 
-                width=400, 
-                placeholder_text="Action/Function",
-                fg_color=self.theme_colors["card_bg"]
-            )
-            action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
-
-            def remove_row():
-                row_frame.pack_forget()
-                row_frame.destroy()
-                if row_data in custom_control_rows:
-                    custom_control_rows.remove(row_data)
+                    dropdown = row_data['dropdown']
+                    current_options = dropdown.cget("values")
+                    current_value = row_data['control_var'].get()
                     
-                    # Update other dropdowns to make this control available again
+                    # Skip updating this dropdown if it's the one that changed
+                    if current_value == changed_control and not add:
+                        continue
+                        
+                    if add:
+                        # Add the control back to the options if it's not already there
+                        if changed_control not in current_options:
+                            # Insert the control in alphabetical order (keeping "OTHER" at the end)
+                            new_options = list(current_options)
+                            if "OTHER (Type custom name)" in new_options:
+                                new_options.remove("OTHER (Type custom name)")
+                                
+                            new_options.append(changed_control)
+                            new_options.sort()  # Sort alphabetically
+                            new_options.append("OTHER (Type custom name)")  # Keep OTHER at the end
+                            
+                            # Update the dropdown
+                            dropdown.configure(values=new_options)
+                    else:
+                        # Remove the control from the options
+                        if changed_control in current_options:
+                            new_options = [opt for opt in current_options if opt != changed_control]
+                            dropdown.configure(values=new_options)
+            
+            def add_custom_control_row():
+                row_frame = ctk.CTkFrame(custom_controls_frame, fg_color=self.theme_colors["background"], corner_radius=4)
+                row_frame.pack(fill="x", pady=2)
+                
+                # Configure columns
+                row_frame.columnconfigure(0, weight=1)  # Control name
+                row_frame.columnconfigure(1, weight=1)  # Action entry
+                row_frame.columnconfigure(2, weight=0)  # Remove button
+                
+                # Define comprehensive list of all possible MAME controls
+                all_control_options = [
+                    # Standard buttons from 1-12
+                    "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", 
+                    "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
+                    "P1_BUTTON9", "P1_BUTTON10", "P1_BUTTON11", "P1_BUTTON12",
+                    # System buttons
+                    "P1_START", "P1_SELECT", "P1_COIN",
+                    # Joysticks
+                    "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT",
+                    # Right joystick
+                    "P1_JOYSTICKRIGHT_UP", "P1_JOYSTICKRIGHT_DOWN", "P1_JOYSTICKRIGHT_LEFT", "P1_JOYSTICKRIGHT_RIGHT",
+                    # D-Pad
+                    "P1_DPAD_UP", "P1_DPAD_DOWN", "P1_DPAD_LEFT", "P1_DPAD_RIGHT",
+                    # Specialized controls
+                    "P1_DIAL", "P1_DIAL_V", "P1_PADDLE", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
+                    "P1_MOUSE_X", "P1_MOUSE_Y", "P1_LIGHTGUN_X", "P1_LIGHTGUN_Y",
+                    "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z",
+                    "P1_PEDAL", "P1_PEDAL2", "P1_POSITIONAL",
+                    "P1_GAMBLE_HIGH", "P1_GAMBLE_LOW",
+                    # Player 2 controls
+                    "P2_BUTTON1", "P2_BUTTON2", "P2_BUTTON3", "P2_BUTTON4",
+                    "P2_JOYSTICK_UP", "P2_JOYSTICK_DOWN", "P2_JOYSTICK_LEFT", "P2_JOYSTICK_RIGHT",
+                    "P2_START", "P2_SELECT",
+                ]
+                
+                # Get list of already assigned controls
+                already_assigned = []
+                
+                # From standard controls
+                for control_name, entry in control_entries.items():
+                    if isinstance(entry, ctk.CTkEntry) and entry.get().strip():
+                        already_assigned.append(control_name)
+                
+                # From custom controls
+                for row_data in custom_control_rows:
                     if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
-                        removed_control = row_data['control_var'].get()
-                        if removed_control != "OTHER (Type custom name)":
-                            update_all_dropdowns(removed_control, add=True)
-                    elif 'custom_entry' in row_data:
-                        removed_control = row_data['custom_entry'].get().strip()
-                        if removed_control:
-                            update_all_dropdowns(removed_control, add=True)
+                        control = row_data['control_var'].get()
+                        if control and control != "OTHER (Type custom name)":
+                            already_assigned.append(control)
+                    elif 'custom_entry' in row_data and row_data['custom_entry'].winfo_exists():
+                        control = row_data['custom_entry'].get().strip()
+                        if control:
+                            already_assigned.append(control)
+                
+                # Filter out already assigned controls
+                available_controls = [c for c in all_control_options if c not in already_assigned]
+                
+                # Always add the custom option at the end
+                control_options = available_controls + ["OTHER (Type custom name)"]
+                
+                # Control name dropdown
+                control_var = tk.StringVar()
+                if control_options:
+                    control_var.set(control_options[0])  # Set the first available option as default
+                
+                control_dropdown = ctk.CTkComboBox(
+                    row_frame,
+                    width=250,
+                    values=control_options,
+                    variable=control_var,
+                    fg_color=self.theme_colors["card_bg"],
+                    button_color=self.theme_colors["primary"],
+                    button_hover_color=self.theme_colors["secondary"],
+                    dropdown_fg_color=self.theme_colors["card_bg"]
+                )
+                control_dropdown.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
+                
+                # Custom control entry (initially hidden)
+                custom_control_entry = ctk.CTkEntry(
+                    row_frame,
+                    width=250,
+                    placeholder_text="Enter custom control name",
+                    fg_color=self.theme_colors["card_bg"]
+                )
+                custom_control_entry.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
+                custom_control_entry.grid_remove()  # Initially hidden
+                
+                # Function to handle dropdown changes
+                def on_dropdown_change(*args):
+                    old_value = getattr(control_var, "_last_value", None)
+                    new_value = control_var.get()
+                    
+                    # Store the current value for next time
+                    control_var._last_value = new_value
+                    
+                    if new_value == "OTHER (Type custom name)":
+                        # Hide dropdown, show custom entry
+                        control_dropdown.grid_remove()
+                        custom_control_entry.grid()
+                        custom_control_entry.focus_set()
+                    elif old_value != new_value:
+                        # Control selection changed, update other dropdowns
+                        update_all_dropdowns(new_value, add=False)  # Remove from other dropdowns
+                        if old_value and old_value != "OTHER (Type custom name)":
+                            update_all_dropdowns(old_value, add=True)  # Add old value back to other dropdowns
+
+                # Bind the change event
+                control_var.trace_add("write", on_dropdown_change)
+                
+                # Action entry
+                action_entry = ctk.CTkEntry(
+                    row_frame, 
+                    width=400, 
+                    placeholder_text="Action/Function",
+                    fg_color=self.theme_colors["card_bg"]
+                )
+                action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+
+                def remove_row():
+                    row_frame.pack_forget()
+                    row_frame.destroy()
+                    if row_data in custom_control_rows:
+                        custom_control_rows.remove(row_data)
+                        
+                        # Update other dropdowns to make this control available again
+                        if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
+                            removed_control = row_data['control_var'].get()
+                            if removed_control != "OTHER (Type custom name)":
+                                update_all_dropdowns(removed_control, add=True)
+                        elif 'custom_entry' in row_data:
+                            removed_control = row_data['custom_entry'].get().strip()
+                            if removed_control:
+                                update_all_dropdowns(removed_control, add=True)
+                
+                remove_button = ctk.CTkButton(
+                    row_frame,
+                    text="×",
+                    width=30,
+                    height=30,
+                    command=remove_row,
+                    fg_color=self.theme_colors["danger"],
+                    hover_color="#c82333",
+                    font=("Arial", 14, "bold"),
+                    corner_radius=15
+                )
+                remove_button.grid(row=0, column=2, padx=(5, 10), pady=8)
+                
+                # Store row data
+                row_data = {
+                    'frame': row_frame, 
+                    'dropdown': control_dropdown,
+                    'custom_entry': custom_control_entry,
+                    'control_var': control_var,
+                    'action': action_entry
+                }
+                custom_control_rows.append(row_data)
+                
+                return row_data
             
-            remove_button = ctk.CTkButton(
-                row_frame,
-                text="×",
-                width=30,
-                height=30,
-                command=remove_row,
-                fg_color=self.theme_colors["danger"],
-                hover_color="#c82333",
-                font=("Arial", 14, "bold"),
-                corner_radius=15
+            # Add first custom row
+            add_custom_control_row()
+            
+            # Add button for additional rows
+            add_custom_button = ctk.CTkButton(
+                custom_controls_frame,
+                text="+ Add Another Custom Control",
+                command=add_custom_control_row,
+                fg_color=self.theme_colors["primary"],
+                hover_color=self.theme_colors["button_hover"],
+                height=35
             )
-            remove_button.grid(row=0, column=2, padx=(5, 10), pady=8)
-            
-            # Store row data
-            row_data = {
-                'frame': row_frame, 
-                'dropdown': control_dropdown,
-                'custom_entry': custom_control_entry,
-                'control_var': control_var,
-                'action': action_entry
-            }
-            custom_control_rows.append(row_data)
-            
-            return row_data
-        
-        # Add first custom row
-        add_custom_control_row()
-        
-        # Add button for additional rows
-        add_custom_button = ctk.CTkButton(
-            custom_controls_frame,
-            text="+ Add Another Custom Control",
-            command=add_custom_control_row,
-            fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["button_hover"],
-            height=35
-        )
-        add_custom_button.pack(pady=10)
+            add_custom_button.pack(pady=10)
+        else:
+            # Create empty list to prevent errors in save function
+            custom_control_rows = []
         
         # MOVED: Clone games section BELOW control mappings
         # Clone games card
@@ -5760,12 +5768,14 @@ class MAMEControlConfig(ctk.CTk):
                 # This will use our updated show_control_editor which handles redirecting clones
                 self.show_control_editor(rom, game_name)
         
-        edit_button = ctk.CTkButton(
-            button_frame,
-            text="Edit Selected Game",
-            command=edit_selected_game
-        )
-        edit_button.pack(side=tk.LEFT, padx=5)
+        # Only show edit button if adding new games is allowed
+        if self.ALLOW_ADD_NEW_GAME:  # or if False: to disable
+            edit_button = ctk.CTkButton(
+                button_frame,
+                text="Edit Selected Game",
+                command=edit_selected_game
+            )
+            edit_button.pack(side=tk.LEFT, padx=5)
         
         return list_frame
     
