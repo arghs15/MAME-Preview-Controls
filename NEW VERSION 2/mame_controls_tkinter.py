@@ -8223,11 +8223,18 @@ class MAMEControlConfig(ctk.CTk):
         
         return settings
     
-    # Update load_gamedata_json method
     def load_gamedata_json(self):
-        """Load gamedata.json from the canonical settings location"""
+        """Load gamedata.json from the canonical settings location with improved error handling"""
         if hasattr(self, 'gamedata_json') and self.gamedata_json:
             return self.gamedata_json  # Already loaded
+        
+        # Check if we've already shown a JSON error to prevent repeated dialogs
+        if hasattr(self, '_json_error_shown') and self._json_error_shown:
+            # Return empty data without showing error again
+            if not hasattr(self, 'gamedata_json'):
+                self.gamedata_json = {}
+                self.parent_lookup = {}
+            return self.gamedata_json
         
         # Use the new method to find gamedata.json
         gamedata_path = self.find_file_in_standard_locations(
@@ -8271,12 +8278,187 @@ class MAMEControlConfig(ctk.CTk):
                         # This avoids duplicating entries and preserves the hierarchy
                 
             return self.gamedata_json
-                
-        except Exception as e:
-            print(f"ERROR loading gamedata.json: {str(e)}")
+        
+        except json.JSONDecodeError as e:
+            # Handle JSON parsing errors specifically
+            error_title = "Corrupted gamedata.json File"
+            error_message = (
+                f"The gamedata.json file has been manually edited and contains a syntax error.\n\n"
+                f"Error Details:\n"
+                f"• File: {gamedata_path}\n"
+                f"• Line: {e.lineno}\n"
+                f"• Column: {e.colno}\n"
+                f"• Error: {e.msg}\n\n"
+                f"Please fix the JSON syntax error and restart the application.\n\n"
+                f"Common issues:\n"
+                f"• Missing or extra commas\n"
+                f"• Unclosed quotes or brackets\n"
+                f"• Invalid escape characters\n\n"
+                f"You can use an online JSON validator to help identify the issue."
+            )
+            
+            # Mark that we've shown the error to prevent repeated dialogs
+            self._json_error_shown = True
+            
+            # Show error dialog and close splash if it exists
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+            
+            # Show the error dialog
+            messagebox.showerror(error_title, error_message)
+            
+            # Print to console for debugging
+            print(f"JSON PARSE ERROR in {gamedata_path}:")
+            print(f"  Line {e.lineno}, Column {e.colno}: {e.msg}")
+            
+            # Set empty data and exit gracefully
             self.gamedata_json = {}
             self.parent_lookup = {}
+            
+            # Schedule application exit after showing error (immediate)
+            self.after(1, self.force_close_with_json_error)
+            
             return {}
+            
+        except FileNotFoundError:
+            # Handle file not found specifically
+            # Mark that we've shown the error to prevent repeated dialogs
+            self._json_error_shown = True
+            
+            error_message = (
+                f"The gamedata.json file could not be found at:\n"
+                f"{gamedata_path}\n\n"
+                f"This file is required for the application to function.\n"
+                f"Please ensure the file exists and restart the application."
+            )
+            
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+            
+            messagebox.showerror("Missing gamedata.json", error_message)
+            self.gamedata_json = {}
+            self.parent_lookup = {}
+            self.after(1, self.force_close_with_json_error)
+            return {}
+            
+        except UnicodeDecodeError as e:
+            # Handle encoding errors
+            # Mark that we've shown the error to prevent repeated dialogs
+            self._json_error_shown = True
+            
+            error_message = (
+                f"The gamedata.json file contains invalid characters and cannot be read.\n\n"
+                f"Error Details:\n"
+                f"• File: {gamedata_path}\n"
+                f"• Encoding: {e.encoding}\n"
+                f"• Position: {e.start}-{e.end}\n"
+                f"• Reason: {e.reason}\n\n"
+                f"Please ensure the file is saved in UTF-8 encoding."
+            )
+            
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+            
+            messagebox.showerror("File Encoding Error", error_message)
+            self.gamedata_json = {}
+            self.parent_lookup = {}
+            self.after(1, self.force_close_with_json_error)
+            return {}
+            
+        except Exception as e:
+            # Handle any other unexpected errors
+            # Mark that we've shown the error to prevent repeated dialogs
+            self._json_error_shown = True
+            
+            error_message = (
+                f"An unexpected error occurred while loading gamedata.json:\n\n"
+                f"Error: {str(e)}\n"
+                f"File: {gamedata_path}\n\n"
+                f"Please check the file and restart the application."
+            )
+            
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+            
+            messagebox.showerror("Unexpected Error", error_message)
+            print(f"ERROR loading gamedata.json: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            self.gamedata_json = {}
+            self.parent_lookup = {}
+            self.after(1, self.force_close_with_json_error)
+            return {}
+
+    def force_close_with_json_error(self):
+        """Force close the application after a JSON error"""
+        try:
+            print("Forcing application close due to JSON error...")
+            
+            # Clean up any resources
+            if hasattr(self, 'async_loader'):
+                try:
+                    self.async_loader.stop_worker()
+                except:
+                    pass
+            
+            # Destroy any remaining windows
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+            
+            # Cancel any pending after() calls
+            try:
+                # Cancel all pending after() calls
+                for i in range(1000):  # Clear a reasonable number of pending calls
+                    try:
+                        self.after_cancel(f"after#{i}")
+                    except:
+                        pass
+            except:
+                pass
+            
+            # Withdraw the main window immediately
+            try:
+                self.withdraw()
+            except:
+                pass
+            
+            # Exit the application immediately
+            self.quit()
+            
+            # Force exit if needed
+            import sys
+            print("Exiting application...")
+            sys.exit(1)
+            
+        except Exception as e:
+            print(f"Error during forced close: {e}")
+            # Force exit even if cleanup fails
+            import sys
+            sys.exit(1)
+
+    def has_json_error(self):
+        """Check if there was a JSON loading error"""
+        return hasattr(self, '_json_error_shown') and self._json_error_shown
 
     def export_image_headless(self, output_path, format="png"):
         """Export preview image in headless mode using existing save_image functionality with bezel settings"""
