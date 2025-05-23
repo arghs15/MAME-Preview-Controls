@@ -5136,19 +5136,11 @@ class MAMEControlConfig(ctk.CTk):
     @lru_cache(maxsize=128)
     def get_game_data(self, romname):
         """Get game data with integrated database prioritization and improved handling of unnamed controls"""
+        
         # 1. Check cache first (this is redundant with lru_cache but kept for backward compatibility)
         if hasattr(self, 'rom_data_cache') and romname in self.rom_data_cache:
             cached_data = self.rom_data_cache[romname]
             
-            # Check if cached data matches current XInput mode setting
-            cached_xinput_only = cached_data.get('xinput_only_mode', False)
-            current_xinput_only = getattr(self, 'xinput_only_mode', False)
-            
-            # If modes match, return cached data
-            if cached_xinput_only == current_xinput_only:
-                return cached_data
-            # Otherwise, fall through to reload with correct mode
-        
         # 2. Try database first if available
         if os.path.exists(self.db_path):
             db_data = self.get_game_data_from_db(romname)
@@ -5255,9 +5247,14 @@ class MAMEControlConfig(ctk.CTk):
                 for control_name, control_data in controls.items():
                     # Add P1 controls
                     if control_name.startswith('P1_'):
-                        # Skip non-joystick/button controls
-                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
-                            # Get the friendly name
+                        
+                        # Include standard controls AND specialized analog/positional controls
+                        specialized_control_types = ['JOYSTICK', 'BUTTON', 'PEDAL', 'AD_STICK', 'DIAL', 'PADDLE', 
+                                                   'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE']
+                        
+                        if any(control_type in control_name for control_type in specialized_control_types):
+                            
+                            # Get the friendly name - IMPORTANT: Always provide a fallback
                             friendly_name = None
                             
                             # First check for explicit name
@@ -5266,43 +5263,56 @@ class MAMEControlConfig(ctk.CTk):
                             # Then check for default actions
                             elif control_name in default_actions:
                                 friendly_name = default_actions[control_name]
-                            # Fallback to control name
+                            # ALWAYS provide a fallback - never leave friendly_name as None
                             else:
                                 parts = control_name.split('_')
                                 if len(parts) > 1:
-                                    friendly_name = parts[-1]
-                                
-                            if friendly_name:
-                                p1_controls.append({
-                                    'name': control_name,
-                                    'value': friendly_name
-                                })
-                    
-                    # Add P2 controls - prioritize matching P1 button names
-                    elif control_name.startswith('P2_'):
-                        if 'JOYSTICK' in control_name or 'BUTTON' in control_name:
-                            friendly_name = None
+                                    friendly_name = parts[-1].replace('_', ' ').title()
+                                else:
+                                    friendly_name = control_name
                             
-                            # First check for explicit name
-                            if 'name' in control_data and control_data['name']:
-                                friendly_name = control_data['name']
-                            # Then check if we have a matching P1 button name
-                            elif control_name in p1_button_names:
-                                friendly_name = p1_button_names[control_name]
-                            # Then check defaults
-                            elif control_name in default_actions:
-                                friendly_name = default_actions[control_name]
-                            # Fallback to control name
-                            else:
-                                parts = control_name.split('_')
-                                if len(parts) > 1:
-                                    friendly_name = parts[-1]
-                                
-                            if friendly_name:
-                                p2_controls.append({
-                                    'name': control_name,
-                                    'value': friendly_name
-                                })
+                            # ALWAYS add the control - don't check if friendly_name exists
+                            control_entry = {
+                                'name': control_name,
+                                'value': friendly_name
+                            }
+                            p1_controls.append(control_entry)
+           
+                # Handle system controls that don't have P1_ prefix
+                # If shown the directional and analog only games will not displayt correctly.
+                system_control_mappings = {
+                    #'START1': ('P1_START', 'Start Button'),
+                    #'START2': ('P2_START', 'Start Button'), 
+                    #'COIN1': ('P1_SELECT', 'Insert Coin'),
+                    #'COIN2': ('P2_SELECT', 'Insert Coin'),
+                    'SERVICE1': ('P1_SERVICE', 'Service Button'),
+                    'TEST1': ('P1_TEST', 'Test Button')
+                }
+
+                for original_control, control_data in controls.items():
+                    if original_control in system_control_mappings:
+                        mapped_name, default_action = system_control_mappings[original_control]
+                        
+                        # Determine which player list this belongs to
+                        if mapped_name.startswith('P1_'):
+                            target_list = p1_controls
+                        elif mapped_name.startswith('P2_'):
+                            target_list = p2_controls
+                        else:
+                            continue
+                            
+                        # Get friendly name
+                        friendly_name = None
+                        if 'name' in control_data and control_data['name']:
+                            friendly_name = control_data['name']
+                        else:
+                            friendly_name = default_action
+                            
+                        # Add to appropriate player list
+                        target_list.append({
+                            'name': mapped_name,  # Use the standardized name
+                            'value': friendly_name
+                        })
                 
                 # Also check for special direction mappings (P1_UP, etc.)
                 for control_name, control_data in controls.items():
@@ -5444,6 +5454,7 @@ class MAMEControlConfig(ctk.CTk):
     # Update the get_game_data_from_db method to handle controls without names
     def get_game_data_from_db(self, romname):
         """Get control data for a ROM from the SQLite database with better handling of unnamed controls"""
+        
         if not os.path.exists(self.db_path):
             return None
         
@@ -5456,9 +5467,9 @@ class MAMEControlConfig(ctk.CTk):
             
             # Get basic game info
             cursor.execute("""
-                SELECT rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom
-                FROM games WHERE rom_name = ?
+                SELECT control_name, display_name FROM game_controls WHERE rom_name = ?
             """, (romname,))
+            control_rows = cursor.fetchall()
             
             game_row = cursor.fetchone()
             
@@ -5548,11 +5559,47 @@ class MAMEControlConfig(ctk.CTk):
                 'P2_BUTTON8': 'RT Button',
                 'P2_BUTTON9': 'Left Stick Button',
                 'P2_BUTTON10': 'Right Stick Button',
+                # ADD SPECIALIZED CONTROLS:
+                'P1_PEDAL': 'Accelerator Pedal',
+                'P1_PEDAL2': 'Brake Pedal',
+                'P1_AD_STICK_X': 'Analog Stick Left/Right',
+                'P1_AD_STICK_Y': 'Analog Stick Up/Down',
+                'P1_AD_STICK_Z': 'Analog Stick Z-Axis',
+                'P1_DIAL': 'Dial Control',
+                'P1_DIAL_V': 'Vertical Dial',
+                'P1_PADDLE': 'Paddle Control',
+                'P1_TRACKBALL_X': 'Trackball X-Axis',
+                'P1_TRACKBALL_Y': 'Trackball Y-Axis',
+                'P1_MOUSE_X': 'Mouse X-Axis',
+                'P1_MOUSE_Y': 'Mouse Y-Axis',
+                'P1_LIGHTGUN_X': 'Light Gun X-Axis',
+                'P1_LIGHTGUN_Y': 'Light Gun Y-Axis',
+                'P1_POSITIONAL': 'Positional Control',
+                'P1_GAMBLE_HIGH': 'Gamble High',
+                'P1_GAMBLE_LOW': 'Gamble Low',
+                'P2_PEDAL': 'Accelerator Pedal',
+                'P2_PEDAL2': 'Brake Pedal',
+                'P2_AD_STICK_X': 'Analog Stick Left/Right',
+                'P2_AD_STICK_Y': 'Analog Stick Up/Down',
+                'P2_AD_STICK_Z': 'Analog Stick Z-Axis',
             }
             
+            # System control mappings for non-P1_/P2_ prefixed controls
+            system_control_mappings = {
+                'SERVICE1': ('P1_SERVICE', 'Service Button'),
+                'TEST1': ('P1_TEST', 'Test Button')
+            }
+
             for control in control_rows:
                 control_name = control[0]  # First column
                 display_name = control[1]  # Second column
+                
+                # Handle system control mapping first
+                if control_name in system_control_mappings:
+                    mapped_name, default_action = system_control_mappings[control_name]
+                    control_name = mapped_name  # Use the mapped name
+                    if not display_name:
+                        display_name = default_action
                 
                 # If display_name is empty, try to use a default
                 if not display_name and control_name in default_actions:
@@ -5562,10 +5609,11 @@ class MAMEControlConfig(ctk.CTk):
                 if not display_name:
                     parts = control_name.split('_')
                     if len(parts) > 1:
-                        display_name = parts[-1].capitalize()
+                        display_name = parts[-1].replace('_', ' ').title()
                     else:
                         display_name = control_name  # Last resort
                 
+                # Add to appropriate player list (NO FILTERING BY CONTROL TYPE)
                 if control_name.startswith('P1_'):
                     p1_controls.append({
                         'name': control_name,
@@ -7223,22 +7271,22 @@ class MAMEControlConfig(ctk.CTk):
         
         # When collecting controls, add this debug print
         all_controls = []
-        print(f"DEBUG: Starting to collect Player 1 controls")
+        #print(f"DEBUG: Starting to collect Player 1 controls")
         
         for player in game_data.get('players', []):
             player_num = player.get('number')
-            print(f"DEBUG: Player {player_num} has {len(player.get('labels', []))} labels")
+            #print(f"DEBUG: Player {player_num} has {len(player.get('labels', []))} labels")
             
             if player.get('number') == 1:  # Only include Player 1
                 for label in player.get('labels', []):
                     # Add debug information
                     control_name = label['name']
                     action = label['value']
-                    print(f"DEBUG: Processing control {control_name}: {action}")
+                    #print(f"DEBUG: Processing control {control_name}: {action}")
                     
                     # For AD_STICK controls, ensure they're processed
                     if "AD_STICK" in control_name:
-                        print(f"DEBUG: Found AD_STICK control: {control_name}")
+                        #print(f"DEBUG: Found AD_STICK control: {control_name}")
                         # Force flag to true for these controls
                         label['is_custom'] = control_name in cfg_controls
                         # Set display mode to ensure it shows up
