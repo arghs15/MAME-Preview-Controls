@@ -2,16 +2,13 @@ import subprocess
 import sys
 import os
 import json
-import re
 import time
-from typing import Dict, Optional, Set, List, Tuple
+from typing import Optional
 import xml.etree.ElementTree as ET
 from mame_utils import (
     get_application_path, 
     get_mame_parent_dir, 
-    find_file_in_standard_locations,
-    load_json_file,
-    save_json_file
+    find_file_in_standard_locations
 )
 
 class PositionManager:
@@ -19,7 +16,6 @@ class PositionManager:
     def __init__(self, parent):
         self.parent = parent
         self.positions = {}
-
 
 class MAMEControlConfig:
     def __init__(self, preview_only=False):

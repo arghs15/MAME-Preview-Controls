@@ -1,15 +1,13 @@
-import builtins
 import os
 import random
 import sys
 import json
-import traceback
 from PyQt5 import sip
-from PyQt5.QtWidgets import (QAction, QGridLayout, QLayout, QLineEdit, QMainWindow, QMenu, QMessageBox, QSizePolicy, QSpinBox, QVBoxLayout, QHBoxLayout, QWidget, 
-                            QLabel, QPushButton, QFrame, QApplication, QDesktopWidget,
+from PyQt5.QtWidgets import (QGridLayout, QLayout, QLineEdit, QMainWindow, QMessageBox, QSizePolicy, QSpinBox, QVBoxLayout, QHBoxLayout, QWidget, 
+                            QLabel, QPushButton, QApplication, QDesktopWidget,
                             QDialog, QGroupBox, QCheckBox, QSlider, QComboBox)
-from PyQt5.QtGui import QBrush, QFontInfo, QImage, QLinearGradient, QPalette, QPixmap, QFont, QColor, QPainter, QPen, QFontMetrics
-from PyQt5.QtCore import Qt, QPoint, QTimer, QRect, QEvent, QSize
+from PyQt5.QtGui import QBrush, QLinearGradient, QPalette, QPixmap, QFont, QColor, QPainter, QPen, QFontMetrics
+from PyQt5.QtCore import Qt, QPoint, QTimer
 
 # Helper function that should be at the top of the file
 def get_application_path():
