@@ -2840,16 +2840,18 @@ class MAMEControlConfig(ctk.CTk):
     def show_game_context_menu_listbox(self, event):
         """Show context menu on right-click for ROM entries in listbox"""
         try:
-            # Get the index at the event position (CTkListbox may have a different method for this)
-            # You might need to adjust this based on CTkListbox's API
-            index = self.game_listbox.curselection()
+            # Get the clicked item index
+            clicked_index = self.game_listbox.nearest(event.y)
             
-            # Select the clicked item
-            self.game_listbox.activate(index)
+            # Clear selection and select the clicked item
+            self.game_listbox.selection_clear(0, tk.END)
+            self.game_listbox.selection_set(clicked_index)
+            self.game_listbox.activate(clicked_index)
             
             # Get ROM name from our data list
-            if index < len(self.game_list_data):
-                rom_name, display_text = self.game_list_data[index]
+            if clicked_index < len(self.game_list_data):
+                rom_name, display_text = self.game_list_data[clicked_index]
+                #rom_name, display_text = self.game_list_data[index]
                 
                 # DEBUGGING: Print raw line content
                 print(f"Context menu for ROM: '{rom_name}'")
@@ -2861,15 +2863,16 @@ class MAMEControlConfig(ctk.CTk):
                 # Create context menu
                 context_menu = tk.Menu(self, tearoff=0)
                 
-                # Add menu items
-                if is_clone and parent_rom:
-                    # For clones, show different edit option that redirects to parent
-                    context_menu.add_command(label=f"Edit Controls (Parent: {parent_rom})", 
-                                        command=lambda: self.show_control_editor(rom_name))
-                else:
-                    # Regular edit option for non-clones
-                    context_menu.add_command(label="Edit Controls", 
-                                        command=lambda: self.show_control_editor(rom_name))
+               # Add menu items - only show Edit Controls if adding new games is allowed
+                if self.ALLOW_ADD_NEW_GAME:
+                    if is_clone and parent_rom:
+                        # For clones, show different edit option that redirects to parent
+                        context_menu.add_command(label=f"Edit Controls (Parent: {parent_rom})", 
+                                            command=lambda: self.show_control_editor(rom_name))
+                    else:
+                        # Regular edit option for non-clones
+                        context_menu.add_command(label="Edit Controls", 
+                                            command=lambda: self.show_control_editor(rom_name))
                 
                 # Preview controls is always available
                 context_menu.add_command(label="Preview Controls", 
