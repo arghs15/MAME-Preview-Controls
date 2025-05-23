@@ -105,26 +105,9 @@ class PreviewWindow(QMainWindow):
             button_count = 0
             
             # Scan game data to identify control types
-            for player in self.game_data.get('players', []):
-                if player['number'] != 1:  # Only analyze Player 1 controls
-                    continue
-                
-                for control in player.get('labels', []):
-                    control_name = control['name']
-                    
-                    # Count directional controls - EXPANDED LIST
-                    if any(control_type in control_name for control_type in [
-                        "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
-                        "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
-                        "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
-                    ]):
-                        directional_count += 1
-                    # Count button controls (excluding directional inputs)
-                    elif any(control_type in control_name for control_type in ["BUTTON", "START", "SELECT", "GAMBLE"]):
-                        button_count += 1
+            # Analyze game controls to determine if it's standard-directional-only
+            self.analyze_game_controls_improved()
             
-            # Determine if this is a directional-only game
-            self.is_directional_only_game = directional_count > 0 and button_count == 0
             print(f"Early game control analysis: {directional_count} directional, {button_count} buttons")
             print(f"Is directional-only game: {self.is_directional_only_game}")
             
@@ -3420,8 +3403,21 @@ class PreviewWindow(QMainWindow):
             if hasattr(self, 'specialized_controls_button'):
                 self.specialized_controls_button.setText("Specialized Controls")
 
+    def get_standard_directional_controls(self, control_name):
+        """Check if control is standard directional"""
+        return any(control_type in control_name for control_type in [
+            "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"
+        ])
+
+    def get_specialized_directional_controls(self, control_name):
+        """Check if control is specialized directional"""
+        return any(control_type in control_name for control_type in [
+            "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", 
+            "AD_STICK", "PEDAL", "POSITIONAL"
+        ])
+
     def apply_joystick_visibility(self):
-        """Force apply joystick visibility settings to all directional controls"""
+        """Apply joystick visibility ONLY to standard directional controls, leave specialized controls alone"""
         controls_updated = 0
         
         # Get the auto-show directionals setting
@@ -3435,18 +3431,19 @@ class PreviewWindow(QMainWindow):
             if 'label' not in control_data or not control_data['label']:
                 continue
                 
-            # Check for all types of directional controls - EXPANDED LIST
-            if any(control_type in control_name for control_type in [
-                "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD",  # Standard directional
-                "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
-                "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
-            ]):
-                # MANUAL OVERRIDE FIRST: If user manually set joystick_visible, respect it
-                # Only apply auto-show logic if auto_show_directionals is True AND it's directional-only
+            # ONLY affect STANDARD directional controls (joystick, d-pad)
+            # Do NOT affect specialized controls (trackball, dial, etc.)
+            standard_directional_types = [
+                "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"
+            ]
+            
+            if any(control_type in control_name for control_type in standard_directional_types):
+                # This is a standard directional control - apply joystick_visible logic
+                
                 if is_directional_only and auto_show_directionals and not self.joystick_visible:
                     # Override to visible for directional-only games (if auto-show enabled)
                     is_visible = self.texts_visible
-                    print(f"Auto-showing {control_name} for directional-only game")
+                    print(f"Auto-showing standard directional {control_name} for directional-only game")
                 else:
                     # Use manual joystick_visible setting
                     is_visible = self.texts_visible and self.joystick_visible
@@ -3455,9 +3452,59 @@ class PreviewWindow(QMainWindow):
                 if control_data['label'].isVisible() != is_visible:
                     control_data['label'].setVisible(is_visible)
                     controls_updated += 1
+                    print(f"Updated {control_name} visibility to {is_visible}")
+            
+            # SPECIALIZED controls are left alone - they keep their current visibility
+            # This includes: DIAL, PADDLE, TRACKBALL, MOUSE, LIGHTGUN, AD_STICK, PEDAL, POSITIONAL
         
-        print(f"Applied directional controls visibility to {controls_updated} controls (manual setting: {self.joystick_visible})")
+        print(f"Applied standard directional visibility to {controls_updated} controls (joystick_visible: {self.joystick_visible})")
+        print(f"Specialized directional controls (trackball, dial, etc.) are unaffected")
         return controls_updated
+
+    # Also add helper methods for clarity:
+
+    def is_standard_directional_control(self, control_name):
+        """Check if control is a standard directional control (joystick, d-pad)"""
+        standard_directional_types = [
+            "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"
+        ]
+        return any(control_type in control_name for control_type in standard_directional_types)
+
+    def is_specialized_directional_control(self, control_name):
+        """Check if control is a specialized directional control (dial, trackball, etc.)"""
+        specialized_directional_types = [
+            "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", 
+            "AD_STICK", "PEDAL", "POSITIONAL"
+        ]
+        return any(control_type in control_name for control_type in specialized_directional_types)
+
+    # Update the game analysis method to use the helper:
+    def analyze_game_controls_improved(self):
+        """Analyze game controls to determine if it's directional-only (standard directional only)"""
+        directional_count = 0
+        button_count = 0
+        
+        # Scan game data to identify control types
+        for player in self.game_data.get('players', []):
+            if player['number'] != 1:  # Only analyze Player 1 controls
+                continue
+            
+            for control in player.get('labels', []):
+                control_name = control['name']
+                
+                # Count STANDARD directional controls only
+                if self.is_standard_directional_control(control_name):
+                    directional_count += 1
+                # Count button controls (excluding directional inputs)
+                elif any(control_type in control_name for control_type in ["BUTTON", "START", "SELECT", "GAMBLE"]):
+                    button_count += 1
+        
+        # Determine if this is a directional-only game (based on STANDARD directional only)
+        self.is_directional_only_game = directional_count > 0 and button_count == 0
+        print(f"Game control analysis: {directional_count} standard directional, {button_count} buttons")
+        print(f"Is standard-directional-only game: {self.is_directional_only_game}")
+        
+        return self.is_directional_only_game
 
     # Update resizeEvent to handle bezel resizing
     def on_resize_with_bezel(self, event):
@@ -5956,15 +6003,23 @@ class PreviewWindow(QMainWindow):
                 
                 # Determine visibility based on control type
                 is_visible = True
-                is_directional = any(control_type in control_name for control_type in [
-                    "JOYSTICK", "JOYSTICKRIGHT", "DPAD",  # Standard directional
-                    "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
-                    "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
+                # Check ONLY standard directional (not specialized)
+                is_standard_directional = any(control_type in control_name for control_type in [
+                    "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"  # ONLY these
                 ])
 
-                if is_directional:
-                    # Use the pre-determined directional visibility
+                is_specialized_directional = any(control_type in control_name for control_type in [
+                    "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", 
+                    "AD_STICK", "PEDAL", "POSITIONAL"
+                ])
+
+                if is_standard_directional:
+                    # Standard directional controlled by joystick setting
                     is_visible = self.texts_visible and self.should_show_directional
+                elif is_specialized_directional:
+                    # Specialized directional ALWAYS visible (not controlled by joystick button)
+                    is_visible = self.texts_visible
+                # else: regular buttons stay visible
                 
                 # Apply text settings
                 if self.text_settings.get("use_uppercase", False):
