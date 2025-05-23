@@ -3990,19 +3990,18 @@ class MAMEControlConfig(ctk.CTk):
             text_color="#ffffff"
         ).pack(padx=10, pady=5)
         
-        # Create container for control entries
+        # Create container for the controls
         controls_container = ctk.CTkFrame(controls_card, fg_color="transparent")
-        controls_container.pack(fill="x", padx=15, pady=(0, 15))
+        controls_container.pack(fill="both", expand=True, padx=15, pady=(0, 15))
         
-        # Create a scrollable container for controls
+        # Create a scrollable container for controls - auto-sizing
         controls_scroll = ctk.CTkScrollableFrame(
             controls_container,
             fg_color="transparent",
-            height=300,  # Limit height to make sure we don't get a huge dialog
             scrollbar_button_color=self.theme_colors["primary"],
             scrollbar_button_hover_color=self.theme_colors["secondary"]
         )
-        controls_scroll.pack(fill="x", expand=True)
+        controls_scroll.pack(fill="x")  # Remove expand=True
         
         # Row alternating colors
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
