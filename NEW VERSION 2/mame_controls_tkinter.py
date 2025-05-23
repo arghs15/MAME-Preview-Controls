@@ -5169,6 +5169,11 @@ class MAMEControlConfig(ctk.CTk):
                 'P2_JOYSTICK_DOWN': 'Down',
                 'P2_JOYSTICK_LEFT': 'Left',
                 'P2_JOYSTICK_RIGHT': 'Right',
+                'P1_PEDAL': 'Accelerator Pedal',      # Instead of "Pedal"
+                'P1_PEDAL2': 'Brake Pedal',           # Instead of "Pedal2"  
+                'P1_AD_STICK_X': 'Steering Left/Right',  # Instead of "X"
+                'P1_AD_STICK_Y': 'Lean Forward/Back',    # Instead of "Y"
+                'P1_AD_STICK_Z': 'Throttle Control',     # Instead of "Z"
                 'P1_BUTTON1': 'A Button',
                 'P1_BUTTON2': 'B Button',
                 'P1_BUTTON3': 'X Button',
