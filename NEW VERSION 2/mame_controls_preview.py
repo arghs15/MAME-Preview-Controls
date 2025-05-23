@@ -275,52 +275,151 @@ class PreviewWindow(QMainWindow):
             self.close()
 
     def distribute_controls_vertically(self):
-        """Distribute visible controls evenly in the vertical space they occupy"""
+        """Distribute visible controls evenly in columns with detailed debugging"""
         # Get all visible control labels
         visible_controls = []
         for control_name, control_data in self.control_labels.items():
             if 'label' in control_data and control_data['label'].isVisible():
                 visible_controls.append((control_name, control_data['label']))
         
-        # Sort controls by Y position
-        visible_controls.sort(key=lambda item: item[1].y())
-        
         if len(visible_controls) < 3:
             self.show_toast_notification("Need at least 3 visible controls to distribute")
             return False
         
-        # Get top and bottom boundaries
-        top_label = visible_controls[0][1]
-        bottom_label = visible_controls[-1][1]
-        top_y = top_label.y()
-        bottom_y = bottom_label.y()
-        total_height = bottom_y - top_y
+        # Group controls by column (similar X positions)
+        columns = {}
+        column_tolerance = 50  # Controls within 50px horizontally are considered same column
         
-        # Calculate even spacing
-        steps = len(visible_controls) - 1
-        step_size = total_height / steps
-        
-        # Store changes for notification
-        changes_made = 0
-        
-        # Reposition all controls except first and last (to maintain boundaries)
-        for i in range(1, len(visible_controls) - 1):
-            control_name, label = visible_controls[i]
-            current_y = label.y()
-            target_y = int(top_y + (i * step_size))
+        for control_name, label in visible_controls:
+            x_pos = label.x()
             
-            # Only move if position would change significantly
-            if abs(current_y - target_y) > 2:
-                label.move(label.x(), target_y)
-                changes_made += 1
+            # Find which column this control belongs to
+            assigned_column = None
+            for col_x in columns.keys():
+                if abs(x_pos - col_x) <= column_tolerance:
+                    assigned_column = col_x
+                    break
+            
+            # If no existing column found, create new one
+            if assigned_column is None:
+                assigned_column = x_pos
+                columns[assigned_column] = []
+            
+            columns[assigned_column].append((control_name, label))
         
-        # Show toast notification with results
-        if changes_made > 0:
-            self.show_toast_notification(f"Distributed {changes_made} controls evenly between boundaries")
+        print(f"\n=== DISTRIBUTE DEBUG ===")
+        print(f"Found {len(columns)} columns with controls:")
+        for col_x, controls in columns.items():
+            print(f"  Column at X={col_x}: {len(controls)} controls")
+        
+        total_changes = 0
+        columns_processed = 0
+        
+        # Process each column separately
+        for col_x, column_controls in columns.items():
+            # Need at least 3 controls in a column to distribute
+            if len(column_controls) < 3:
+                print(f"  Skipping column at X={col_x} - only {len(column_controls)} controls")
+                continue
+            
+            print(f"\n--- Processing Column at X={col_x} ---")
+            
+            # Sort controls in this column by Y position
+            column_controls.sort(key=lambda item: item[1].y())
+            
+            # Print BEFORE positions
+            print("BEFORE Distribution:")
+            for i, (control_name, label) in enumerate(column_controls):
+                print(f"  {i}: {control_name} at Y={label.y()}")
+            
+            # Get top and bottom boundaries for this column
+            top_label = column_controls[0][1]
+            bottom_label = column_controls[-1][1]
+            top_y = top_label.y()
+            bottom_y = bottom_label.y()
+            total_height = bottom_y - top_y
+            
+            print(f"Top boundary: {column_controls[0][0]} at Y={top_y}")
+            print(f"Bottom boundary: {column_controls[-1][0]} at Y={bottom_y}")
+            print(f"Total height: {total_height}px")
+            
+            # Skip if controls are too close together
+            if total_height < 100:
+                print(f"  Skipping column - controls too close together ({total_height}px)")
+                continue
+            
+            # Calculate even spacing for this column
+            steps = len(column_controls) - 1
+            step_size = total_height / steps
+            
+            print(f"Steps: {steps}, Step size: {step_size:.1f}px")
+            
+            column_changes = 0
+            
+            # Calculate all target positions first
+            target_positions = []
+            for i in range(len(column_controls)):
+                if i == 0:
+                    target_y = top_y  # Keep first at boundary
+                elif i == len(column_controls) - 1:
+                    target_y = bottom_y  # Keep last at boundary
+                else:
+                    target_y = int(top_y + (i * step_size))
+                target_positions.append(target_y)
+            
+            print("\nTarget positions:")
+            for i, target_y in enumerate(target_positions):
+                control_name = column_controls[i][0]
+                current_y = column_controls[i][1].y()
+                will_move = abs(current_y - target_y) > 2 and i != 0 and i != len(column_controls) - 1
+                print(f"  {i}: {control_name} → Y={target_y} (current: {current_y}) {'MOVE' if will_move else 'STAY'}")
+            
+            # Now apply the moves
+            for i in range(1, len(column_controls) - 1):  # Skip first and last
+                control_name, label = column_controls[i]
+                current_y = label.y()
+                target_y = target_positions[i]
+                
+                # Only move if position would change significantly
+                if abs(current_y - target_y) > 2:
+                    label.move(label.x(), target_y)
+                    column_changes += 1
+                    print(f"  MOVED: {control_name} from Y={current_y} to Y={target_y}")
+                else:
+                    print(f"  SKIPPED: {control_name} already at Y={current_y}")
+            
+            # Print AFTER positions
+            print("\nAFTER Distribution:")
+            for i, (control_name, label) in enumerate(column_controls):
+                spacing = ""
+                if i > 0:
+                    prev_y = column_controls[i-1][1].y()
+                    gap = label.y() - prev_y
+                    spacing = f" (gap: {gap}px)"
+                print(f"  {i}: {control_name} at Y={label.y()}{spacing}")
+            
+            # Calculate actual spacing between adjacent controls
+            print("\nActual gaps between controls:")
+            for i in range(1, len(column_controls)):
+                prev_y = column_controls[i-1][1].y()
+                curr_y = column_controls[i][1].y()
+                gap = curr_y - prev_y
+                print(f"  Gap {i-1}→{i}: {gap}px")
+            
+            if column_changes > 0:
+                print(f"\nDistributed {column_changes} controls in column at X={col_x}")
+                total_changes += column_changes
+                columns_processed += 1
+        
+        print(f"\n=== DISTRIBUTE COMPLETE ===\n")
+        
+        # Show results
+        if total_changes > 0:
+            self.show_toast_notification(f"Distributed {total_changes} controls across {columns_processed} columns")
         else:
             self.show_toast_notification("Controls already evenly distributed")
         
-        return True
+        return total_changes > 0
     
     def show_toast_notification(self, message, duration=2000):
         """Show a brief notification that automatically disappears after specified duration (ms)"""
@@ -406,331 +505,7 @@ class PreviewWindow(QMainWindow):
         
         print(f"Max text width calculated: {max_width}px + {extra_padding}px padding = {result_width}px")
         return result_width
-    
-    # 1. Add this method to PreviewWindow class to show only specialized MAME controls
-    def show_specialized_controls(self):
-        """Show specialized MAME controls like dials, trackballs, etc. for positioning"""
-        
-        # Specialized MAME controls that aren't part of standard XInput
-        specialized_controls = {
-            "P1_DIAL": "Rotary Dial",
-            "P1_DIAL_V": "Vertical Dial",
-            "P1_PADDLE": "Paddle Controller",
-            "P1_TRACKBALL_X": "Trackball X-Axis",
-            "P1_TRACKBALL_Y": "Trackball Y-Axis",
-            "P1_MOUSE_X": "Mouse X-Axis",
-            "P1_MOUSE_Y": "Mouse Y-Axis",
-            "P1_LIGHTGUN_X": "Light Gun X-Axis",
-            "P1_LIGHTGUN_Y": "Light Gun Y-Axis",
-            "P1_AD_STICK_X": "Analog Stick X-Axis",
-            "P1_AD_STICK_Y": "Analog Stick Y-Axis",
-            "P1_AD_STICK_Z": "Analog Stick Z-Axis",
-            "P1_PEDAL": "Pedal Input",
-            "P1_PEDAL2": "Second Pedal Input",
-            "P1_POSITIONAL": "Positional Control",
-            "P1_GAMBLE_HIGH": "Gamble High",
-            "P1_GAMBLE_LOW": "Gamble Low",
-        }
-        
-        try:
-            from PyQt5.QtGui import QFont, QFontInfo, QColor, QFontDatabase, QFontMetrics
-            from PyQt5.QtCore import QPoint, Qt, QTimer
-            from PyQt5.QtWidgets import QLabel, QSizePolicy
-            import os
-            
-            print("\n--- Showing specialized MAME controls ---")
-            
-            # CRITICAL FIX: First ensure fonts are properly loaded/registered
-            if not hasattr(self, 'current_font') or self.current_font is None:
-                print("Font not initialized - forcing font loading before showing controls")
-                self.load_and_register_fonts()
-            
-            # Save existing control positions
-            if not hasattr(self, 'original_controls_backup'):
-                self.original_controls_backup = {}
-                for control_name, control_data in self.control_labels.items():
-                    self.original_controls_backup[control_name] = {
-                        'action': control_data['action'],
-                        'position': control_data['label'].pos(),
-                        'original_pos': control_data.get('original_pos', QPoint(0, 0))
-                    }
-                print(f"Backed up {len(self.original_controls_backup)} original controls")
-            
-            # Clear ALL existing controls first
-            for control_name in list(self.control_labels.keys()):
-                # Remove the control from the canvas
-                if control_name in self.control_labels:
-                    if 'label' in self.control_labels[control_name]:
-                        self.control_labels[control_name]['label'].deleteLater()
-                    del self.control_labels[control_name]
 
-            # Clear collections
-            self.control_labels = {}
-            print("Cleared all existing controls")
-            
-            # Load saved positions
-            saved_positions = self.load_saved_positions()
-            
-            # Extract text settings and style information
-            font_family = self.text_settings.get("font_family", "Arial")
-            font_size = self.text_settings.get("font_size", 28)
-            bold_strength = self.text_settings.get("bold_strength", 2) > 0
-            use_uppercase = self.text_settings.get("use_uppercase", False)
-            show_button_prefix = self.text_settings.get("show_button_prefix", True)
-            y_offset = self.text_settings.get("y_offset", -40)
-            
-            # Get color and gradient settings
-            use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
-            use_action_gradient = self.text_settings.get("use_action_gradient", False)
-            prefix_color = self.text_settings.get("prefix_color", "#FFC107")
-            action_color = self.text_settings.get("action_color", "#FFFFFF")
-            prefix_gradient_start = self.text_settings.get("prefix_gradient_start", "#FFC107")
-            prefix_gradient_end = self.text_settings.get("prefix_gradient_end", "#FF5722")
-            action_gradient_start = self.text_settings.get("action_gradient_start", "#2196F3")
-            action_gradient_end = self.text_settings.get("action_gradient_end", "#4CAF50")
-            
-            # Use existing font if available
-            if hasattr(self, 'current_font') and self.current_font:
-                font = QFont(self.current_font)  # Create a copy to avoid modifying the original
-                print(f"Using existing current_font for specialized controls: {font.family()}")
-            elif hasattr(self, 'initialized_font') and self.initialized_font:
-                font = QFont(self.initialized_font)
-                print(f"Using initialized_font for specialized controls: {font.family()}")
-            else:
-                # Create a standard font as a last resort
-                font = QFont(font_family, font_size)
-                font.setBold(bold_strength)
-                font.setStyleStrategy(QFont.PreferMatch)  # Force exact matching
-                print(f"Created new font for specialized controls: {font.family()} (fallback)")
-            
-                max_text_width = self.calculate_max_text_width(
-                specialized_controls,
-                font,
-                show_button_prefix=show_button_prefix,
-                use_uppercase=use_uppercase,
-                extra_padding=40  # Increased padding for safety
-            )
-            
-            # Calculate the maximum text width needed 
-            font_metrics = QFontMetrics(font)
-            max_text_width = 0
-            
-            # First determine the longest text to ensure consistent sizing
-            for control_name, action_text in specialized_controls.items():
-                button_prefix = self.get_button_prefix(control_name)
-                if use_uppercase:
-                    action_text = action_text.upper()
-                
-                display_text = action_text
-                if show_button_prefix and button_prefix:
-                    display_text = f"{button_prefix}: {action_text}"
-                
-                # ADD THIS LINE to truncate long text
-                display_text = self.truncate_display_text(display_text)
-                
-                # Calculate width needed for this text
-                text_width = font_metrics.horizontalAdvance(display_text)
-                
-                # Add padding for safety
-                text_width += 20  # 10px padding on each side
-                
-                max_text_width = max(max_text_width, text_width)
-            
-            print(f"Calculated maximum text width: {max_text_width}px")
-            
-            # Default grid layout
-            grid_x, grid_y = 0, 0
-            
-            # Create all specialized controls with nice layout
-            for control_name, action_text in specialized_controls.items():
-                # Apply uppercase if needed
-                if use_uppercase:
-                    action_text = action_text.upper()
-                
-                # Get button prefix
-                button_prefix = self.get_button_prefix(control_name)
-                
-                # Add prefix if enabled
-                display_text = action_text
-                if show_button_prefix and button_prefix:
-                    display_text = f"{button_prefix}: {action_text}"
-                
-                # ADD THIS LINE to truncate long text
-                display_text = self.truncate_display_text(display_text)
-                
-                # Choose the correct label class based on gradient settings
-                if use_prefix_gradient or use_action_gradient:
-                    # Use gradient-enabled label
-                    label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
-                    
-                    # Set gradient properties
-                    label.use_prefix_gradient = use_prefix_gradient
-                    label.use_action_gradient = use_action_gradient
-                    label.prefix_gradient_start = QColor(prefix_gradient_start)
-                    label.prefix_gradient_end = QColor(prefix_gradient_end)
-                    label.action_gradient_start = QColor(action_gradient_start)
-                    label.action_gradient_end = QColor(action_gradient_end)
-                else:
-                    # Use color-enabled label
-                    label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
-                
-                # Apply font directly
-                label.setFont(font)
-                
-                # Additional precautions to ensure proper font application
-                label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
-                
-                label.prefix = button_prefix
-                label.action = action_text
-                
-                # Remove size constraints and set expanding policy for proper sizing
-                label.setMinimumSize(0, 0)
-                label.setMaximumSize(16777215, 16777215)  # Qt's QWIDGETSIZE_MAX
-                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                
-                # Make sure we have proper settings in the label
-                label.settings = self.text_settings.copy()
-                
-                # First, let the label auto-size based on content
-                label.adjustSize()
-
-                # More aggressive approach to prevent text truncation
-                font_metrics = QFontMetrics(label.font())
-                text_width = font_metrics.horizontalAdvance(display_text)
-
-                # Get font family to check if it's a custom font
-                font_family = label.font().family()
-                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
-                                                    "Courier New", "Segoe UI", "Calibri", "Georgia", 
-                                                    "Impact", "System"]
-
-                # Determine base padding based on font type
-                base_padding = 50 if is_custom_font else 30
-
-                # Add additional padding for longer text
-                if len(display_text) > 15:
-                    base_padding += 20
-                if len(display_text) > 20:
-                    base_padding += 30
-                    
-                # Special case for Select button or text containing Select
-                if "SELECT" in control_name or "Select" in action_text:
-                    base_padding += 25
-                    
-                # Calculate final width with generous padding
-                label_width = text_width + base_padding
-                label_height = label.height()
-
-                # Debug output for problematic labels
-                if "SELECT" in control_name or len(display_text) > 15:
-                    print(f"Setting width for {control_name}: text={text_width}px, padding={base_padding}px, final={label_width}px")
-
-                # Resize with the calculated width
-                label.resize(label_width, label_height)
-                
-                # Determine position
-                x, y = 0, 0
-                
-                # Check for saved position or use grid layout
-                if saved_positions and control_name in saved_positions:
-                    # Use the EXACT coordinates from global positions
-                    pos_x, pos_y = saved_positions[control_name]
-                    x, y = pos_x, pos_y + y_offset
-                    original_pos = QPoint(pos_x, pos_y)
-                    print(f"Using global position for {control_name}: ({pos_x}, {pos_y})")
-                
-                elif control_name in self.original_controls_backup:
-                    # Use backup position exactly as stored
-                    backup_pos = self.original_controls_backup[control_name]['position']
-                    x, y = backup_pos.x(), backup_pos.y()
-                    original_pos = self.original_controls_backup[control_name]['original_pos']
-                    print(f"Using backup position for {control_name}: ({x}, {y})")
-                
-                else:
-                    # Use a specialized grid layout for better organization
-                    row = grid_y
-                    col = grid_x
-                    
-                    # Group similar controls together
-                    if 'DIAL' in control_name or 'PADDLE' in control_name:
-                        # Rotary controls in first row
-                        row = 0
-                    elif 'TRACKBALL' in control_name or 'MOUSE' in control_name:
-                        # Tracking controls in second row
-                        row = 1
-                    elif 'LIGHTGUN' in control_name:
-                        # Light gun in third row
-                        row = 2
-                    elif 'AD_STICK' in control_name:
-                        # Analog stick in fourth row
-                        row = 3
-                    elif 'PEDAL' in control_name or 'POSITIONAL' in control_name:
-                        # Pedals and positional in fifth row
-                        row = 4
-                    elif 'GAMBLE' in control_name:
-                        # Gambling controls in sixth row
-                        row = 5
-                    
-                    # Then determine column - X and Y axes next to each other
-                    if '_X' in control_name:
-                        col = 0
-                    elif '_Y' in control_name:
-                        col = 1
-                    elif '_Z' in control_name:
-                        col = 2
-                    else:
-                        col = grid_x
-                        grid_x = (grid_x + 1) % 3
-                    
-                    # Calculate position based on grid
-                    x = 150 + (col * 300)  # Wide columns for specialized controls
-                    y = 100 + (row * 70) + y_offset  # More spacing between rows
-                    
-                    original_pos = QPoint(x, y - y_offset)
-                    print(f"Using grid position for {control_name}: ({x}, {y})")
-                    
-                    # Update grid counters for non-specific controls
-                    if '_X' not in control_name and '_Y' not in control_name and '_Z' not in control_name:
-                        grid_y = (grid_y + 1 if grid_x == 0 else grid_y)
-                
-                # Apply position
-                label.move(x, y)
-                
-                # Store in control_labels
-                self.control_labels[control_name] = {
-                    'label': label,
-                    'action': action_text,
-                    'prefix': button_prefix,
-                    'original_pos': original_pos
-                }
-                
-                # All specialized controls are visible by default
-                label.setVisible(True)
-            
-            # Update button text
-            if hasattr(self, 'specialized_controls_button'):
-                self.specialized_controls_button.setText("Normal Controls")
-            
-            # Set specialized mode flag
-            self.showing_specialized_controls = True
-            
-            # Force updates with staggered timers
-            QTimer.singleShot(50, lambda: self.force_resize_all_labels())
-            QTimer.singleShot(150, lambda: self.apply_text_settings())
-            QTimer.singleShot(250, lambda: self.force_resize_all_labels())  # Second pass
-            
-            # Force a canvas update
-            self.canvas.update()
-            
-            print(f"Created and displayed {len(specialized_controls)} specialized MAME controls")
-            return True
-            
-        except Exception as e:
-            print(f"Error showing specialized controls: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
     def recreate_control_labels_with_case(self):
         """Recreate control labels to properly handle case changes and gradient settings"""
         print("Recreating control labels to apply case and gradient changes...")
@@ -1848,12 +1623,13 @@ class PreviewWindow(QMainWindow):
         self.toggle_texts_button.setStyleSheet(button_style)
         self.toggle_texts_button.setToolTip("Show/hide control text labels\nHides all text except directional controls")
         self.bottom_row.addWidget(self.toggle_texts_button)'''
-        
+
         # Create the joystick button with better initial text
-        #self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
-        #self.joystick_button.clicked.connect(self.toggle_joystick_controls)
-        #self.joystick_button.setStyleSheet(button_style)
-        #self.bottom_row.addWidget(self.joystick_button)
+        self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
+        self.joystick_button.clicked.connect(self.toggle_joystick_controls)
+        self.joystick_button.setStyleSheet(button_style)
+        self.joystick_button.setToolTip("Toggle visbility of directional controls")
+        self.bottom_row.addWidget(self.joystick_button)
         
         # Add a settings button if it doesn't exist
         #if not hasattr(self, 'settings_button'):
@@ -2728,38 +2504,65 @@ class PreviewWindow(QMainWindow):
         readable = control_name.replace('P1_', '').replace('_', ' ').title()
         return readable
     
-    def toggle_controls_view(self):
-        """Toggle between control views: Normal -> XInput -> Directionals -> Specialized -> Normal"""
-        # Check what's currently showing
-        showing_xinput = hasattr(self, 'showing_all_xinput_controls') and self.showing_all_xinput_controls
-        showing_specialized = hasattr(self, 'showing_specialized_controls') and self.showing_specialized_controls
-        showing_directionals = hasattr(self, 'showing_all_directionals') and self.showing_all_directionals
+    # Add these new methods to your PreviewWindow class
+
+    def show_specialized_controls_group_1(self):
+        """Show Group 1: Movement/Tracking Controls (9 controls)"""
         
-        if showing_xinput:
-            # Switch to directional controls
-            self.showing_all_xinput_controls = False
-            self.show_all_directional_controls()
+        # Group 1: Movement and Tracking Controls
+        specialized_controls_group_1 = {
+            "P1_DIAL": "Rotary",
+            "P1_DIAL_V": "Vertical", 
+            "P1_PADDLE": "Paddle",
+            "P1_TRACKBALL_X": "Trackball X",
+            "P1_TRACKBALL_Y": "Trackball Y",
+            "P1_MOUSE_X": "Mouse X",
+            "P1_MOUSE_Y": "Mouse Y",
+            "P1_AD_STICK_X": "Analog X",
+            "P1_AD_STICK_Y": "Analog Y",
+            "P1_AD_STICK_Z": "Analog Z",
+        }
+        
+        return self._show_specialized_group(specialized_controls_group_1, "Group 1 (Movement/Tracking)")
+
+    def show_specialized_controls_group_2(self):
+        """Show Group 2: Action/Input Controls (7 controls)"""
+        
+        # Group 2: Action and Input Controls  
+        specialized_controls_group_2 = {
+            "P1_LIGHTGUN_X": "Light Gun X",
+            "P1_LIGHTGUN_Y": "Light Gun Y", 
+            "P1_PEDAL": "Pedal1",
+            "P1_PEDAL2": "Pedal2",
+            "P1_POSITIONAL": "Positional",
+            "P1_GAMBLE_HIGH": "Gamble High",
+            "P1_GAMBLE_LOW": "Gamble Low",
+        }
+        
+        return self._show_specialized_group(specialized_controls_group_2, "Group 2 (Action/Input)")
+
+    def _show_specialized_group(self, controls_dict, group_name):
+        """Common method to show a group of specialized controls"""
+        try:
+            from PyQt5.QtGui import QFont, QFontInfo, QColor, QFontDatabase, QFontMetrics
+            from PyQt5.QtCore import QPoint, Qt, QTimer
+            from PyQt5.QtWidgets import QLabel, QSizePolicy
+            import os
             
-            # Update button text for NEXT state (specialized)
-            if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Specialized Controls")
-        
-        elif showing_directionals:
-            # Switch to specialized controls
-            self.showing_all_directionals = False
-            self.show_specialized_controls()
+            print(f"\n--- Showing {group_name} ---")
             
-            # Update button text for NEXT state (normal)
-            if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Normal Controls")
-        
-        elif showing_specialized:
-            # Switch back to normal game controls
-            self.showing_specialized_controls = False
+            # Save existing control positions as backup
+            if not hasattr(self, 'original_controls_backup'):
+                self.original_controls_backup = {}
+                for control_name, control_data in self.control_labels.items():
+                    self.original_controls_backup[control_name] = {
+                        'action': control_data['action'],
+                        'position': control_data['label'].pos(),
+                        'original_pos': control_data.get('original_pos', QPoint(0, 0))
+                    }
             
             # Clear ALL existing controls first
             for control_name in list(self.control_labels.keys()):
-                # Remove the control from the canvas
                 if control_name in self.control_labels:
                     if 'label' in self.control_labels[control_name]:
                         self.control_labels[control_name]['label'].deleteLater()
@@ -2767,26 +2570,232 @@ class PreviewWindow(QMainWindow):
 
             # Clear collections
             self.control_labels = {}
+            print("Cleared all existing controls")
+            
+            # Load saved positions
+            saved_positions = self.load_saved_positions()
+            
+            # Extract text settings and style information
+            font_family = self.text_settings.get("font_family", "Arial")
+            font_size = self.text_settings.get("font_size", 28)
+            bold_strength = self.text_settings.get("bold_strength", 2) > 0
+            use_uppercase = self.text_settings.get("use_uppercase", False)
+            show_button_prefix = self.text_settings.get("show_button_prefix", True)
+            y_offset = self.text_settings.get("y_offset", -40)
+            
+            # Get color and gradient settings
+            use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+            use_action_gradient = self.text_settings.get("use_action_gradient", False)
+            prefix_color = self.text_settings.get("prefix_color", "#FFC107")
+            action_color = self.text_settings.get("action_color", "#FFFFFF")
+            prefix_gradient_start = self.text_settings.get("prefix_gradient_start", "#FFC107")
+            prefix_gradient_end = self.text_settings.get("prefix_gradient_end", "#FF5722")
+            action_gradient_start = self.text_settings.get("action_gradient_start", "#2196F3")
+            action_gradient_end = self.text_settings.get("action_gradient_end", "#4CAF50")
+            
+            # Use existing font if available
+            if hasattr(self, 'current_font') and self.current_font:
+                font = QFont(self.current_font)
+            elif hasattr(self, 'initialized_font') and self.initialized_font:
+                font = QFont(self.initialized_font)
+            else:
+                font = QFont(font_family, font_size)
+                font.setBold(bold_strength)
+                font.setStyleStrategy(QFont.PreferMatch)
+            
+            # Calculate maximum text width
+            max_text_width = self.calculate_max_text_width(
+                controls_dict,
+                font,
+                show_button_prefix=show_button_prefix,
+                use_uppercase=use_uppercase,
+                extra_padding=40
+            )
+            
+            # Default grid layout - spread them out more with fewer controls
+            grid_x, grid_y = 0, 0
+            controls_per_row = 3  # 3 controls per row for better spacing
+            
+            # Create all controls in the group
+            for control_name, action_text in controls_dict.items():
+                # Apply uppercase if needed
+                if use_uppercase:
+                    action_text = action_text.upper()
+                
+                # Get button prefix
+                button_prefix = self.get_button_prefix(control_name)
+                
+                # Add prefix if enabled
+                display_text = action_text
+                if show_button_prefix and button_prefix:
+                    display_text = f"{button_prefix}: {action_text}"
+                
+                # Truncate long text
+                display_text = self.truncate_display_text(display_text)
+                
+                # Choose the correct label class based on gradient settings
+                if use_prefix_gradient or use_action_gradient:
+                    label = GradientDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                    label.use_prefix_gradient = use_prefix_gradient
+                    label.use_action_gradient = use_action_gradient
+                    label.prefix_gradient_start = QColor(prefix_gradient_start)
+                    label.prefix_gradient_end = QColor(prefix_gradient_end)
+                    label.action_gradient_start = QColor(action_gradient_start)
+                    label.action_gradient_end = QColor(action_gradient_end)
+                else:
+                    label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings.copy())
+                
+                # Apply font and styling
+                label.setFont(font)
+                label.setStyleSheet(f"background-color: transparent; border: none; font-family: '{font.family()}';")
+                label.prefix = button_prefix
+                label.action = action_text
+                
+                # Configure label sizing
+                label.setMinimumSize(0, 0)
+                label.setMaximumSize(16777215, 16777215)
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.settings = self.text_settings.copy()
+                label.adjustSize()
+
+                # Calculate proper width
+                font_metrics = QFontMetrics(label.font())
+                text_width = font_metrics.horizontalAdvance(display_text)
+                font_family = label.font().family()
+                is_custom_font = font_family not in ["Arial", "Verdana", "Tahoma", "Times New Roman", 
+                                                "Courier New", "Segoe UI", "Calibri", "Georgia", 
+                                                "Impact", "System"]
+                base_padding = 50 if is_custom_font else 30
+                if len(display_text) > 15:
+                    base_padding += 20
+                if "SELECT" in control_name or "Select" in action_text:
+                    base_padding += 25
+                    
+                label_width = text_width + base_padding
+                label_height = label.height()
+                label.resize(label_width, label_height)
+                
+                # Determine position
+                if saved_positions and control_name in saved_positions:
+                    pos_x, pos_y = saved_positions[control_name]
+                    x, y = pos_x, pos_y + y_offset
+                    original_pos = QPoint(pos_x, pos_y)
+                elif control_name in self.original_controls_backup:
+                    backup_pos = self.original_controls_backup[control_name]['position']
+                    x, y = backup_pos.x(), backup_pos.y()
+                    original_pos = self.original_controls_backup[control_name]['original_pos']
+                else:
+                    # Better grid layout with more spacing for fewer controls
+                    row = grid_y
+                    col = grid_x
+                    
+                    x = 150 + (col * 400)  # More space between columns
+                    y = 100 + (row * 80) + y_offset  # More space between rows
+                    
+                    original_pos = QPoint(x, y - y_offset)
+                    
+                    # Update grid position
+                    grid_x = (grid_x + 1) % controls_per_row
+                    if grid_x == 0:
+                        grid_y += 1
+                
+                # Apply position
+                label.move(x, y)
+                
+                # Store in control_labels
+                self.control_labels[control_name] = {
+                    'label': label,
+                    'action': action_text,
+                    'prefix': button_prefix,
+                    'original_pos': original_pos
+                }
+                
+                # All controls should be visible
+                label.setVisible(True)
+            
+            # Force updates
+            QTimer.singleShot(50, lambda: self.force_resize_all_labels())
+            QTimer.singleShot(150, lambda: self.apply_text_settings())
+            
+            # Force a canvas update
+            self.canvas.update()
+            
+            print(f"Created and displayed {len(controls_dict)} controls in {group_name}")
+            return True
+            
+        except Exception as e:
+            print(f"Error showing {group_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # Update the toggle_controls_view method to cycle through 5 states
+    def toggle_controls_view(self):
+        """Toggle between control views: Normal → All Buttons → Directionals → Specialized Group 1 → Specialized Group 2 → Normal"""
+        
+        # Initialize state tracking if not exists
+        if not hasattr(self, 'current_view_state'):
+            self.current_view_state = 'normal'
+        
+        # Determine current state and next state
+        if self.current_view_state == 'normal':
+            # Switch to all buttons
+            self.current_view_state = 'all_buttons'
+            self.show_all_xinput_controls()
+            next_state_text = "Directional Controls"
+            
+        elif self.current_view_state == 'all_buttons':
+            # Switch to directional controls
+            self.current_view_state = 'directionals'
+            self.show_all_directional_controls()
+            next_state_text = "Specialized Group 1"
+            
+        elif self.current_view_state == 'directionals':
+            # Switch to specialized group 1
+            self.current_view_state = 'specialized_1'
+            self.show_specialized_controls_group_1()
+            next_state_text = "Specialized Group 2"
+            
+        elif self.current_view_state == 'specialized_1':
+            # Switch to specialized group 2
+            self.current_view_state = 'specialized_2'
+            self.show_specialized_controls_group_2()
+            next_state_text = "Normal Controls"
+            
+        elif self.current_view_state == 'specialized_2':
+            # Switch back to normal
+            self.current_view_state = 'normal'
+            
+            # Clear ALL existing controls first
+            for control_name in list(self.control_labels.keys()):
+                if control_name in self.control_labels:
+                    if 'label' in self.control_labels[control_name]:
+                        self.control_labels[control_name]['label'].deleteLater()
+                    del self.control_labels[control_name]
+            self.control_labels = {}
             
             # Reload the current game controls from scratch
             self.create_control_labels()
             
             # Force apply the font after recreating controls
-            from PyQt5.QtCore import QTimer
             QTimer.singleShot(100, self.apply_text_settings)
             QTimer.singleShot(200, self.force_resize_all_labels)
             
-            # Update button text for NEXT state (XInput)
-            if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Show All Controls")
-                
+            next_state_text = "Show All Controls"
+        
         else:
-            # If showing normal controls, switch to XInput
-            self.show_all_xinput_controls()
+            # Fallback to normal state
+            self.current_view_state = 'normal'
+            next_state_text = "Show All Controls"
+        
+        # Update button text for NEXT state
+        if hasattr(self, 'controls_mode_button'):
+            self.controls_mode_button.setText(next_state_text)
             
-            # Update button text for NEXT state (directionals)
-            if hasattr(self, 'controls_mode_button'):
-                self.controls_mode_button.setText("Directional Controls")
+        # Clear any old state flags
+        self.showing_all_xinput_controls = (self.current_view_state == 'all_buttons')
+        self.showing_all_directionals = (self.current_view_state == 'directionals') 
+        self.showing_specialized_controls = self.current_view_state in ['specialized_1', 'specialized_2']
 
     def truncate_display_text(self, text, max_length=15):
         """Truncate display text with minimal space loss"""
@@ -3432,21 +3441,22 @@ class PreviewWindow(QMainWindow):
                 "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN",  # Specialized directional
                 "AD_STICK", "PEDAL", "POSITIONAL"  # Additional special inputs
             ]):
-                # Default visibility based on joystick_visible
-                is_visible = self.texts_visible and self.joystick_visible
-                
-                # Determine if we should override for directional-only game
+                # MANUAL OVERRIDE FIRST: If user manually set joystick_visible, respect it
+                # Only apply auto-show logic if auto_show_directionals is True AND it's directional-only
                 if is_directional_only and auto_show_directionals and not self.joystick_visible:
-                    # Override to visible if auto-show is enabled for directional-only games
+                    # Override to visible for directional-only games (if auto-show enabled)
                     is_visible = self.texts_visible
-                    print(f"Keeping {control_name} visible despite Hide Directional setting (directional-only game)")
+                    print(f"Auto-showing {control_name} for directional-only game")
+                else:
+                    # Use manual joystick_visible setting
+                    is_visible = self.texts_visible and self.joystick_visible
                 
                 # Only update if needed
                 if control_data['label'].isVisible() != is_visible:
                     control_data['label'].setVisible(is_visible)
                     controls_updated += 1
         
-        print(f"Applied directional controls visibility to {controls_updated} controls")
+        print(f"Applied directional controls visibility to {controls_updated} controls (manual setting: {self.joystick_visible})")
         return controls_updated
 
     # Update resizeEvent to handle bezel resizing
@@ -3555,10 +3565,11 @@ class PreviewWindow(QMainWindow):
             # Settings file path - always global in new structure
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
             
-            # Create settings object
+            # Create settings object - UNCOMMENT the joystick_visible line!
             settings = {
                 "bezel_visible": self.bezel_visible,
-                #"joystick_visible": getattr(self, 'joystick_visible', True)  # Default to True if not set
+                "joystick_visible": getattr(self, 'joystick_visible', True),  # ← UNCOMMENT THIS LINE!
+                "auto_show_directionals_for_directional_only": getattr(self, 'auto_show_directionals_for_directional_only', True)
             }
             
             # Save settings
@@ -4287,91 +4298,6 @@ class PreviewWindow(QMainWindow):
         
         print(f"Logo display updated: {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
         
-    def create_button_rows(self):
-        """Create the button rows for the preview window"""
-        # Create two rows for buttons
-        self.top_row = QHBoxLayout()
-        self.bottom_row = QHBoxLayout()
-        
-        # Button style
-        button_style = """
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #5a5a5a;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-                min-width: 90px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """
-        
-        # Top row buttons
-        self.close_button = QPushButton("Close")
-        self.close_button.clicked.connect(self.close)
-        self.close_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.close_button)
-        
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.clicked.connect(self.reset_positions)
-        self.reset_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.reset_button)
-        
-        self.global_button = QPushButton("Global")
-        self.global_button.clicked.connect(lambda: self.save_positions(is_global=True))
-        self.global_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.global_button)
-        
-        self.rom_button = QPushButton("ROM")
-        self.rom_button.clicked.connect(lambda: self.save_positions(is_global=False))
-        self.rom_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.rom_button)
-        
-        self.text_settings_button = QPushButton("Text Settings")
-        self.text_settings_button.clicked.connect(self.show_text_settings)
-        self.text_settings_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.text_settings_button)
-        
-        self.save_image_button = QPushButton("Save Image")
-        self.save_image_button.clicked.connect(self.save_image)
-        self.save_image_button.setStyleSheet(button_style)
-        self.top_row.addWidget(self.save_image_button)
-        
-        # Bottom row buttons
-        self.joystick_button = QPushButton("Joystick")
-        self.joystick_button.clicked.connect(self.toggle_joystick_controls)
-        self.joystick_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.joystick_button)
-        
-        self.toggle_texts_button = QPushButton("Hide Texts")
-        self.toggle_texts_button.clicked.connect(self.toggle_texts)
-        self.toggle_texts_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.toggle_texts_button)
-        
-        # Add logo controls
-        self.logo_visible = self.logo_settings.get("logo_visible", True)
-        logo_text = "Hide Logo" if self.logo_visible else "Show Logo"
-        self.logo_button = QPushButton(logo_text)
-        self.logo_button.clicked.connect(self.toggle_logo)
-        self.logo_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.logo_button)
-        
-        # Add screen toggle button
-        self.screen_button = QPushButton("Screen 2")
-        self.screen_button.clicked.connect(self.toggle_screen)
-        self.screen_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.screen_button)
-        
-        # Add rows to button layout
-        self.button_layout.addLayout(self.top_row)
-        self.button_layout.addLayout(self.bottom_row)
-    
     def delete_rom_specific_settings(self):
         """Delete ROM-specific settings files and refresh preview with global settings"""
         try:
@@ -5576,7 +5502,7 @@ class PreviewWindow(QMainWindow):
         specialized_prefixes = {
             # Rotary controls
             'P1_DIAL': 'DIAL',
-            'P1_DIAL_V': 'DIAL↕',
+            'P1_DIAL_V': 'DIAL↑↓',
             'P1_PADDLE': 'PDL',
             
             # Trackball controls
@@ -5722,26 +5648,31 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
     
     def toggle_joystick_controls(self):
-        """Toggle visibility of all directional controls with automatic handling for directional-only games"""
+        """Toggle visibility of all directional controls with proper saving"""
         self.joystick_visible = not self.joystick_visible
         
         # Update button text
-        self.joystick_button.setText("Show Directional" if not self.joystick_visible else "Hide Directional")
+        if hasattr(self, 'joystick_button'):
+            self.joystick_button.setText("Show Directional" if not self.joystick_visible else "Hide Directional")
         
-        # Apply the joystick visibility with special handling for directional-only games
+        # Apply the joystick visibility
         self.apply_joystick_visibility()
         
         # CRITICAL: Enforce correct layer order
         self.enforce_layer_order()
         
-        # Save the setting (even though we might override it for directional-only games)
-        self.save_bezel_settings(is_global=True)
-        
-        # Show appropriate message
-        if getattr(self, 'is_directional_only_game', False) and not self.joystick_visible:
-            print("Note: Directional controls remain visible because this game only uses directional inputs")
+        # Save the setting - make sure this actually saves joystick_visible
+        saved = self.save_bezel_settings(is_global=True)
+        if saved:
+            print(f"Joystick visibility saved: {self.joystick_visible}")
         else:
-            print(f"Directional controls visibility set to {self.joystick_visible}")
+            print("ERROR: Failed to save joystick visibility setting")
+        
+        # Show toast notification
+        status = "hidden" if not self.joystick_visible else "visible"
+        self.show_toast_notification(f"Directional controls {status}")
+        
+        print(f"Directional controls visibility set to {self.joystick_visible}")
     
     # Update the reset_positions method to better handle saved positions
     def reset_positions(self):
