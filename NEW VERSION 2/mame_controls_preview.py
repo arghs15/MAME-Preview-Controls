@@ -1632,11 +1632,11 @@ class PreviewWindow(QMainWindow):
         self.bottom_row.addWidget(self.joystick_button)
         
         # Add a settings button if it doesn't exist
-        #if not hasattr(self, 'settings_button'):
-            #self.settings_button = QPushButton("Settings")
-            #self.settings_button.clicked.connect(self.show_settings_dialog)
-            #self.settings_button.setStyleSheet(button_style)
-            #self.bottom_row.addWidget(self.settings_button)
+        if not hasattr(self, 'settings_button'):
+            self.settings_button = QPushButton("Settings")
+            self.settings_button.clicked.connect(self.show_settings_dialog)
+            self.settings_button.setStyleSheet(button_style)
+            self.bottom_row.addWidget(self.settings_button)
         
         # Add button prefix toggle button
         prefix_text = "Hide Prefixes" if self.text_settings.get("show_button_prefix", True) else "Show Prefixes"
