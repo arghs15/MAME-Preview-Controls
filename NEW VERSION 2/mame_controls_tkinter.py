@@ -169,7 +169,7 @@ class MAMEControlConfig(ctk.CTk):
     def __init__(self, preview_only=False, initially_hidden=False):
         # FEATURE TOGGLES - Set to False to disable features
         self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
-        self.ALLOW_ADD_NEW_GAME = False     # Set to True to enable "Add New Game" tab
+        self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -4128,7 +4128,8 @@ class MAMEControlConfig(ctk.CTk):
                 control_entries[control_name] = action_entry
         
         # Add a section for custom controls with enhanced styling
-        if self.ALLOW_CUSTOM_CONTROLS:  # Toggle custom controls feature
+        # Allow if: custom controls enabled OR we're adding a new game
+        if self.ALLOW_CUSTOM_CONTROLS or (is_new_game and self.ALLOW_ADD_NEW_GAME):
             custom_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
             custom_card.pack(fill="x", padx=0, pady=(0, 15))
             
