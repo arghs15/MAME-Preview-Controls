@@ -2564,7 +2564,7 @@ class MAMEControlConfig(ctk.CTk):
                 self.after_cancel(self._selection_timer)
             self._selection_timer = self.after(50, lambda: self.on_game_select_from_listbox(event))
 
-        self.game_listbox.bind("<<ListboxSelect>>", on_selection_change)
+        self.game_listbox.bind("<ButtonRelease-1>", self.on_rom_click_release)
         self.game_listbox.bind("<Button-3>", self.show_game_context_menu_listbox)  # Right-click menu
         self.game_listbox.bind("<Double-Button-1>", self.on_game_double_click)     # Double-click to preview
         
@@ -2575,6 +2575,21 @@ class MAMEControlConfig(ctk.CTk):
         # Store the list data
         self.game_list_data = []  # Will hold (rom_name, display_text) tuples
 
+    def on_rom_click_release(self, event):
+        widget = event.widget
+        try:
+            index = widget.nearest(event.y)
+            if index >= 0:
+                widget.selection_clear(0, tk.END)
+                widget.selection_set(index)
+                widget.activate(index)
+
+                rom_name = widget.get(index)
+                self.on_game_select_from_listbox(event)
+        except Exception as e:
+            print(f"Error handling ROM click: {e}")
+
+    
     def on_game_select_from_listbox(self, event):
         """Handle game selection from listbox with improved stability"""
         try:
