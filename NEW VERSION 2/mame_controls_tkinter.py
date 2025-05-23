@@ -3873,15 +3873,18 @@ class MAMEControlConfig(ctk.CTk):
             buttons_to_show = max(num_buttons, len(defined_buttons))
             print(f"Will show {buttons_to_show} buttons")
 
-        # Generate button controls - ONLY for buttons that exist in the game
-        for i in range(1, buttons_to_show + 1):
-            control_name = f'P1_BUTTON{i}'
-            display_name = f'P1 Button {i}'
-            standard_controls.append((control_name, display_name))
+        # Generate button controls - ONLY for existing games, not new games
+        if not is_new_game:
+            # For existing games, show buttons that are actually defined
+            for i in range(1, buttons_to_show + 1):
+                control_name = f'P1_BUTTON{i}'
+                display_name = f'P1 Button {i}'
+                standard_controls.append((control_name, display_name))
+        # For new games, don't auto-generate any buttons - let user add what they need
 
-        # Only add directional controls if they're used in this game
+        # Only add directional controls if they're used in existing games
         directional_controls = []
-        if any(name.startswith('P1_JOYSTICK_') for name in existing_control_names):
+        if not is_new_game and any(name.startswith('P1_JOYSTICK_') for name in existing_control_names):
             directional_controls.extend([
                 ('P1_JOYSTICK_UP', 'P1 Joystick Up'),
                 ('P1_JOYSTICK_DOWN', 'P1 Joystick Down'),
