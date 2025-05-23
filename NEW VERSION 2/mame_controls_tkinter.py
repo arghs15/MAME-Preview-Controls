@@ -9160,6 +9160,56 @@ class MAMEControlConfig(ctk.CTk):
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f'{width}x{height}+{x}+{y}')
 
+    def create_status_bar(self):
+        """Create a status bar at the bottom of the main window"""
+        try:
+            # Status bar container
+            self.status_bar = ctk.CTkFrame(self, height=25, fg_color=self.theme_colors["card_bg"], corner_radius=0)
+            self.status_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+            self.status_bar.pack_propagate(False)  # Keep fixed height
+            
+            # Status message
+            self.status_message = ctk.CTkLabel(
+                self.status_bar,
+                text="Ready",
+                font=("Arial", 11),
+                text_color=self.theme_colors["text_dimmed"],
+                anchor="w"
+            )
+            self.status_message.pack(side="left", padx=10, fill="y")
+            
+            # Version info
+            self.version_label = ctk.CTkLabel(
+                self.status_bar,
+                text="MAME Controls Config v2.0",
+                font=("Arial", 11),
+                text_color=self.theme_colors["text_dimmed"]
+            )
+            self.version_label.pack(side="right", padx=10, fill="y")
+            
+            # Update grid configuration to accommodate status bar
+            self.grid_rowconfigure(2, weight=0)  # Status bar (fixed height)
+            
+            return True
+        except Exception as e:
+            print(f"Error creating status bar: {e}")
+            return False
+    
+    def update_status_message(self, message, timeout=5000):
+        """Update the status bar message with optional timeout"""
+        try:
+            # Update message text
+            self.status_message.configure(text=message)
+            
+            # Clear after timeout (if specified)
+            if timeout > 0:
+                self.after(timeout, lambda: self.status_message.configure(text="Ready"))
+            
+            return True
+        except Exception as e:
+            print(f"Error updating status message: {e}")
+            return False
+
 if __name__ == "__main__":
     try:
         app = MAMEControlConfig()

@@ -407,34 +407,6 @@ class PreviewWindow(QMainWindow):
         print(f"Max text width calculated: {max_width}px + {extra_padding}px padding = {result_width}px")
         return result_width
     
-    # Add this method to the PreviewWindow class to map button prefixes to control names
-    def get_control_name_from_prefix(self, prefix):
-        """Map a button prefix back to a standard control name for position lookup"""
-        prefix_to_control = {
-            "A": "P1_BUTTON1",
-            "B": "P1_BUTTON2",
-            "X": "P1_BUTTON3",
-            "Y": "P1_BUTTON4",
-            "LB": "P1_BUTTON5",
-            "RB": "P1_BUTTON6",
-            "LT": "P1_BUTTON7",
-            "RT": "P1_BUTTON8",
-            "LS": "P1_BUTTON9",
-            "RS": "P1_BUTTON10",
-            "LS↑": "P1_JOYSTICK_UP",
-            "LS↓": "P1_JOYSTICK_DOWN",
-            "LS←": "P1_JOYSTICK_LEFT",
-            "LS→": "P1_JOYSTICK_RIGHT",
-            "RS↑": "P1_JOYSTICK2_UP",
-            "RS↓": "P1_JOYSTICK2_DOWN",
-            "RS←": "P1_JOYSTICK2_LEFT",
-            "RS→": "P1_JOYSTICK2_RIGHT",
-            "START": "P1_START",
-            "BACK": "P1_SELECT"
-        }
-        
-        return prefix_to_control.get(prefix, "")
-    
     # 1. Add this method to PreviewWindow class to show only specialized MAME controls
     def show_specialized_controls(self):
         """Show specialized MAME controls like dials, trackballs, etc. for positioning"""
@@ -1372,41 +1344,6 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
         
         return False
-    
-    # Add this method to PreviewWindow class
-    def setup_alignment_features(self):
-        """Set up alignment features in the PreviewWindow"""
-        # Initialize the alignment grid system
-        self.initialize_alignment_grid()
-        
-        # Add the grid toggle button to the floating control panel
-        if hasattr(self, 'bottom_row') and not hasattr(self, 'grid_button'):
-            from PyQt5.QtWidgets import QPushButton
-            from PyQt5.QtCore import Qt
-            
-            button_style = """
-                QPushButton {
-                    background-color: #404050;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 6px 10px;
-                    font-weight: bold;
-                    font-size: 12px;
-                    min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #555565;
-                }
-                QPushButton:pressed {
-                    background-color: #303040;
-                }
-            """
-            
-            self.grid_button = QPushButton("Show Grid")
-            self.grid_button.clicked.connect(self.toggle_alignment_grid)
-            self.grid_button.setStyleSheet(button_style)
-            self.bottom_row.addWidget(self.grid_button)
 
     def initialize_alignment_grid(self):
         """Initialize the alignment grid system"""
@@ -1784,82 +1721,6 @@ class PreviewWindow(QMainWindow):
                 label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         print("Font applied and labels resized")
-    
-    def init_fonts(self):
-        """Initialize and preload fonts at startup to ensure they're available throughout the session"""
-        from PyQt5.QtGui import QFontDatabase, QFont
-        
-        print("\n--- INITIALIZING FONTS ---")
-        # Get requested font from settings
-        font_family = self.text_settings.get("font_family", "Arial")
-        font_size = self.text_settings.get("font_size", 28)
-        
-        # 1. First try to load the exact font file if it's a known system font
-        system_font_map = {
-            "Times New Roman": "times.ttf",
-            "Impact": "impact.ttf",
-            "Courier New": "cour.ttf",
-            "Comic Sans MS": "comic.ttf",
-            "Georgia": "georgia.ttf",
-            "Arial": "arial.ttf",
-            "Verdana": "verdana.ttf",
-            "Tahoma": "tahoma.ttf",
-            "Calibri": "calibri.ttf"
-        }
-        
-        # Store the actual font family name loaded
-        self.initialized_font_family = None
-        
-        if font_family in system_font_map:
-            font_file = system_font_map[font_family]
-            font_path = os.path.join("C:\\Windows\\Fonts", font_file)
-            
-            if os.path.exists(font_path):
-                print(f"Preloading system font: {font_path}")
-                font_id = QFontDatabase.addApplicationFont(font_path)
-                
-                if font_id >= 0:
-                    families = QFontDatabase.applicationFontFamilies(font_id)
-                    if families:
-                        self.initialized_font_family = families[0]
-                        print(f"System font loaded and registered as: {self.initialized_font_family}")
-        
-        # 2. Check for custom fonts if we couldn't load a system font
-        if not self.initialized_font_family:
-            fonts_dir = os.path.join(self.mame_dir, "preview", "fonts")
-            if os.path.exists(fonts_dir):
-                # Try to find a matching font file
-                for filename in os.listdir(fonts_dir):
-                    if filename.lower().endswith(('.ttf', '.otf')):
-                        base_name = os.path.splitext(filename)[0]
-                        
-                        # Check if this might be the font we're looking for
-                        if (base_name.lower() == font_family.lower() or
-                            font_family.lower() in base_name.lower()):
-                            
-                            font_path = os.path.join(fonts_dir, filename)
-                            print(f"Trying to load custom font: {font_path}")
-                            
-                            font_id = QFontDatabase.addApplicationFont(font_path)
-                            if font_id >= 0:
-                                families = QFontDatabase.applicationFontFamilies(font_id)
-                                if families:
-                                    self.initialized_font_family = families[0]
-                                    print(f"Custom font loaded and registered as: {self.initialized_font_family}")
-                                    break
-        
-        # Create a proper QFont with the exact family name
-        if self.initialized_font_family:
-            # Store the font for future use
-            self.initialized_font = QFont(self.initialized_font_family, font_size)
-            self.initialized_font.setBold(self.text_settings.get("bold_strength", 2) > 0)
-            self.initialized_font.setStyleStrategy(QFont.PreferMatch)
-            
-            print(f"Initialized font: {self.initialized_font_family} at size {font_size}")
-        else:
-            print(f"Could not initialize font: {font_family}. Will fallback to system handling.")
-        
-        print("--- FONT INITIALIZATION COMPLETE ---\n")
 
     # 10. Remove the shadow toggle button from UI
     def create_floating_button_frame(self):
@@ -2354,19 +2215,6 @@ class PreviewWindow(QMainWindow):
             # Debug output
             print(f"Button frame positioned: {frame_width}x{button_height} at ({x_pos}, {y_pos})")
             print(f"Window size: {self.width()}x{self.height()}")
-
-    def on_resize_with_buttons(self, event):
-        """Handle resize events and reposition the button frame"""
-        # Let the normal resize event happen first
-        super().resizeEvent(event)
-        
-        # Reposition the button frame with a short delay to ensure geometry is updated
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(50, self.position_button_frame)
-        
-        # Also handle bezel resizing if needed
-        if hasattr(self, 'on_resize_with_bezel'):
-            self.on_resize_with_bezel(event)
     
     # Add this to the PreviewWindow class
     def ensure_bezel_state(self):
@@ -2746,40 +2594,6 @@ class PreviewWindow(QMainWindow):
         # Let event propagate
         event.accept()
 
-    def create_presized_label(self, text, font, control_name=""):
-        """Create a properly sized label before positioning it"""
-        from PyQt5.QtWidgets import QSizePolicy
-        from PyQt5.QtCore import Qt
-        
-        # Create the label
-        label = DraggableLabel(text, self.canvas, settings=self.text_settings.copy())
-        
-        # Apply font directly
-        label.setFont(font)
-        
-        # Important text display fixes
-        label.setWordWrap(False)  # Prevent wrapping
-        label.setTextFormat(Qt.PlainText)  # Simple text format
-        
-        # Remove any constraints
-        label.setMinimumSize(0, 0)
-        label.setMaximumSize(16777215, 16777215)  # Qt's maximum
-        
-        # Set expanding size policy
-        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        
-        # Force size calculation
-        label.adjustSize()
-        
-        # Track the actual size used
-        width = label.width()
-        height = label.height()
-        
-        if control_name:
-            print(f"Presized {control_name}: {width}x{height}")
-        
-        return label, width, height
-
     def convert_mapping(self, mapping, to_xinput=True):
         """Convert JOYCODE mappings to XINPUT format for button prefix extraction."""
         if not mapping:
@@ -2850,212 +2664,6 @@ class PreviewWindow(QMainWindow):
         
         print(f"JOYCODE_1_ZAXIS mapped to: {self.joycode_to_xinput_map.get('JOYCODE_1_ZAXIS', 'NOT FOUND')}")
     
-    # 4. Updated function categorization for specialized controls
-    def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
-        """Update game_data to include custom mappings with improved specialized control handling"""
-        if not cfg_controls and not hasattr(self, 'default_controls'):
-            return
-            
-        # Define ALL specialized controls with their proper prefixes and display names
-        specialized_controls = {
-            # Rotary controls
-            'P1_DIAL': {'prefix': 'DIAL', 'display_name': 'Rotary Dial (H)'},
-            'P1_DIAL_V': {'prefix': 'DIAL↕', 'display_name': 'Vertical Dial'},
-            'P1_PADDLE': {'prefix': 'PDL', 'display_name': 'Paddle Control'},
-            
-            # Trackball controls
-            'P1_TRACKBALL_X': {'prefix': 'TRK←→', 'display_name': 'Trackball X-Axis'},
-            'P1_TRACKBALL_Y': {'prefix': 'TRK↑↓', 'display_name': 'Trackball Y-Axis'},
-            
-            # Mouse controls
-            'P1_MOUSE_X': {'prefix': 'MSE←→', 'display_name': 'Mouse X-Axis'},
-            'P1_MOUSE_Y': {'prefix': 'MSE↑↓', 'display_name': 'Mouse Y-Axis'},
-            
-            # Light gun controls
-            'P1_LIGHTGUN_X': {'prefix': 'GUN←→', 'display_name': 'Lightgun X-Axis'},
-            'P1_LIGHTGUN_Y': {'prefix': 'GUN↑↓', 'display_name': 'Lightgun Y-Axis'},
-            
-            # Analog stick controls
-            'P1_AD_STICK_X': {'prefix': 'ASX', 'display_name': 'Analog Stick X'},
-            'P1_AD_STICK_Y': {'prefix': 'ASY', 'display_name': 'Analog Stick Y'},
-            'P1_AD_STICK_Z': {'prefix': 'ASZ', 'display_name': 'Analog Stick Z'},
-            
-            # Pedal inputs
-            'P1_PEDAL': {'prefix': 'PED1', 'display_name': 'Pedal 1'},
-            'P1_PEDAL2': {'prefix': 'PED2', 'display_name': 'Pedal 2'},
-            
-            # Positional control
-            'P1_POSITIONAL': {'prefix': 'POS', 'display_name': 'Positional Ctrl'},
-            
-            # Gambling controls
-            'P1_GAMBLE_HIGH': {'prefix': 'HIGH', 'display_name': 'Gamble High'},
-            'P1_GAMBLE_LOW': {'prefix': 'LOW', 'display_name': 'Gamble Low'},
-        }
-        
-        # Add flag to game_data for custom config
-        if game_data['romname'] in self.custom_configs:
-            game_data['has_rom_cfg'] = True
-            game_data['rom_cfg_file'] = f"{game_data['romname']}.cfg"
-        
-        # Add flag for default cfg if available
-        if hasattr(self, 'default_controls') and self.default_controls:
-            game_data['has_default_cfg'] = True
-        
-        print(f"\n*** Starting update_game_data_with_custom_mappings for {self.rom_name} ***")
-        
-        # Process each control in the game data
-        for player in game_data.get('players', []):
-            for label in player.get('labels', []):
-                control_name = label['name']
-                
-                # Debug ALL controls to see what's being processed
-                print(f"Control: {control_name}, Value: {label['value']}, Mapping: {label.get('mapping', 'NONE')}")
-                
-                # Special debug for P1_PEDAL2
-                if control_name == "P1_PEDAL2":
-                    print(f"*** Found P1_PEDAL2 ***")
-                    print(f"Action: {label['value']}")
-                    print(f"Mapping: {label.get('mapping', 'NONE')}")
-                    print(f"Is Custom: {label.get('is_custom', False)}")
-                    print(f"Mapping source: {label.get('mapping_source', 'UNKNOWN')}")
-                    
-                    # Check if default controls exist and contain this control
-                    has_defaults = hasattr(self, 'default_controls')
-                    in_defaults = has_defaults and control_name in self.default_controls
-                    print(f"Has default_controls: {has_defaults}")
-                    print(f"P1_PEDAL2 in default_controls: {in_defaults}")
-                    if in_defaults:
-                        print(f"Default mapping: {self.default_controls[control_name]}")
-                        
-                # Get the functional category for this control (for positioning)
-                func_category = self.get_functional_category(control_name)
-                label['func_category'] = func_category
-                
-                # Check if this is a specialized control
-                is_specialized = control_name in specialized_controls
-                
-                # Check for mapping information
-                has_custom_mapping = control_name in cfg_controls
-                mapping = None
-                xinput_prefix = None
-
-                if has_custom_mapping:
-                    mapping = cfg_controls[control_name]
-                    # Check if in XInput mode - try for ANY mapping
-                    if self.use_xinput:  # Remove "XINPUT" in mapping check
-                        xinput_prefix = self.get_button_prefix_from_mapping(mapping)
-                    
-                    # Add or update a 'mapping' key to store the current mapping
-                    label['mapping'] = mapping
-                    label['is_custom'] = True
-                    label['mapping_source'] = f"ROM CFG ({game_data['romname']}.cfg)"
-                    label['cfg_mapping'] = True
-                    
-                elif hasattr(self, 'default_controls') and control_name in self.default_controls:
-                    default_mapping = self.default_controls[control_name]
-                    print(f"Processing default mapping for {control_name}: {default_mapping}")
-                    
-                    if self.use_xinput:
-                        # Check if conversion method exists
-                        if hasattr(self, 'convert_mapping'):
-                            mapping = self.convert_mapping(default_mapping, True)
-                            print(f"Converted mapping for {control_name}: {mapping}")
-                        else:
-                            print(f"WARNING: convert_mapping method not found for {control_name}")
-                            mapping = default_mapping
-                            
-                        # Try to get prefix regardless of mapping type
-                        xinput_prefix = self.get_button_prefix_from_mapping(mapping)
-                        print(f"XInput prefix for {control_name}: {xinput_prefix}")
-                    else:
-                        mapping = default_mapping
-                    
-                    label['mapping'] = mapping
-                    label['is_custom'] = False
-                    label['mapping_source'] = "Default CFG"
-                    label['cfg_mapping'] = True
-                else:
-                    label['is_custom'] = False
-                
-                # Apply display styles based on function category
-                self.set_display_style(label, func_category)
-                
-                # Set display name based on control type
-                if self.use_xinput:
-                    if is_specialized:
-                        # Get specialized control details
-                        special_data = specialized_controls[control_name]
-                        
-                        # CRITICAL CHANGE: Prioritize button mapping as prefix
-                        if xinput_prefix:
-                            # Use the actual mapped button (LT, RB, etc.) as prefix
-                            label['prefix'] = xinput_prefix
-                            label['display_name'] = special_data['display_name']
-                        else:
-                            # Only fall back to specialized type (PED1, PED2) if no mapping
-                            label['prefix'] = special_data['prefix']
-                            label['display_name'] = special_data['display_name']
-                        
-                        # Always set target button if available
-                        if xinput_prefix:
-                            label['target_button'] = xinput_prefix
-                    else:
-                        # Regular buttons use standard XINPUT display names
-                        standard_display_names = {
-                            'P1_BUTTON1': 'P1 A Button',
-                            'P1_BUTTON2': 'P1 B Button',
-                            'P1_BUTTON3': 'P1 X Button',
-                            'P1_BUTTON4': 'P1 Y Button',
-                            'P1_BUTTON5': 'P1 LB Button',
-                            'P1_BUTTON6': 'P1 RB Button',
-                            'P1_BUTTON7': 'P1 LT Button',
-                            'P1_BUTTON8': 'P1 RT Button',
-                            'P1_BUTTON9': 'P1 Left Stick Button',
-                            'P1_BUTTON10': 'P1 Right Stick Button',
-                            'P1_START': 'P1 Start Button',
-                            'P1_SELECT': 'P1 Select Button'
-                        }
-                        label['display_name'] = standard_display_names.get(control_name, self.format_control_name(control_name))
-                        
-                        # For XINPUT mappings, extract target button
-                        if mapping and "XINPUT" in mapping:
-                            label['target_button'] = self.get_friendly_xinput_name(mapping)
-                else:
-                    # JOYCODE mode - use traditional names
-                    if is_specialized:
-                        special_data = specialized_controls[control_name]
-                        label['prefix'] = special_data['prefix']
-                        label['display_name'] = special_data['display_name']
-                    else:
-                        label['display_name'] = self.format_control_name(control_name)
-                        
-                    # For JOYCODE mappings, extract button info
-                    if mapping and "JOYCODE" in mapping:
-                        self.extract_joycode_button_info(label, mapping)
-
-        def get_functional_category(self, control_name):
-            """Get the functional category for a control to ensure consistent positioning"""
-            # Define the functional categories for organizing controls
-            functional_categories = {
-                'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_PADDLE', 'P1_DIAL'],
-                'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
-                'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
-                'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
-                'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
-                'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
-                'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_AD_STICK_Z', 'P1_POSITIONAL'],
-                'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
-                'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
-            }
-            
-            # Find which category contains this control
-            for category, controls in functional_categories.items():
-                if control_name in controls:
-                    return category
-                    
-            # Default to 'other' if not found in any category
-            return 'other'
-
     # 5. Updated format_control_name method to produce more readable control names
     def format_control_name(self, control_name):
         """Format control names for better display with specialized control handling"""
@@ -3841,72 +3449,6 @@ class PreviewWindow(QMainWindow):
         print(f"Applied directional controls visibility to {controls_updated} controls")
         return controls_updated
 
-    # Call this at the end of PreviewWindow.__init__
-    def init_joystick_delayed(self):
-        """Set up a delayed joystick visibility initialization"""
-        # After UI is fully initialized, apply joystick visibility
-        QTimer.singleShot(600, self.apply_joystick_visibility)
-        print("Scheduled delayed joystick visibility application")
-    
-    # Add method to initialize joystick visibility during startup
-    def initialize_joystick_visibility(self):
-        """Apply joystick visibility setting to controls"""
-        # Make sure joystick_visible is initialized
-        if not hasattr(self, 'joystick_visible'):
-            # Try to load from settings
-            bezel_settings = self.load_bezel_settings()
-            self.joystick_visible = bezel_settings.get("joystick_visible", True)
-        
-        # Update joystick button text if it exists
-        if hasattr(self, 'joystick_button'):
-            self.joystick_button.setText("Show Joystick" if not self.joystick_visible else "Hide Joystick")
-        
-        # Apply visibility to joystick controls
-        for control_name, control_data in self.control_labels.items():
-            if any(js_type in control_name for js_type in ["JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT"]):
-                is_visible = self.texts_visible and self.joystick_visible
-                control_data['label'].setVisible(is_visible)
-        
-        print(f"Initialized joystick visibility to: {self.joystick_visible}")
-
-    # Add this to the button_frame creation in __init__
-    def add_xinput_controls_button(self):
-        """Add a button to show all XInput controls"""
-        button_style = """
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #5a5a5a;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-                min-width: 90px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """
-        
-        # Create button for XInput controls toggle
-        '''self.xinput_controls_button = QPushButton("Show All XInput")
-        self.xinput_controls_button.clicked.connect(self.toggle_xinput_controls)
-        self.xinput_controls_button.setStyleSheet(button_style)
-        self.button_layout.setToolTip("Show all XInput controls for positioning")'''
-        
-        # Add to bottom row if it exists
-        if hasattr(self, 'bottom_row'):
-            self.bottom_row.addWidget(self.xinput_controls_button)
-    
-    # Add method to hide bezel
-    def hide_bezel(self):
-        """Hide the bezel image"""
-        if self.bezel_label:
-            self.bezel_label.hide()
-            print("Bezel hidden")
-
     # Update resizeEvent to handle bezel resizing
     def on_resize_with_bezel(self, event):
         """Handle resize events with bezel support"""
@@ -4196,10 +3738,6 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
         
         print("Layer order enforcement complete")
-    
-    def show_logo_position(self):
-        """Show dialog to configure logo position"""
-        self.show_logo_settings()
     
     def save_logo_settings(self, is_global=False):
         """Save logo settings to file in settings directory"""
@@ -4582,12 +4120,6 @@ class PreviewWindow(QMainWindow):
                     action = "resized" if was_resizing else "moved"
                     print(f"Logo {action} - settings saved")
     
-    def toggle_horizontal_centering(self, enabled):
-        """Toggle horizontal centering controls"""
-        # Disable X position spinner when horizontal centering is enabled
-        self.x_spin.setEnabled(not enabled)
-
-    
     # Add logo resize handle display in paintEvent
     def logo_paint_event(self, event):
         """Paint event handler for logo label to draw resize handle"""
@@ -4829,11 +4361,6 @@ class PreviewWindow(QMainWindow):
         self.logo_button.clicked.connect(self.toggle_logo)
         self.logo_button.setStyleSheet(button_style)
         self.bottom_row.addWidget(self.logo_button)
-        
-        self.logo_pos_button = QPushButton("Logo Pos")
-        self.logo_pos_button.clicked.connect(self.show_logo_position)
-        self.logo_pos_button.setStyleSheet(button_style)
-        self.bottom_row.addWidget(self.logo_pos_button)
         
         # Add screen toggle button
         self.screen_button = QPushButton("Screen 2")
@@ -5201,23 +4728,6 @@ class PreviewWindow(QMainWindow):
             self.distribute_controls_vertically()
             event.accept()
     
-    # Make sure the window is full screen without borders
-    def set_fullscreen(self):
-        """Make the window truly fullscreen without borders"""
-        # Get screen geometry
-        screen_rect = QApplication.desktop().screenGeometry(self.current_screen - 1)  # -1 for 0-based index
-        
-        # Set window to exactly screen size
-        self.setGeometry(screen_rect)
-        
-        # Remove window frame
-        self.setWindowFlags(self.windowFlags() | Qt.FramelessWindowHint)
-        
-        # Update window
-        self.show()
-        
-        print(f"Set window to full screen: {screen_rect.width()}x{screen_rect.height()}")
-    
     # Modify move_to_screen to ensure full screen
     def move_to_screen(self, screen_index):
         """Move window to specified screen with true fullscreen"""
@@ -5283,24 +4793,6 @@ class PreviewWindow(QMainWindow):
         
         # Now call move_to_screen with the new value
         self.move_to_screen(target_screen)
-    
-    # Add a method to force controls above the bezel
-    def force_controls_above_bezel(self):
-        """Force all control elements to be above the bezel"""
-        if not hasattr(self, 'bezel_label') or not self.bezel_label:
-            return
-        
-        # Raise all control labels
-        if hasattr(self, 'control_labels'):
-            for control_data in self.control_labels.values():
-                if 'label' in control_data and control_data['label']:
-                    control_data['label'].raise_()
-        
-        # Raise logo if it exists
-        if hasattr(self, 'logo_label') and self.logo_label:
-            self.logo_label.raise_()
-        
-        print("All controls raised above bezel")
 
     def initialize_transparent_background(self):
         """Create and ensure a blank transparent background exists before displaying preview"""
@@ -5754,118 +5246,6 @@ class PreviewWindow(QMainWindow):
             print(f"Error in canvas resize: {e}")
             import traceback
             traceback.print_exc()
-
-    def save_logo_settings_global(self):
-        """Save logo settings globally to ensure they persist across ROM changes"""
-        try:
-            # Create settings directory if it doesn't exist
-            os.makedirs(self.settings_dir, exist_ok=True)
-            
-            # Save to global settings file
-            settings_file = os.path.join(self.settings_dir, "logo_settings.json")
-            
-            with open(settings_file, 'w') as f:
-                json.dump(self.logo_settings, f)
-                
-            print(f"Saved global logo settings to: {settings_file}")
-            print(f"Settings: {self.logo_settings}")
-            return True
-        except Exception as e:
-            print(f"Error saving global logo settings: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def check_layer_visibility(self):
-        """Print diagnostic information about layer visibility"""
-        print("\n----- LAYER VISIBILITY CHECK -----")
-        
-        # Check background
-        if hasattr(self, 'bg_label') and self.bg_label:
-            print(f"Background: {'VISIBLE' if self.bg_label.isVisible() else 'HIDDEN'}")
-            if self.bg_label.pixmap():
-                print(f"  Size: {self.bg_label.pixmap().width()}x{self.bg_label.pixmap().height()}")
-            else:
-                print("  No pixmap loaded")
-        else:
-            print("Background: NOT CREATED")
-        
-        # Check bezel
-        if hasattr(self, 'bezel_label') and self.bezel_label:
-            print(f"Bezel: {'VISIBLE' if self.bezel_label.isVisible() else 'HIDDEN'}")
-            if self.bezel_label.pixmap():
-                print(f"  Size: {self.bezel_label.pixmap().width()}x{self.bezel_label.pixmap().height()}")
-            else:
-                print("  No pixmap loaded")
-        else:
-            print("Bezel: NOT CREATED")
-        
-        # Check logo
-        if hasattr(self, 'logo_label') and self.logo_label:
-            print(f"Logo: {'VISIBLE' if self.logo_label.isVisible() else 'HIDDEN'}")
-            if self.logo_label.pixmap():
-                print(f"  Size: {self.logo_label.pixmap().width()}x{self.logo_label.pixmap().height()}")
-            else:
-                print("  No pixmap loaded")
-        else:
-            print("Logo: NOT CREATED")
-        
-        # Check controls (sample)
-        if hasattr(self, 'control_labels') and self.control_labels:
-            visible_controls = sum(1 for c in self.control_labels.values() 
-                                if 'label' in c and c['label'] and c['label'].isVisible())
-            print(f"Controls: {visible_controls} visible out of {len(self.control_labels)} total")
-        else:
-            print("Controls: NOT CREATED")
-        
-        print("--------------------------------")
-
-        self.check_layer_visibility()
-    
-    def on_canvas_resize(self, event):
-        """Handle canvas resize to update background image"""
-        try:
-            # Resize and center the background image
-            if hasattr(self, 'bg_label'):
-                # Get the original pixmap
-                pixmap = self.bg_label.pixmap()
-                if pixmap and not pixmap.isNull():
-                    # Resize to fill the canvas, stretching it
-                    new_pixmap = pixmap.scaled(
-                        self.canvas.width(), 
-                        self.canvas.height(), 
-                        Qt.IgnoreAspectRatio,  # Stretch to fill the canvas without keeping aspect ratio
-                        Qt.SmoothTransformation
-                    )
-                    self.bg_label.setPixmap(new_pixmap)
-                    
-                    # Center the background
-                    self.center_background()
-            
-            # Also update control positions
-            self.update_control_positions()
-                    
-            # Call the original QWidget resize event directly instead of using super()
-            QWidget.resizeEvent(self.canvas, event)
-            
-        except Exception as e:
-            print(f"Error in on_canvas_resize: {e}")
-            import traceback
-            traceback.print_exc()
-
-    
-    def center_background(self):
-        """Center the background image in the canvas"""
-        if hasattr(self, 'bg_label') and self.bg_label.pixmap():
-            pixmap = self.bg_label.pixmap()
-            # Calculate position to center the pixmap
-            x = (self.canvas.width() - pixmap.width()) // 2
-            y = (self.canvas.height() - pixmap.height()) // 2
-            self.bg_label.setGeometry(x, y, pixmap.width(), pixmap.height())
-            
-            # Store the background position for control positioning
-            self.bg_pos = (x, y)
-            self.bg_size = (pixmap.width(), pixmap.height())
     
     # 4. Fix load_text_settings to check settings_dir first, then migrate from preview_dir
     def load_text_settings(self):
@@ -6234,17 +5614,6 @@ class PreviewWindow(QMainWindow):
         # Return the prefix if found, otherwise empty string
         return all_prefixes.get(control_name, "")
     
-    def ensure_clean_layout(self):
-        """Ensure all controls are properly laid out in clean mode"""
-        # Force a redraw of the canvas
-        self.canvas.update()
-                
-        # If logo exists, make sure it has no border
-        if hasattr(self, 'logo_label') and self.logo_label:
-            self.logo_label.setStyleSheet("background-color: transparent; border: none;")
-            
-        print("Clean layout applied - shadows positioned correctly")
-    
     # Add or update a method to load saved positions
     def load_saved_positions(self):
         """Load saved positions from ROM-specific or global config with improved error handling"""
@@ -6328,12 +5697,6 @@ class PreviewWindow(QMainWindow):
         print(f"Returning {len(positions)} positions")
         return positions
     
-    def update_control_positions(self):
-        """Update control positions when canvas resizes"""
-        # This would be used to maintain relative positions on resize
-        # Placeholder for now - requires position management system
-        pass
-    
     # Replace your existing toggle_texts method with this one
     def toggle_texts(self):
         """Toggle visibility of control labels except joystick controls"""
@@ -6379,43 +5742,6 @@ class PreviewWindow(QMainWindow):
             print("Note: Directional controls remain visible because this game only uses directional inputs")
         else:
             print(f"Directional controls visibility set to {self.joystick_visible}")
-    
-    def save_directional_settings(self, is_global=True):
-        """Save joystick visibility settings including respect_directional_only"""
-        try:
-            # Create settings directory if it doesn't exist
-            os.makedirs(self.settings_dir, exist_ok=True)
-            
-            # Get existing settings first
-            settings = {}
-            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
-            
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
-                    try:
-                        settings = json.load(f)
-                    except:
-                        pass
-            
-            # Update with our settings
-            settings["joystick_visible"] = self.joystick_visible
-            settings["respect_directional_only"] = getattr(self, 'respect_directional_only', True)
-            
-            # Preserve other settings
-            if hasattr(self, 'bezel_visible'):
-                settings["bezel_visible"] = self.bezel_visible
-            
-            # Save to file
-            with open(settings_file, 'w') as f:
-                json.dump(settings, f)
-                
-            print(f"Saved directional settings: {settings}")
-            return True
-        except Exception as e:
-            print(f"Error saving directional settings: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
     
     # Update the reset_positions method to better handle saved positions
     def reset_positions(self):
@@ -7658,119 +6984,6 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             return False
-
-    # Add this to mame_controls_preview.py to handle command line parameters
-    def add_cli_export_support():
-        """Add CLI support for batch export mode to the preview module"""
-        import argparse
-        
-        parser = argparse.ArgumentParser(description='MAME Control Preview')
-        parser.add_argument('--export-image', action='store_true', help='Export image mode')
-        parser.add_argument('--game', type=str, help='ROM name')
-        parser.add_argument('--output', type=str, help='Output image path')
-        parser.add_argument('--format', type=str, default='png', choices=['png', 'jpg'], help='Image format')
-        parser.add_argument('--no-buttons', action='store_true', help='Hide control buttons')
-        parser.add_argument('--clean-mode', action='store_true', help='Clean mode with no drag handles')
-        parser.add_argument('--no-bezel', action='store_true', help='Hide bezel')
-        parser.add_argument('--no-logo', action='store_true', help='Hide logo')
-        
-        args = parser.parse_args()
-        
-        # If export mode is enabled, handle it
-        if args.export_image:
-            if not args.game or not args.output:
-                print("ERROR: --game and --output parameters are required for export mode")
-                sys.exit(1)
-            
-            # Get application paths
-            app_dir = get_application_path()
-            mame_dir = get_mame_parent_dir(app_dir)
-            
-            # Find and load game data
-            from PyQt5.QtWidgets import QApplication
-            app = QApplication(sys.argv)
-            
-            # Create a headless app for image export
-            try:
-                # Load game data from cache 
-                preview_dir = os.path.join(mame_dir, "preview")
-                cache_dir = os.path.join(preview_dir, "cache")
-                cache_path = os.path.join(cache_dir, f"{args.game}_cache.json")
-                
-                if os.path.exists(cache_path):
-                    with open(cache_path, 'r', encoding='utf-8') as f:
-                        game_data = json.load(f)
-                else:
-                    print(f"ERROR: Cache file not found: {cache_path}")
-                    sys.exit(1)
-                    
-                # Create preview window with command line options
-                hide_buttons = args.no_buttons
-                clean_mode = args.clean_mode
-                
-                # Create the preview window (starts invisible)
-                preview = PreviewWindow(
-                    args.game, 
-                    game_data, 
-                    mame_dir,
-                    hide_buttons=hide_buttons,
-                    clean_mode=clean_mode
-                )
-                
-                # Set bezel/logo visibility if specified
-                if args.no_bezel and hasattr(preview, 'bezel_visible'):
-                    preview.bezel_visible = False
-                    
-                if args.no_logo and hasattr(preview, 'logo_visible'):
-                    preview.logo_visible = False
-                    if hasattr(preview, 'logo_label') and preview.logo_label:
-                        preview.logo_label.setVisible(False)
-                
-                # Export the image
-                if preview.export_image_headless(args.output, args.format):
-                    print(f"Successfully exported preview for {args.game} to {args.output}")
-                    sys.exit(0)
-                else:
-                    print(f"Failed to export preview for {args.game}")
-                    sys.exit(1)
-                    
-            except Exception as e:
-                print(f"ERROR in export mode: {e}")
-                import traceback
-                traceback.print_exc()
-                sys.exit(1)
-                
-        return args
-
-# 1. First, modify the EnhancedLabel class to remove shadow functionality
-class EnhancedLabel(QLabel):
-    """A label with improved rendering without shadows"""
-    def __init__(self, text, parent=None):
-        super().__init__(text, parent)
-        
-        # Set transparent background
-        self.setStyleSheet("background-color: transparent;")
-        
-    def paintEvent(self, event):
-        """Override paint event to draw text with better positioning"""
-        if not self.text():
-            return
-            
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.TextAntialiasing)
-        
-        # Get current font metrics
-        metrics = QFontMetrics(self.font())
-        text_rect = metrics.boundingRect(self.text())
-        
-        # Calculate text position (centered in the label)
-        x = int((self.width() - text_rect.width()) / 2)
-        y = int((self.height() + metrics.ascent() - metrics.descent()) / 2)
-        
-        # Draw main text
-        painter.setPen(self.palette().color(QPalette.WindowText))
-        painter.drawText(int(x), int(y), self.text())
         
 class DraggableLabel(QLabel):
     """A draggable label without right-click menu functionality"""
@@ -9044,22 +8257,6 @@ class PositionIndicator(QLabel):
         """Hide the position indicator"""
         if hasattr(self, 'position_indicator'):
             self.position_indicator.hide()
-
-    def create_absolute_alignment_lines(self, x=None, y=None):
-        """Create absolute alignment lines at specified X or Y positions"""
-        guide_lines = []
-        canvas_width = self.canvas.width()
-        canvas_height = self.canvas.height()
-        
-        if x is not None:
-            # Create vertical guide line at fixed X
-            guide_lines.append((x, 0, x, canvas_height))
-        
-        if y is not None:
-            # Create horizontal guide line at fixed Y
-            guide_lines.append((0, y, canvas_width, y))
-        
-        self.show_alignment_guides(guide_lines)
 
 # 1. Update GradientPrefixLabel to remove shadow handling
 class GradientPrefixLabel(DraggableLabel):
