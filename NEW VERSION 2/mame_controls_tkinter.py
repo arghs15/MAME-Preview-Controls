@@ -170,6 +170,7 @@ class MAMEControlConfig(ctk.CTk):
         # FEATURE TOGGLES - Set to False to disable features
         self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
         self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
+        self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -4628,8 +4629,8 @@ class MAMEControlConfig(ctk.CTk):
         button_container = ctk.CTkFrame(button_area, fg_color="transparent")
         button_container.pack(fill="both", expand=True, padx=20, pady=15)
         
-        # Remove Game button (with confirmation) - only show if not a new game
-        if not is_new_game:
+        # Remove Game button (with confirmation) - only show if not a new game and feature is enabled
+        if not is_new_game and self.ALLOW_REMOVE_GAME:
             remove_button = ctk.CTkButton(
                 button_container,
                 text="Remove Game",
