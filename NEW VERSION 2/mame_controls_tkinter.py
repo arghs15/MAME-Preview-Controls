@@ -3824,10 +3824,9 @@ class MAMEControlConfig(ctk.CTk):
         clone_entries = []
         preview_text = None  # Define here to avoid NameError
         
-        # REORDERED: Control mappings card MOVED UP before clone management
         controls_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         controls_card.pack(fill="x", padx=0, pady=(0, 15))
-        
+
         # Card title
         ctk.CTkLabel(
             controls_card,
@@ -3835,8 +3834,7 @@ class MAMEControlConfig(ctk.CTk):
             font=("Arial", 16, "bold"),
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
-        
-        # Get existing controls from game data to ensure we show ALL controls
+
         # Get existing controls from game data to ensure we show ALL controls
         existing_controls = []
         existing_control_names = set()  # Track which control names exist in the game data
@@ -3848,75 +3846,84 @@ class MAMEControlConfig(ctk.CTk):
                     existing_controls.append((label['name'], label['value']))
                     existing_control_names.add(label['name'])
 
-        # Dynamically generate buttons based on game data
+        # FIXED: Only show controls that actually exist, don't auto-generate
         standard_controls = []
 
-        # First determine how many buttons to show
-        if is_new_game:
-            # For new games, use the buttons value from the UI
-            buttons_to_show = int(buttons_var.get())
-            print(f"New game: showing {buttons_to_show} buttons from UI input")
-        else:
-            # For existing games, only show buttons that are actually defined in the controls
-            num_buttons = int(game_data.get('buttons', 2))  # Default to 2 if not specified
-            print(f"Existing game: game defines {num_buttons} buttons")
-            
-            # Only show buttons that are actually defined in the controls
-            defined_buttons = []
-            for i in range(1, 11):  # Check up to button 10
-                button_name = f"P1_BUTTON{i}"
-                if button_name in existing_control_names or (
-                    'controls' in game_data and button_name in game_data['controls']):
-                    defined_buttons.append(button_name)
-            
-            print(f"Found {len(defined_buttons)} defined buttons: {defined_buttons}")
-            buttons_to_show = max(num_buttons, len(defined_buttons))
-            print(f"Will show {buttons_to_show} buttons")
-
-        # Generate button controls - ONLY for existing games, not new games
         if not is_new_game:
-            # For existing games, show buttons that are actually defined
-            for i in range(1, buttons_to_show + 1):
-                control_name = f'P1_BUTTON{i}'
-                display_name = f'P1 Button {i}'
-                standard_controls.append((control_name, display_name))
-        # For new games, don't auto-generate any buttons - let user add what they need
+            # For existing games, ONLY show controls that are actually defined
+            # Don't auto-generate based on button count
+            
+            print(f"Existing game: found {len(existing_control_names)} actual controls")
+            print(f"Controls found: {sorted(existing_control_names)}")
+            
+            # Only add controls that actually exist in the game data
+            for control_name in sorted(existing_control_names):
+                # Only include standard button/joystick controls in the standard_controls list
+                # Specialized controls will be handled separately
+                if (control_name.startswith('P1_BUTTON') or 
+                    control_name.startswith('P1_JOYSTICK') or
+                    control_name.startswith('P1_START') or 
+                    control_name.startswith('P1_SELECT')):
+                    
+                    # Create display name
+                    if control_name.startswith('P1_BUTTON'):
+                        button_num = control_name.replace('P1_BUTTON', '')
+                        display_name = f'P1 Button {button_num}'
+                    elif control_name == 'P1_START':
+                        display_name = 'P1 Start Button'
+                    elif control_name == 'P1_SELECT':
+                        display_name = 'P1 Select/Coin Button'
+                    elif control_name == 'P1_JOYSTICK_UP':
+                        display_name = 'P1 Joystick Up'
+                    elif control_name == 'P1_JOYSTICK_DOWN':
+                        display_name = 'P1 Joystick Down'
+                    elif control_name == 'P1_JOYSTICK_LEFT':
+                        display_name = 'P1 Joystick Left'
+                    elif control_name == 'P1_JOYSTICK_RIGHT':
+                        display_name = 'P1 Joystick Right'
+                    else:
+                        display_name = control_name
+                        
+                    standard_controls.append((control_name, display_name))
 
-        # Only add directional controls if they're used in existing games
+        # For new games, don't pre-generate any controls - let user add what they need
+        if is_new_game:
+            print("New game: not pre-generating any controls")
+            standard_controls = []
+
+        # Only add directional controls if they actually exist in the game data
         directional_controls = []
         if not is_new_game and any(name.startswith('P1_JOYSTICK_') for name in existing_control_names):
-            directional_controls.extend([
-                ('P1_JOYSTICK_UP', 'P1 Joystick Up'),
-                ('P1_JOYSTICK_DOWN', 'P1 Joystick Down'),
-                ('P1_JOYSTICK_LEFT', 'P1 Joystick Left'),
-                ('P1_JOYSTICK_RIGHT', 'P1 Joystick Right'),
-            ])
+            # Only add the specific directional controls that exist
+            for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                control_name = f'P1_JOYSTICK_{direction}'
+                if control_name in existing_control_names:
+                    directional_controls.append((control_name, f'P1 Joystick {direction.capitalize()}'))
 
-        # Only add right stick controls if they're used
+        # Only add right stick controls if they actually exist
         right_stick_controls = []
         if any(name.startswith('P1_JOYSTICKRIGHT_') for name in existing_control_names):
-            right_stick_controls.extend([
-                ('P1_JOYSTICKRIGHT_UP', 'P1 Right Stick Up'),
-                ('P1_JOYSTICKRIGHT_DOWN', 'P1 Right Stick Down'),
-                ('P1_JOYSTICKRIGHT_LEFT', 'P1 Right Stick Left'),
-                ('P1_JOYSTICKRIGHT_RIGHT', 'P1 Right Stick Right'),
-            ])
+            for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                control_name = f'P1_JOYSTICKRIGHT_{direction}'
+                if control_name in existing_control_names:
+                    right_stick_controls.append((control_name, f'P1 Right Stick {direction.capitalize()}'))
 
-        # Only add D-pad controls if they're used
+        # Only add D-pad controls if they actually exist
         dpad_controls = []
         if any(name.startswith('P1_DPAD_') for name in existing_control_names):
-            dpad_controls.extend([
-                ('P1_DPAD_UP', 'P1 D-Pad Up'),
-                ('P1_DPAD_DOWN', 'P1 D-Pad Down'),
-                ('P1_DPAD_LEFT', 'P1 D-Pad Left'),
-                ('P1_DPAD_RIGHT', 'P1 D-Pad Right'),
-            ])
+            for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                control_name = f'P1_DPAD_{direction}'
+                if control_name in existing_control_names:
+                    dpad_controls.append((control_name, f'P1 D-Pad {direction.capitalize()}'))
 
-        # System buttons are common so we'll include them
-        system_controls = [
-            ('P1_START', 'P1 Start Button'),
-            ('P1_SELECT', 'P1 Select/Coin Button'),
-        ]
+        # System buttons - only if they exist
+        system_controls = []
+        for control_name in ['P1_START', 'P1_SELECT']:
+            if control_name in existing_control_names:
+                if control_name == 'P1_START':
+                    system_controls.append((control_name, 'P1 Start Button'))
+                elif control_name == 'P1_SELECT':
+                    system_controls.append((control_name, 'P1 Select/Coin Button'))
 
         # Define all specialized controls but only add the ones that exist in the game data
         all_specialized_controls = [
@@ -3953,9 +3960,13 @@ class MAMEControlConfig(ctk.CTk):
             if not any(control[0] == control_name for control in all_controls):
                 all_controls.append((control_name, action))
 
+        print(f"Final controls to display: {len(all_controls)}")
+        for control_name, display_name in all_controls:
+            print(f"  {control_name}: {display_name}")
+
         # Create a dictionary to store all the entry fields
         control_entries = {}
-        
+
         # Helper function to get existing action for a control
         def get_existing_action(control_name):
             for player in game_data.get('players', []):
@@ -3963,61 +3974,138 @@ class MAMEControlConfig(ctk.CTk):
                     if label.get('name') == control_name:
                         return label.get('value', '')
             return ''
-        
+
         # Headers for controls
         headers_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
         headers_frame.pack(fill="x", padx=15, pady=(0, 5))
-        
+
         # Two-column grid for headers
         headers_frame.columnconfigure(0, weight=1)  # Control
         headers_frame.columnconfigure(1, weight=1)  # Action
-        
+
         # Header labels
         control_header = ctk.CTkFrame(headers_frame, fg_color=self.theme_colors["primary"], corner_radius=4)
         control_header.grid(row=0, column=0, padx=(0, 5), sticky="ew")
-        
+
         ctk.CTkLabel(
             control_header,
             text="Control",
             font=("Arial", 13, "bold"),
             text_color="#ffffff"
         ).pack(padx=10, pady=5)
-        
+
         action_header = ctk.CTkFrame(headers_frame, fg_color=self.theme_colors["primary"], corner_radius=4)
         action_header.grid(row=0, column=1, padx=(5, 0), sticky="ew")
-        
+
         ctk.CTkLabel(
             action_header,
             text="Action/Function (leave empty to skip)",
             font=("Arial", 13, "bold"),
             text_color="#ffffff"
         ).pack(padx=10, pady=5)
-        
+
         # Create container for the controls
         controls_container = ctk.CTkFrame(controls_card, fg_color="transparent")
         controls_container.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-        
-        # Create a scrollable container for controls - auto-sizing
+
+        # Calculate dynamic height based on number of controls
+        num_controls = len(all_controls)
+        if num_controls == 0:
+            # Minimum height for empty state
+            dynamic_height = 60
+        elif num_controls <= 3:
+            # Small height for few controls
+            dynamic_height = min(num_controls * 45 + 20, 150)
+        elif num_controls <= 8:
+            # Medium height for moderate number of controls
+            dynamic_height = min(num_controls * 42 + 20, 300)
+        else:
+            # Cap height for many controls and enable scrolling
+            dynamic_height = 350
+
+        print(f"Setting controls frame height to {dynamic_height}px for {num_controls} controls")
+
+        # Create a scrollable container for controls with dynamic height
         controls_scroll = ctk.CTkScrollableFrame(
             controls_container,
+            height=dynamic_height,  # Dynamic height based on content
             fg_color="transparent",
             scrollbar_button_color=self.theme_colors["primary"],
             scrollbar_button_hover_color=self.theme_colors["secondary"]
         )
-        controls_scroll.pack(fill="x")  # Remove expand=True
-        
+        controls_scroll.pack(fill="x", expand=False)  # Don't expand, use calculated height
+
+        # Function to update height when controls are added/removed
+        def update_controls_height():
+            """Update the height of the controls frame based on current content"""
+            current_children = len([child for child in controls_scroll.winfo_children() 
+                                if isinstance(child, ctk.CTkFrame)])
+            
+            if current_children == 0:
+                new_height = 60
+            elif current_children <= 3:
+                new_height = min(current_children * 45 + 20, 150)
+            elif current_children <= 8:
+                new_height = min(current_children * 42 + 20, 300)
+            else:
+                new_height = 350
+            
+            # Only update if height changed significantly
+            current_height = controls_scroll.cget("height")
+            if abs(current_height - new_height) > 10:
+                controls_scroll.configure(height=new_height)
+                print(f"Updated controls frame height: {current_height} -> {new_height} ({current_children} controls)")
+
+        def update_empty_state():
+            """Update empty state message and frame height"""
+            control_widgets = [child for child in controls_scroll.winfo_children() 
+                            if isinstance(child, ctk.CTkFrame)]
+            
+            # Check if we have the empty state frame
+            empty_frames = [child for child in controls_scroll.winfo_children() 
+                        if isinstance(child, ctk.CTkFrame) and 
+                        any(isinstance(grandchild, ctk.CTkLabel) and 
+                            "No controls defined yet" in grandchild.cget("text") 
+                            for grandchild in child.winfo_children())]
+            
+            if len(control_widgets) == 0 or (len(control_widgets) == 1 and empty_frames):
+                # Show empty state if no real controls
+                if not empty_frames:
+                    empty_frame = ctk.CTkFrame(controls_scroll, fg_color=self.theme_colors["background"], corner_radius=4)
+                    empty_frame.pack(fill="x", pady=10)
+                    
+                    ctk.CTkLabel(
+                        empty_frame,
+                        text="No controls defined yet. Use 'Add Custom Controls' below to add controls.",
+                        font=("Arial", 13),
+                        text_color=self.theme_colors["text_dimmed"]
+                    ).pack(pady=20)
+                
+                # Set minimum height for empty state
+                controls_scroll.configure(height=80)
+            else:
+                # Remove empty state frames if we have real controls
+                for empty_frame in empty_frames:
+                    empty_frame.destroy()
+                
+                # Update height based on actual controls
+                if hasattr(controls_scroll, 'update_height'):
+                    controls_scroll.update_height()
+
         # Row alternating colors
         alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
-        
-        # Create entry fields for each standard control
-        for i, (control_name, display_name) in enumerate(standard_controls):
+
+        # Create entry fields for each control
+        for i, (control_name, display_name) in enumerate(all_controls):
             # Create a frame for each control with alternating background
             control_frame = ctk.CTkFrame(
                 controls_scroll, 
                 fg_color=alt_colors[i % 2],
-                corner_radius=4
+                corner_radius=4,
+                height=40  # Fixed row height
             )
             control_frame.pack(fill="x", pady=2)
+            control_frame.pack_propagate(False)  # Maintain fixed row height
             
             # Configure columns
             control_frame.columnconfigure(0, weight=1)  # Control name
@@ -4046,322 +4134,259 @@ class MAMEControlConfig(ctk.CTk):
             
             # Store the entry widget in our dictionary
             control_entries[control_name] = action_entry
-        
-        # Create entry fields for specialized controls
-        for i, (control_name, display_name) in enumerate(specialized_controls):
-            # Create a frame for each control with alternating background
-            control_frame = ctk.CTkFrame(
-                controls_scroll, 
-                fg_color=alt_colors[i % 2],
-                corner_radius=4
-            )
-            control_frame.pack(fill="x", pady=2)
-            
-            # Configure columns
-            control_frame.columnconfigure(0, weight=1)  # Control name
-            control_frame.columnconfigure(1, weight=1)  # Action entry
-            
-            # Control name label
-            ctk.CTkLabel(
-                control_frame, 
-                text=display_name, 
-                font=("Arial", 13),
-                anchor="w",
-                width=200
-            ).grid(row=0, column=0, padx=10, pady=8, sticky="w")
-            
-            # Get existing action if available
-            existing_action = get_existing_action(control_name)
-            
-            # Create entry for action
-            action_entry = ctk.CTkEntry(
-                control_frame, 
-                width=400,
-                fg_color=self.theme_colors["background"]
-            )
-            action_entry.insert(0, existing_action)
-            action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
-            
-            # Store the entry widget in our dictionary
-            control_entries[control_name] = action_entry
-        
-        # Add any additional controls found in game data but not in our predefined lists
-        additional_controls = []
-        for control_name, action in existing_controls:
-            if not any(control[0] == control_name for control in standard_controls + specialized_controls):
-                additional_controls.append((control_name, action))
-        
-        if additional_controls:
-            
-            # Create entry fields for additional controls
-            for i, (control_name, action) in enumerate(additional_controls):
-                control_frame = ctk.CTkFrame(
-                    controls_scroll, 
-                    fg_color=alt_colors[i % 2],
-                    corner_radius=4
-                )
-                control_frame.pack(fill="x", pady=2)
-                
-                # Configure columns
-                control_frame.columnconfigure(0, weight=1)  # Control name
-                control_frame.columnconfigure(1, weight=1)  # Action entry
-                
-                # Control name label
-                ctk.CTkLabel(
-                    control_frame, 
-                    text=control_name, 
-                    font=("Arial", 13),
-                    anchor="w",
-                    width=200
-                ).grid(row=0, column=0, padx=10, pady=8, sticky="w")
-                
-                # Create entry for action
-                action_entry = ctk.CTkEntry(
-                    control_frame, 
-                    width=400,
-                    fg_color=self.theme_colors["background"]
-                )
-                action_entry.insert(0, action)
-                action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
-                
-                # Store the entry widget in our dictionary
-                control_entries[control_name] = action_entry
-        
-        # Add a section for custom controls with enhanced styling
-        # Allow if: custom controls enabled OR we're adding a new game
+
+        # Store the update function for use in custom controls section
+        controls_scroll.update_height = update_controls_height
+
+        # Call update_empty_state to handle initial state
+        update_empty_state()
+
+        # Add a section for custom controls with simple styling
         if self.ALLOW_CUSTOM_CONTROLS or (is_new_game and self.ALLOW_ADD_NEW_GAME):
             custom_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
             custom_card.pack(fill="x", padx=0, pady=(0, 15))
             
+            # Simple header
             ctk.CTkLabel(
-                custom_card, 
-                text="Custom Controls (Optional)", 
-                font=("Arial", 16, "bold")
+                custom_card,
+                text="Add Custom Controls",
+                font=("Arial", 16, "bold"),
+                anchor="w"
             ).pack(anchor="w", padx=15, pady=(15, 10))
             
-            # Frame to hold custom control entries
-            custom_controls_frame = ctk.CTkFrame(custom_card, fg_color="transparent")
-            custom_controls_frame.pack(fill="x", padx=15, pady=(0, 15))
+            # Simple description
+            ctk.CTkLabel(
+                custom_card,
+                text="Add additional controls that will appear in the Controller Mappings section above.",
+                font=("Arial", 12),
+                text_color=self.theme_colors["text_dimmed"],
+                wraplength=750,
+                justify="left"
+            ).pack(anchor="w", padx=15, pady=(0, 15))
             
-            # List to track custom controls
-            custom_control_rows = []
+            # Frame to hold the add control form
+            add_form_frame = ctk.CTkFrame(custom_card, fg_color=self.theme_colors["background"], corner_radius=6)
+            add_form_frame.pack(fill="x", padx=15, pady=(0, 15))
             
-            def update_all_dropdowns(changed_control, add=False):
-                """
-                Update all dropdown menus when a control is added or removed
-                
-                Parameters:
-                - changed_control: The control name that was added or removed
-                - add: True if the control should be added to dropdowns, False if it should be removed
-                """
-                # Only process if it's a valid control name
-                if not changed_control or changed_control == "OTHER (Type custom name)":
-                    return
-                    
-                for row_data in custom_control_rows:
-                    if 'dropdown' not in row_data or not row_data['dropdown'].winfo_exists():
-                        continue
-                        
-                    dropdown = row_data['dropdown']
-                    current_options = dropdown.cget("values")
-                    current_value = row_data['control_var'].get()
-                    
-                    # Skip updating this dropdown if it's the one that changed
-                    if current_value == changed_control and not add:
-                        continue
-                        
-                    if add:
-                        # Add the control back to the options if it's not already there
-                        if changed_control not in current_options:
-                            # Insert the control in alphabetical order (keeping "OTHER" at the end)
-                            new_options = list(current_options)
-                            if "OTHER (Type custom name)" in new_options:
-                                new_options.remove("OTHER (Type custom name)")
-                                
-                            new_options.append(changed_control)
-                            new_options.sort()  # Sort alphabetically
-                            new_options.append("OTHER (Type custom name)")  # Keep OTHER at the end
-                            
-                            # Update the dropdown
-                            dropdown.configure(values=new_options)
-                    else:
-                        # Remove the control from the options
-                        if changed_control in current_options:
-                            new_options = [opt for opt in current_options if opt != changed_control]
-                            dropdown.configure(values=new_options)
+            # Form grid
+            add_form_frame.columnconfigure(0, weight=1)
+            add_form_frame.columnconfigure(1, weight=2)
+            add_form_frame.columnconfigure(2, weight=0)
             
-            def add_custom_control_row():
-                row_frame = ctk.CTkFrame(custom_controls_frame, fg_color=self.theme_colors["background"], corner_radius=4)
-                row_frame.pack(fill="x", pady=2)
-                
-                # Configure columns
-                row_frame.columnconfigure(0, weight=1)  # Control name
-                row_frame.columnconfigure(1, weight=1)  # Action entry
-                row_frame.columnconfigure(2, weight=0)  # Remove button
-                
-                # Define comprehensive list of all possible MAME controls
-                all_control_options = [
-                    # Standard buttons from 1-12
-                    "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", 
-                    "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
-                    "P1_BUTTON9", "P1_BUTTON10", "P1_BUTTON11", "P1_BUTTON12",
-                    # System buttons
-                    "P1_START", "P1_SELECT", "P1_COIN",
-                    # Joysticks
-                    "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT",
-                    # Right joystick
-                    "P1_JOYSTICKRIGHT_UP", "P1_JOYSTICKRIGHT_DOWN", "P1_JOYSTICKRIGHT_LEFT", "P1_JOYSTICKRIGHT_RIGHT",
-                    # D-Pad
-                    "P1_DPAD_UP", "P1_DPAD_DOWN", "P1_DPAD_LEFT", "P1_DPAD_RIGHT",
-                    # Specialized controls
-                    "P1_DIAL", "P1_DIAL_V", "P1_PADDLE", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
-                    "P1_MOUSE_X", "P1_MOUSE_Y", "P1_LIGHTGUN_X", "P1_LIGHTGUN_Y",
-                    "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z",
-                    "P1_PEDAL", "P1_PEDAL2", "P1_POSITIONAL",
-                    "P1_GAMBLE_HIGH", "P1_GAMBLE_LOW",
-                    # Player 2 controls
-                    "P2_BUTTON1", "P2_BUTTON2", "P2_BUTTON3", "P2_BUTTON4",
-                    "P2_JOYSTICK_UP", "P2_JOYSTICK_DOWN", "P2_JOYSTICK_LEFT", "P2_JOYSTICK_RIGHT",
-                    "P2_START", "P2_SELECT",
-                ]
-                
-                # Get list of already assigned controls
-                already_assigned = []
+            # Control name dropdown
+            all_control_options = [
+                # Standard buttons from 1-12
+                "P1_BUTTON1", "P1_BUTTON2", "P1_BUTTON3", "P1_BUTTON4", 
+                "P1_BUTTON5", "P1_BUTTON6", "P1_BUTTON7", "P1_BUTTON8",
+                "P1_BUTTON9", "P1_BUTTON10", "P1_BUTTON11", "P1_BUTTON12",
+                # System buttons
+                "P1_START", "P1_SELECT", "P1_COIN",
+                # Joysticks
+                "P1_JOYSTICK_UP", "P1_JOYSTICK_DOWN", "P1_JOYSTICK_LEFT", "P1_JOYSTICK_RIGHT",
+                "P1_JOYSTICKRIGHT_UP", "P1_JOYSTICKRIGHT_DOWN", "P1_JOYSTICKRIGHT_LEFT", "P1_JOYSTICKRIGHT_RIGHT",
+                # D-Pad
+                "P1_DPAD_UP", "P1_DPAD_DOWN", "P1_DPAD_LEFT", "P1_DPAD_RIGHT",
+                # Specialized controls
+                "P1_DIAL", "P1_DIAL_V", "P1_PADDLE", "P1_TRACKBALL_X", "P1_TRACKBALL_Y",
+                "P1_MOUSE_X", "P1_MOUSE_Y", "P1_LIGHTGUN_X", "P1_LIGHTGUN_Y",
+                "P1_AD_STICK_X", "P1_AD_STICK_Y", "P1_AD_STICK_Z",
+                "P1_PEDAL", "P1_PEDAL2", "P1_POSITIONAL",
+                "P1_GAMBLE_HIGH", "P1_GAMBLE_LOW",
+                # Player 2 controls
+                "P2_BUTTON1", "P2_BUTTON2", "P2_BUTTON3", "P2_BUTTON4",
+                "P2_JOYSTICK_UP", "P2_JOYSTICK_DOWN", "P2_JOYSTICK_LEFT", "P2_JOYSTICK_RIGHT",
+                "P2_START", "P2_SELECT",
+            ]
+            
+            def get_available_controls():
+                """Get controls not already used in standard or custom controls"""
+                used_controls = set()
                 
                 # From standard controls
                 for control_name, entry in control_entries.items():
                     if isinstance(entry, ctk.CTkEntry) and entry.get().strip():
-                        already_assigned.append(control_name)
+                        used_controls.add(control_name)
                 
-                # From custom controls
-                for row_data in custom_control_rows:
-                    if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
-                        control = row_data['control_var'].get()
-                        if control and control != "OTHER (Type custom name)":
-                            already_assigned.append(control)
-                    elif 'custom_entry' in row_data and row_data['custom_entry'].winfo_exists():
-                        control = row_data['custom_entry'].get().strip()
-                        if control:
-                            already_assigned.append(control)
-                
-                # Filter out already assigned controls
-                available_controls = [c for c in all_control_options if c not in already_assigned]
-                
-                # Always add the custom option at the end
-                control_options = available_controls + ["OTHER (Type custom name)"]
-                
-                # Control name dropdown
-                control_var = tk.StringVar()
-                if control_options:
-                    control_var.set(control_options[0])  # Set the first available option as default
-                
-                control_dropdown = ctk.CTkComboBox(
-                    row_frame,
-                    width=250,
-                    values=control_options,
-                    variable=control_var,
-                    fg_color=self.theme_colors["card_bg"],
-                    button_color=self.theme_colors["primary"],
-                    button_hover_color=self.theme_colors["secondary"],
-                    dropdown_fg_color=self.theme_colors["card_bg"]
-                )
-                control_dropdown.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
-                
-                # Custom control entry (initially hidden)
-                custom_control_entry = ctk.CTkEntry(
-                    row_frame,
-                    width=250,
-                    placeholder_text="Enter custom control name",
-                    fg_color=self.theme_colors["card_bg"]
-                )
-                custom_control_entry.grid(row=0, column=0, padx=10, pady=8, sticky="ew")
-                custom_control_entry.grid_remove()  # Initially hidden
-                
-                # Function to handle dropdown changes
-                def on_dropdown_change(*args):
-                    old_value = getattr(control_var, "_last_value", None)
-                    new_value = control_var.get()
-                    
-                    # Store the current value for next time
-                    control_var._last_value = new_value
-                    
-                    if new_value == "OTHER (Type custom name)":
-                        # Hide dropdown, show custom entry
-                        control_dropdown.grid_remove()
-                        custom_control_entry.grid()
-                        custom_control_entry.focus_set()
-                    elif old_value != new_value:
-                        # Control selection changed, update other dropdowns
-                        update_all_dropdowns(new_value, add=False)  # Remove from other dropdowns
-                        if old_value and old_value != "OTHER (Type custom name)":
-                            update_all_dropdowns(old_value, add=True)  # Add old value back to other dropdowns
-
-                # Bind the change event
-                control_var.trace_add("write", on_dropdown_change)
-                
-                # Action entry
-                action_entry = ctk.CTkEntry(
-                    row_frame, 
-                    width=400, 
-                    placeholder_text="Action/Function",
-                    fg_color=self.theme_colors["card_bg"]
-                )
-                action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
-
-                def remove_row():
-                    row_frame.pack_forget()
-                    row_frame.destroy()
-                    if row_data in custom_control_rows:
-                        custom_control_rows.remove(row_data)
-                        
-                        # Update other dropdowns to make this control available again
-                        if 'dropdown' in row_data and row_data['dropdown'].winfo_viewable():
-                            removed_control = row_data['control_var'].get()
-                            if removed_control != "OTHER (Type custom name)":
-                                update_all_dropdowns(removed_control, add=True)
-                        elif 'custom_entry' in row_data:
-                            removed_control = row_data['custom_entry'].get().strip()
-                            if removed_control:
-                                update_all_dropdowns(removed_control, add=True)
-                
-                remove_button = ctk.CTkButton(
-                    row_frame,
-                    text="×",
-                    width=30,
-                    height=30,
-                    command=remove_row,
-                    fg_color=self.theme_colors["danger"],
-                    hover_color="#c82333",
-                    font=("Arial", 14, "bold"),
-                    corner_radius=15
-                )
-                remove_button.grid(row=0, column=2, padx=(5, 10), pady=8)
-                
-                # Store row data
-                row_data = {
-                    'frame': row_frame, 
-                    'dropdown': control_dropdown,
-                    'custom_entry': custom_control_entry,
-                    'control_var': control_var,
-                    'action': action_entry
-                }
-                custom_control_rows.append(row_data)
-                
-                return row_data
+                return [c for c in all_control_options if c not in used_controls]
             
-            # Add first custom row
-            add_custom_control_row()
-            
-            # Add button for additional rows
-            add_custom_button = ctk.CTkButton(
-                custom_controls_frame,
-                text="+ Add Another Custom Control",
-                command=add_custom_control_row,
-                fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"],
-                height=35
+            # Control selection
+            ctk.CTkLabel(add_form_frame, text="Control:", font=("Arial", 13)).grid(
+                row=0, column=0, padx=10, pady=10, sticky="w"
             )
-            add_custom_button.pack(pady=10)
+            
+            control_var = tk.StringVar()
+            control_dropdown = ctk.CTkComboBox(
+                add_form_frame,
+                variable=control_var,
+                values=get_available_controls() + ["OTHER (Type custom name)"],
+                width=250,
+                fg_color=self.theme_colors["card_bg"],
+                button_color=self.theme_colors["primary"],
+                button_hover_color=self.theme_colors["secondary"],
+                dropdown_fg_color=self.theme_colors["card_bg"]
+            )
+            control_dropdown.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+            
+            # Custom control entry (initially hidden)
+            custom_control_entry = ctk.CTkEntry(
+                add_form_frame,
+                placeholder_text="Enter custom control name",
+                width=250,
+                fg_color=self.theme_colors["card_bg"]
+            )
+            custom_control_entry.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+            custom_control_entry.grid_remove()
+            
+            # Action entry
+            ctk.CTkLabel(add_form_frame, text="Action:", font=("Arial", 13)).grid(
+                row=0, column=1, padx=10, pady=10, sticky="w"
+            )
+            
+            action_entry = ctk.CTkEntry(
+                add_form_frame,
+                placeholder_text="Enter action name (e.g., 'Fire Weapon', 'Jump')",
+                width=400,
+                fg_color=self.theme_colors["card_bg"]
+            )
+            action_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+            
+            # Function to handle dropdown changes
+            def on_control_dropdown_change(*args):
+                if control_var.get() == "OTHER (Type custom name)":
+                    control_dropdown.grid_remove()
+                    custom_control_entry.grid()
+                    custom_control_entry.focus_set()
+                else:
+                    custom_control_entry.grid_remove()
+                    control_dropdown.grid()
+            
+            control_var.trace_add("write", on_control_dropdown_change)
+            
+            def add_custom_control():
+                """Add the custom control to the main controls section"""
+                # Get control name
+                if control_dropdown.winfo_viewable():
+                    control_name = control_var.get()
+                    if control_name == "OTHER (Type custom name)":
+                        messagebox.showerror("Error", "Please select a control or enter a custom name", parent=editor)
+                        return
+                else:
+                    control_name = custom_control_entry.get().strip()
+                    if not control_name:
+                        messagebox.showerror("Error", "Please enter a custom control name", parent=editor)
+                        return
+                
+                # Get action
+                action = action_entry.get().strip()
+                if not action:
+                    messagebox.showerror("Error", "Please enter an action name", parent=editor)
+                    return
+                
+                # Check if control already exists
+                if control_name in control_entries:
+                    messagebox.showerror("Error", f"Control '{control_name}' already exists", parent=editor)
+                    return
+                
+                # Add to the main controls section
+                # Find the controls container (controls_scroll)
+                if 'controls_scroll' in locals() and controls_scroll.winfo_exists():
+                    # Count existing controls for alternating colors
+                    existing_count = len([child for child in controls_scroll.winfo_children() 
+                                        if isinstance(child, ctk.CTkFrame)])
+                    
+                    # Create control frame with alternating background
+                    alt_colors = [self.theme_colors["card_bg"], self.theme_colors["background"]]
+                    control_frame = ctk.CTkFrame(
+                        controls_scroll, 
+                        fg_color=alt_colors[existing_count % 2],
+                        corner_radius=4,
+                        height=40  # Fixed row height
+                    )
+                    control_frame.pack(fill="x", pady=2)
+                    control_frame.pack_propagate(False)  # Maintain fixed row height
+                    
+                    # Configure columns
+                    control_frame.columnconfigure(0, weight=1)
+                    control_frame.columnconfigure(1, weight=1)
+                    
+                    # Control name label with special styling for custom controls
+                    ctk.CTkLabel(
+                        control_frame, 
+                        text=f"{control_name} (Custom)", 
+                        font=("Arial", 13),
+                        text_color=self.theme_colors["success"],  # Green to indicate custom
+                        anchor="w",
+                        width=200
+                    ).grid(row=0, column=0, padx=10, pady=8, sticky="w")
+                    
+                    # Create entry for action (pre-filled)
+                    new_action_entry = ctk.CTkEntry(
+                        control_frame, 
+                        width=400,
+                        fg_color=self.theme_colors["background"]
+                    )
+                    new_action_entry.insert(0, action)
+                    new_action_entry.grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+                    
+                    # Store the entry widget in our dictionary
+                    control_entries[control_name] = new_action_entry
+                    
+                    # IMPORTANT: Update the controls frame height dynamically
+                    if hasattr(controls_scroll, 'update_height'):
+                        controls_scroll.after(100, controls_scroll.update_height)
+                    
+                    # Also update empty state
+                    controls_scroll.after(100, update_empty_state)
+                    
+                    # Clear the form
+                    action_entry.delete(0, tk.END)
+                    if custom_control_entry.winfo_viewable():
+                        custom_control_entry.delete(0, tk.END)
+                        # Switch back to dropdown
+                        custom_control_entry.grid_remove()
+                        control_dropdown.grid()
+                    
+                    # Update dropdown to remove the used control
+                    control_dropdown.configure(values=get_available_controls() + ["OTHER (Type custom name)"])
+                    if get_available_controls():
+                        control_var.set(get_available_controls()[0])
+                    else:
+                        control_var.set("OTHER (Type custom name)")
+                    
+                    # Show success message
+                    messagebox.showinfo(
+                        "Custom Control Added", 
+                        f"'{control_name}' has been added to the Controller Mappings section above.",
+                        parent=editor
+                    )
+                    
+                    # Scroll the controls section to show the new control
+                    controls_scroll.update_idletasks()
+                    # Scroll to bottom to show the newly added control
+                    controls_scroll._parent_canvas.yview_moveto(1.0)
+            
+            # Add button
+            add_button = ctk.CTkButton(
+                add_form_frame,
+                text="Add Control",
+                command=add_custom_control,
+                width=120,
+                height=35,
+                fg_color=self.theme_colors["success"],
+                hover_color="#218838",
+                font=("Arial", 13, "bold")
+            )
+            add_button.grid(row=1, column=2, padx=10, pady=5)
+            
+            # Helper text
+            ctk.CTkLabel(
+                custom_card,
+                text="💡 Added controls will appear in the Controller Mappings section above with '(Custom)' label.",
+                font=("Arial", 11),
+                text_color=self.theme_colors["text_dimmed"],
+                justify="left"
+            ).pack(anchor="w", padx=15, pady=(0, 15))
+
         else:
             # Create empty list to prevent errors in save function
             custom_control_rows = []
@@ -4541,7 +4566,7 @@ class MAMEControlConfig(ctk.CTk):
                             "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
                         }
                 
-                # Add controls
+                # Add ALL controls from control_entries (both standard and custom)
                 for control_name, entry in control_entries.items():
                     if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
                         control_label = entry.get().strip()
@@ -4551,27 +4576,6 @@ class MAMEControlConfig(ctk.CTk):
                                 "tag": "",
                                 "mask": "0"
                             }
-                
-                # Add custom controls
-                for row_data in custom_control_rows:
-                    # Get control name based on whether dropdown or custom entry is used
-                    if row_data['dropdown'].winfo_viewable():  # If dropdown is visible
-                        control_name = row_data['control_var'].get()
-                        # Skip the "OTHER" option
-                        if control_name == "OTHER (Type custom name)":
-                            continue
-                    else:  # Custom entry is being used
-                        control_name = row_data['custom_entry'].get().strip()
-                    
-                    control_label = row_data['action'].get().strip()
-                    
-                    # Only add if both fields have values and it's not the placeholder option
-                    if control_name and control_label and control_name != "OTHER (Type custom name)":
-                        game_entry[current_rom_name]["controls"][control_name] = {
-                            "name": control_label,
-                            "tag": "",
-                            "mask": "0"
-                        }
                 
                 # Format and display the JSON
                 import json
@@ -4688,10 +4692,11 @@ class MAMEControlConfig(ctk.CTk):
                             "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
                         }
                 
-                # Track defined button numbers from standard controls
+                # Track defined button numbers from ALL controls
                 defined_buttons = set()
+                controls_added = 0
                 
-                # Add standard controls
+                # Add ALL controls from control_entries (both standard and any custom ones we added)
                 for control_name, entry in control_entries.items():
                     if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
                         control_label = entry.get().strip()
@@ -4701,6 +4706,7 @@ class MAMEControlConfig(ctk.CTk):
                                 "tag": "",
                                 "mask": "0"
                             }
+                            controls_added += 1
                             
                             # Track button numbers
                             if control_name.startswith("P1_BUTTON"):
@@ -4709,35 +4715,6 @@ class MAMEControlConfig(ctk.CTk):
                                     defined_buttons.add(button_num)
                                 except ValueError:
                                     pass
-                
-                # Add custom controls
-                for row_data in custom_control_rows:
-                    # Get control name based on whether dropdown or custom entry is used
-                    if row_data['dropdown'].winfo_viewable():  # If dropdown is visible
-                        control_name = row_data['control_var'].get()
-                        # Skip the "OTHER" option
-                        if control_name == "OTHER (Type custom name)":
-                            continue
-                    else:  # Custom entry is being used
-                        control_name = row_data['custom_entry'].get().strip()
-                    
-                    control_label = row_data['action'].get().strip()
-                    
-                    # Only add if both fields have values and it's not the placeholder option
-                    if control_name and control_label and control_name != "OTHER (Type custom name)":
-                        game_entry["controls"][control_name] = {
-                            "name": control_label,
-                            "tag": "",
-                            "mask": "0"
-                        }
-                        
-                        # Track button numbers
-                        if control_name.startswith("P1_BUTTON"):
-                            try:
-                                button_num = int(control_name.replace("P1_BUTTON", ""))
-                                defined_buttons.add(button_num)
-                            except ValueError:
-                                pass
                 
                 # Get the current button setting
                 current_buttons = int(buttons_var.get())
@@ -4774,8 +4751,9 @@ class MAMEControlConfig(ctk.CTk):
                     json.dump(gamedata, f, indent=2)
                 
                 # Show success message
+                action_text = 'added to' if is_new_game else 'updated in'
                 messagebox.showinfo("Success", 
-                            f"Game '{current_rom_name}' {'added to' if is_new_game else 'updated in'} gamedata.json", 
+                            f"Game '{current_rom_name}' {action_text} gamedata.json with {controls_added} control mappings", 
                             parent=editor)
                 
                 # Force reload of gamedata.json
@@ -4809,7 +4787,7 @@ class MAMEControlConfig(ctk.CTk):
                             self.x = 10
                             self.y = 10
                     self.after(100, lambda: self.on_game_select(MockEvent()))
-                    
+                        
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save game data: {str(e)}", parent=editor)
                 print(f"Error saving game data: {e}")
@@ -4834,17 +4812,14 @@ class MAMEControlConfig(ctk.CTk):
             button_container,
             text="Cancel",
             command=editor.destroy,
-            fg_color=self.theme_colors["card_bg"],
-            hover_color=self.theme_colors["background"],
-            border_width=1,
-            border_color=self.theme_colors["text_dimmed"],
-            text_color=self.theme_colors["text"],
-            font=("Arial", 14),
+            fg_color=self.theme_colors["danger"],
+            hover_color="#c82333",
+            font=("Arial", 14, "bold"),
             height=40,
             width=120
         )
         cancel_button.pack(side="right", padx=5)
-        
+
         # Center the dialog on the screen
         editor.update_idletasks()
         width = editor.winfo_width()
