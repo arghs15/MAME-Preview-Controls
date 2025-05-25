@@ -5,6 +5,7 @@ which speeds up preview rendering when the user presses pause
 
 import atexit
 import gc
+import json
 import os
 import signal
 import sys
@@ -652,12 +653,11 @@ def main():
                     config._patched_get_game_data = True
                     print("Added unified game data support")
                 
-                # Handle the two modes differently
                 if args.precache:
                     print(f"Precaching game data for: {args.game}")
                     import time
-                    import json  # FIXED: Import at the top
-                    import sqlite3  # FIXED: Import at the top
+                    import json
+                    import sqlite3
                     start_time = time.time()
                     
                     # Set up directories
@@ -666,187 +666,282 @@ def main():
                     os.makedirs(cache_dir, exist_ok=True)
                     cache_file = os.path.join(cache_dir, f"{args.game}_cache.json")
                     
-                    game_data = None
-                    
-                    # Try database first if requested and available
-                    if use_database and db_path and os.path.exists(db_path):
-                        print(f"Attempting to load {args.game} from database")
-                        try:
-                            import sqlite3
-                            conn = sqlite3.connect(db_path)
-                            cursor = conn.cursor()
+                    # CRITICAL: Import the Tkinter module to access its processing methods
+                    try:
+                        # Make sure the path is properly set for module imports
+                        script_dir = os.path.dirname(os.path.abspath(__file__))
+                        sys.path.append(script_dir)
+                        
+                        # Also ensure parent directory is in path if we're in preview folder
+                        if os.path.basename(script_dir) == "preview":
+                            parent_dir = os.path.dirname(script_dir)
+                            sys.path.append(parent_dir)
+                        
+                        # Import the Tkinter module to access processing methods
+                        from mame_controls_tkinter import MAMEControlConfig
+                        
+                        # Create a minimal config object to access its methods
+                        # We use initially_hidden=True to prevent the GUI from showing
+                        temp_config = MAMEControlConfig(initially_hidden=True)
+                        temp_config.withdraw()  # Ensure window stays hidden
+                        
+                        # Set the input mode from settings
+                        temp_config.input_mode = temp_config.load_settings().get('input_mode', 'xinput')
+                        input_mode = temp_config.input_mode
+                        print(f"Using input mode: {input_mode}")
+                        
+                        # Load custom configs and default controls
+                        temp_config.load_custom_configs()
+                        temp_config.load_default_config()
+                        
+                        # Get game data using the same method as the main application
+                        game_data = temp_config.get_game_data(args.game)
+                        
+                        if game_data:
+                            print(f"Retrieved {args.game} from {game_data.get('source', 'unknown source')}")
                             
-                            # Get basic game info
-                            cursor.execute("""
-                                SELECT rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom
-                                FROM games WHERE rom_name = ?
-                            """, (args.game,))
+                            # CRITICAL: Apply custom mappings with the correct input mode
+                            cfg_controls = {}
+                            if args.game in temp_config.custom_configs:
+                                # Parse the custom config using the same method
+                                cfg_content = temp_config.custom_configs[args.game]
+                                parsed_controls = temp_config.parse_cfg_controls(cfg_content)
+                                if parsed_controls:
+                                    print(f"Found {len(parsed_controls)} control mappings in ROM CFG for {args.game}")
+                                    cfg_controls = {
+                                        control: temp_config.convert_mapping(mapping, input_mode)
+                                        for control, mapping in parsed_controls.items()
+                                    }
+                                else:
+                                    print(f"ROM CFG exists for {args.game} but contains no control mappings")
                             
-                            game_row = cursor.fetchone()
+                            # Apply the same processing as the main application
+                            temp_config.update_game_data_with_custom_mappings(game_data, cfg_controls)
                             
-                            if game_row:
-                                print(f"Found {args.game} in database")
+                            # Apply XInput-only filtering if enabled
+                            if hasattr(temp_config, 'xinput_only_mode') and temp_config.xinput_only_mode:
+                                game_data = temp_config.filter_xinput_controls(game_data)
+                                print(f"Applied XInput-only filter")
+                            
+                            # Clean up the temporary config object
+                            temp_config.destroy()
+                            
+                            # Save the processed game data to cache
+                            try:
+                                with open(cache_file, 'w') as f:
+                                    json.dump(game_data, f, indent=2)
                                 
-                                # Build game data structure
-                                game_data = {
-                                    'romname': args.game,
-                                    'gamename': game_row[1],
-                                    'numPlayers': game_row[2],
-                                    'alternating': bool(game_row[5]),
-                                    'mirrored': False,
-                                    'miscDetails': f"Buttons: {game_row[3]}, Sticks: {game_row[4]}",
-                                    'players': [],
-                                    'source': 'gamedata.db'
-                                }
+                                load_time = time.time() - start_time
+                                print(f"Precached {args.game} in {load_time:.3f} seconds using {input_mode} mode")
+                                print(f"Saved to: {cache_file}")
+                                print(f"Source: {game_data.get('source', 'unknown')}")
+                                print(f"Input Mode: {game_data.get('input_mode', 'unknown')}")
+                                print(f"Players: {len(game_data.get('players', []))}")
                                 
-                                # Get control data
+                                if game_data.get('players'):
+                                    for player in game_data['players']:
+                                        control_count = len(player.get('labels', []))
+                                        custom_count = len([l for l in player.get('labels', []) if l.get('is_custom', False)])
+                                        mapped_count = len([l for l in player.get('labels', []) if l.get('target_button')])
+                                        print(f"  Player {player['number']}: {control_count} controls ({custom_count} custom, {mapped_count} mapped)")
+                                        
+                                        # Show sample of processed data
+                                        if control_count > 0:
+                                            sample_label = player['labels'][0]
+                                            print(f"    Sample control: {sample_label['name']} -> {sample_label.get('target_button', sample_label.get('display_name', sample_label['value']))}")
+                                            
+                            except Exception as e:
+                                print(f"Error saving cache: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        else:
+                            print(f"Error: Failed to get game data for {args.game}")
+                            
+                    except ImportError as e:
+                        print(f"Error importing Tkinter module: {e}")
+                        print("Falling back to basic precache without input mode processing...")
+                        
+                        # Fallback to basic processing without input mode (original behavior)
+                        # This is the old code as a backup
+                        game_data = None
+                        
+                        # Try database first if requested and available
+                        if use_database and db_path and os.path.exists(db_path):
+                            print(f"Attempting to load {args.game} from database")
+                            try:
+                                import sqlite3
+                                conn = sqlite3.connect(db_path)
+                                cursor = conn.cursor()
+                                
+                                # Get basic game info
                                 cursor.execute("""
-                                    SELECT control_name, display_name FROM game_controls WHERE rom_name = ?
+                                    SELECT rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom
+                                    FROM games WHERE rom_name = ?
                                 """, (args.game,))
-                                control_rows = cursor.fetchall()
                                 
-                                # Process controls
-                                p1_controls = []
-                                p2_controls = []
+                                game_row = cursor.fetchone()
                                 
-                                for control in control_rows:
-                                    control_name = control[0]
-                                    display_name = control[1]
+                                if game_row:
+                                    print(f"Found {args.game} in database")
                                     
-                                    if control_name.startswith('P1_'):
-                                        p1_controls.append({
-                                            'name': control_name,
-                                            'value': display_name or control_name
-                                        })
-                                    elif control_name.startswith('P2_'):
-                                        p2_controls.append({
-                                            'name': control_name,
-                                            'value': display_name or control_name
-                                        })
-                                
-                                # Add players
-                                if p1_controls:
-                                    game_data['players'].append({
-                                        'number': 1,
-                                        'numButtons': game_row[3],
-                                        'labels': sorted(p1_controls, key=lambda x: x['name'])
-                                    })
-                                    
-                                if p2_controls:
-                                    game_data['players'].append({
-                                        'number': 2,
-                                        'numButtons': game_row[3],
-                                        'labels': sorted(p2_controls, key=lambda x: x['name'])
-                                    })
-                            
-                            conn.close()
-                            
-                        except Exception as e:
-                            print(f"Database lookup failed: {e}")
-                            import traceback
-                            traceback.print_exc()
-                    
-                    # Fall back to JSON lookup if database failed or not available
-                    if not game_data:
-                        print(f"Loading {args.game} from JSON")
-                        try:
-                            # Load gamedata.json directly
-                            gamedata_path = os.path.join(preview_dir, "settings", "gamedata.json")
-                            if not os.path.exists(gamedata_path):
-                                # Try alternative locations
-                                alt_paths = [
-                                    os.path.join(mame_dir, "gamedata.json"),
-                                    os.path.join(app_dir, "gamedata.json"),
-                                    os.path.join(app_dir, "settings", "gamedata.json")
-                                ]
-                                for alt_path in alt_paths:
-                                    if os.path.exists(alt_path):
-                                        gamedata_path = alt_path
-                                        break
-                            
-                            if os.path.exists(gamedata_path):
-                                with open(gamedata_path, 'r', encoding='utf-8') as f:
-                                    gamedata_json = json.load(f)
-                                
-                                if args.game in gamedata_json:
-                                    raw_data = gamedata_json[args.game]
-                                    
-                                    # Convert to standard format
+                                    # Build game data structure
                                     game_data = {
                                         'romname': args.game,
-                                        'gamename': raw_data.get('description', args.game),
-                                        'numPlayers': int(raw_data.get('playercount', 1)),
-                                        'alternating': raw_data.get('alternating', False),
+                                        'gamename': game_row[1],
+                                        'numPlayers': game_row[2],
+                                        'alternating': bool(game_row[5]),
                                         'mirrored': False,
-                                        'miscDetails': f"Buttons: {raw_data.get('buttons', '?')}, Sticks: {raw_data.get('sticks', '?')}",
+                                        'miscDetails': f"Buttons: {game_row[3]}, Sticks: {game_row[4]}",
                                         'players': [],
-                                        'source': 'gamedata.json'
+                                        'source': 'gamedata.db'
                                     }
                                     
+                                    # Get control data
+                                    cursor.execute("""
+                                        SELECT control_name, display_name FROM game_controls WHERE rom_name = ?
+                                    """, (args.game,))
+                                    control_rows = cursor.fetchall()
+                                    
                                     # Process controls
-                                    if 'controls' in raw_data:
-                                        p1_controls = []
-                                        p2_controls = []
+                                    p1_controls = []
+                                    p2_controls = []
+                                    
+                                    for control in control_rows:
+                                        control_name = control[0]
+                                        display_name = control[1]
                                         
-                                        for control_name, control_data in raw_data['controls'].items():
-                                            action = control_data.get('name', control_name)
-                                            
-                                            if control_name.startswith('P1_'):
-                                                p1_controls.append({
-                                                    'name': control_name,
-                                                    'value': action
-                                                })
-                                            elif control_name.startswith('P2_'):
-                                                p2_controls.append({
-                                                    'name': control_name,
-                                                    'value': action
-                                                })
+                                        if control_name.startswith('P1_'):
+                                            p1_controls.append({
+                                                'name': control_name,
+                                                'value': display_name or control_name
+                                            })
+                                        elif control_name.startswith('P2_'):
+                                            p2_controls.append({
+                                                'name': control_name,
+                                                'value': display_name or control_name
+                                            })
+                                    
+                                    # Add players
+                                    if p1_controls:
+                                        game_data['players'].append({
+                                            'number': 1,
+                                            'numButtons': game_row[3],
+                                            'labels': sorted(p1_controls, key=lambda x: x['name'])
+                                        })
                                         
-                                        # Add players
-                                        if p1_controls:
-                                            game_data['players'].append({
-                                                'number': 1,
-                                                'numButtons': int(raw_data.get('buttons', 1)),
-                                                'labels': sorted(p1_controls, key=lambda x: x['name'])
-                                            })
-                                            
-                                        if p2_controls:
-                                            game_data['players'].append({
-                                                'number': 2,
-                                                'numButtons': int(raw_data.get('buttons', 1)),
-                                                'labels': sorted(p2_controls, key=lambda x: x['name'])
-                                            })
-                                else:
-                                    print(f"ROM {args.game} not found in gamedata.json")
-                            else:
-                                print(f"gamedata.json not found at {gamedata_path}")
+                                    if p2_controls:
+                                        game_data['players'].append({
+                                            'number': 2,
+                                            'numButtons': game_row[3],
+                                            'labels': sorted(p2_controls, key=lambda x: x['name'])
+                                        })
                                 
-                        except Exception as e:
-                            print(f"JSON lookup failed: {e}")
-                            import traceback
-                            traceback.print_exc()
+                                conn.close()
+                                
+                            except Exception as e:
+                                print(f"Database lookup failed: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        
+                        # Fall back to JSON lookup if database failed or not available
+                        if not game_data:
+                            print(f"Loading {args.game} from JSON")
+                            try:
+                                # Load gamedata.json directly
+                                gamedata_path = os.path.join(preview_dir, "settings", "gamedata.json")
+                                if not os.path.exists(gamedata_path):
+                                    # Try alternative locations
+                                    alt_paths = [
+                                        os.path.join(mame_dir, "gamedata.json"),
+                                        os.path.join(app_dir, "gamedata.json"),
+                                        os.path.join(app_dir, "settings", "gamedata.json")
+                                    ]
+                                    for alt_path in alt_paths:
+                                        if os.path.exists(alt_path):
+                                            gamedata_path = alt_path
+                                            break
+                                
+                                if os.path.exists(gamedata_path):
+                                    with open(gamedata_path, 'r', encoding='utf-8') as f:
+                                        gamedata_json = json.load(f)
+                                    
+                                    if args.game in gamedata_json:
+                                        raw_data = gamedata_json[args.game]
+                                        
+                                        # Convert to standard format
+                                        game_data = {
+                                            'romname': args.game,
+                                            'gamename': raw_data.get('description', args.game),
+                                            'numPlayers': int(raw_data.get('playercount', 1)),
+                                            'alternating': raw_data.get('alternating', False),
+                                            'mirrored': False,
+                                            'miscDetails': f"Buttons: {raw_data.get('buttons', '?')}, Sticks: {raw_data.get('sticks', '?')}",
+                                            'players': [],
+                                            'source': 'gamedata.json'
+                                        }
+                                        
+                                        # Process controls
+                                        if 'controls' in raw_data:
+                                            p1_controls = []
+                                            p2_controls = []
+                                            
+                                            for control_name, control_data in raw_data['controls'].items():
+                                                action = control_data.get('name', control_name)
+                                                
+                                                if control_name.startswith('P1_'):
+                                                    p1_controls.append({
+                                                        'name': control_name,
+                                                        'value': action
+                                                    })
+                                                elif control_name.startswith('P2_'):
+                                                    p2_controls.append({
+                                                        'name': control_name,
+                                                        'value': action
+                                                    })
+                                            
+                                            # Add players
+                                            if p1_controls:
+                                                game_data['players'].append({
+                                                    'number': 1,
+                                                    'numButtons': int(raw_data.get('buttons', 1)),
+                                                    'labels': sorted(p1_controls, key=lambda x: x['name'])
+                                                })
+                                                
+                                            if p2_controls:
+                                                game_data['players'].append({
+                                                    'number': 2,
+                                                    'numButtons': int(raw_data.get('buttons', 1)),
+                                                    'labels': sorted(p2_controls, key=lambda x: x['name'])
+                                                })
+                                    else:
+                                        print(f"ROM {args.game} not found in gamedata.json")
+                                else:
+                                    print(f"gamedata.json not found at {gamedata_path}")
+                                    
+                            except Exception as e:
+                                print(f"JSON lookup failed: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        
+                        if game_data:
+                            # Basic save without advanced processing
+                            try:
+                                with open(cache_file, 'w') as f:
+                                    json.dump(game_data, f, indent=2)
+                                
+                                load_time = time.time() - start_time
+                                print(f"Precached {args.game} in {load_time:.3f} seconds (basic mode)")
+                                print(f"Saved to: {cache_file}")
+                                print(f"Source: {game_data.get('source', 'unknown')}")
+                            except Exception as e:
+                                print(f"Error saving cache: {e}")
+                        else:
+                            print(f"Error: Failed to get game data for {args.game}")
                     
-                    # Save to cache if we got data
-                    if game_data:
-                        try:
-                            import json
-                            with open(cache_file, 'w') as f:
-                                json.dump(game_data, f, indent=2)
-                            
-                            load_time = time.time() - start_time
-                            print(f"Precached {args.game} in {load_time:.3f} seconds")
-                            print(f"Saved to: {cache_file}")
-                            print(f"Source: {game_data.get('source', 'unknown')}")
-                            print(f"Players: {len(game_data.get('players', []))}")
-                            if game_data.get('players'):
-                                for player in game_data['players']:
-                                    print(f"  Player {player['number']}: {len(player.get('labels', []))} controls")
-                        except Exception as e:
-                            print(f"Error saving cache: {e}")
-                            import traceback
-                            traceback.print_exc()
-                    else:
-                        print(f"Error: Failed to get game data for {args.game}")
+                    except Exception as e:
+                        print(f"Unexpected error in precache: {e}")
+                        import traceback
+                        traceback.print_exc()
                     
                     # Exit without showing UI
                     return 0
@@ -1025,6 +1120,251 @@ def main():
             except:
                 pass
             
+def load_input_mode_from_settings(preview_dir):
+    """Load the current input mode from settings file"""
+    settings_dir = os.path.join(preview_dir, "settings")
+    settings_path = os.path.join(settings_dir, "control_config_settings.json")
+    
+    # Default to xinput if no settings found
+    default_input_mode = 'xinput'
+    
+    try:
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r') as f:
+                settings = json.load(f)
+            input_mode = settings.get('input_mode', default_input_mode)
+            
+            # Validate the input mode
+            if input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
+                print(f"Invalid input mode '{input_mode}' in settings, using default: {default_input_mode}")
+                input_mode = default_input_mode
+                
+            print(f"Loaded input mode from settings: {input_mode}")
+            return input_mode
+        else:
+            print(f"No settings file found at {settings_path}, using default: {default_input_mode}")
+            return default_input_mode
+    except Exception as e:
+        print(f"Error loading input mode from settings: {e}, using default: {default_input_mode}")
+        return default_input_mode
+
+def apply_input_mode_processing(game_data, input_mode, cfg_controls, mame_dir, rom_name):
+    """Apply input mode processing to game data similar to main application"""
+    
+    # Import the conversion methods (we'll need to add these)
+    # For now, let's implement the core logic
+    
+    # Add current input mode to game_data
+    game_data['input_mode'] = input_mode
+    
+    # Apply custom mappings if available
+    if cfg_controls:
+        print(f"Applying custom CFG mappings for {rom_name} in {input_mode} mode")
+        
+        # Process each player's controls
+        for player in game_data.get('players', []):
+            for label in player.get('labels', []):
+                control_name = label['name']
+                
+                # Check if this control has a mapping
+                if control_name in cfg_controls:
+                    mapping_value = cfg_controls[control_name]
+                    
+                    # Add mapping information to the label
+                    label['mapping'] = mapping_value
+                    label['mapping_source'] = f"ROM CFG ({rom_name}.cfg)"
+                    label['is_custom'] = True
+                    label['cfg_mapping'] = True
+                    label['input_mode'] = input_mode
+                    
+                    # Process the mapping based on input mode
+                    if input_mode == 'keycode':
+                        # Extract KEYCODE from mapping
+                        keycode_display = extract_keycode_from_mapping(mapping_value)
+                        label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
+                        label['display_name'] = label['target_button']
+                    elif input_mode == 'xinput':
+                        if 'XINPUT' in mapping_value:
+                            label['target_button'] = get_friendly_xinput_name(mapping_value)
+                            label['display_name'] = f"P1 {label['target_button']}"
+                        else:
+                            # Convert to XInput if possible
+                            converted = convert_mapping_to_xinput(mapping_value)
+                            if converted.startswith('XINPUT'):
+                                label['target_button'] = get_friendly_xinput_name(converted)
+                                label['display_name'] = f"P1 {label['target_button']}"
+                            else:
+                                label['target_button'] = mapping_value
+                                label['display_name'] = mapping_value
+                    elif input_mode == 'dinput':
+                        if 'DINPUT' in mapping_value:
+                            label['target_button'] = get_friendly_dinput_name(mapping_value)
+                            label['display_name'] = f"P1 {label['target_button']}"
+                        else:
+                            # Convert to DInput if possible
+                            converted = convert_mapping_to_dinput(mapping_value)
+                            if converted.startswith('DINPUT'):
+                                label['target_button'] = get_friendly_dinput_name(converted)
+                                label['display_name'] = f"P1 {label['target_button']}"
+                            else:
+                                label['target_button'] = mapping_value
+                                label['display_name'] = mapping_value
+                    elif input_mode == 'joycode':
+                        if 'JOYCODE' in mapping_value:
+                            label['target_button'] = format_joycode_display(mapping_value)
+                            label['display_name'] = label['target_button']
+                        else:
+                            label['target_button'] = mapping_value
+                            label['display_name'] = mapping_value
+                else:
+                    # No custom mapping, set defaults based on input mode
+                    label['is_custom'] = False
+                    if input_mode == 'keycode':
+                        label['display_name'] = "No Key Assigned"
+                    else:
+                        label['display_name'] = format_control_name_for_mode(control_name, input_mode)
+    
+    return game_data
+
+def extract_keycode_from_mapping(mapping):
+    """Extract KEYCODE from mapping string"""
+    if not mapping:
+        return ""
+    
+    # Handle increment/decrement pairs
+    if " ||| " in mapping:
+        inc_mapping, dec_mapping = mapping.split(" ||| ")
+        inc_keycode = extract_keycode_from_mapping(inc_mapping)
+        dec_keycode = extract_keycode_from_mapping(dec_mapping)
+        
+        if inc_keycode and dec_keycode:
+            return f"{inc_keycode} | {dec_keycode}"
+        elif inc_keycode:
+            return inc_keycode
+        elif dec_keycode:
+            return dec_keycode
+        else:
+            return ""
+    
+    # Handle OR statements - look for KEYCODE part
+    if " OR " in mapping:
+        parts = mapping.split(" OR ")
+        for part in parts:
+            part = part.strip()
+            if part.startswith('KEYCODE_'):
+                return format_keycode_display(part)
+        return ""
+    
+    # Single mapping
+    if mapping.startswith('KEYCODE_'):
+        return format_keycode_display(mapping)
+    
+    return ""
+
+def format_keycode_display(mapping):
+    """Format KEYCODE mapping string for display"""
+    if not mapping or not mapping.startswith("KEYCODE_"):
+        return mapping
+        
+    key_name = mapping.replace("KEYCODE_", "")
+    
+    # Make common keys more readable
+    key_mappings = {
+        'LCONTROL': 'Left Ctrl',
+        'RCONTROL': 'Right Ctrl',
+        'LALT': 'Left Alt',
+        'RALT': 'Right Alt', 
+        'LSHIFT': 'Left Shift',
+        'RSHIFT': 'Right Shift',
+        'SPACE': 'Spacebar',
+        'ENTER': 'Enter',
+        # Add more as needed
+    }
+    
+    friendly_name = key_mappings.get(key_name, key_name)
+    return f"Key {friendly_name}"
+
+def get_friendly_xinput_name(mapping):
+    """Convert an XINPUT mapping code into a human-friendly button name"""
+    parts = mapping.split('_', 2)
+    if len(parts) < 3:
+        return mapping
+    action = parts[2]
+    
+    friendly_map = {
+        "A": "A Button",
+        "B": "B Button", 
+        "X": "X Button",
+        "Y": "Y Button",
+        "SHOULDER_L": "LB Button",
+        "SHOULDER_R": "RB Button",
+        # Add more mappings as needed
+    }
+    return friendly_map.get(action, action)
+
+def get_friendly_dinput_name(mapping):
+    """Convert a DINPUT mapping code into a human-friendly button name"""
+    parts = mapping.split('_', 3)
+    if len(parts) < 3:
+        return mapping
+    
+    action = parts[2]
+    if action.startswith("BUTTON"):
+        button_num = action[6:]
+        return f"Button {button_num}"
+    return action
+
+def format_joycode_display(mapping):
+    """Format JOYCODE mapping string for display"""
+    if "BUTTON" in mapping:
+        parts = mapping.split('_')
+        if len(parts) >= 4:
+            joy_num = parts[1]
+            button_num = parts[3]
+            return f"Joy {joy_num} Btn {button_num}"
+    return mapping
+
+def format_control_name_for_mode(control_name, input_mode):
+    """Format control name based on input mode"""
+    if input_mode == 'xinput':
+        if control_name == 'P1_BUTTON1':
+            return 'P1 A Button'
+        elif control_name == 'P1_BUTTON2':
+            return 'P1 B Button'
+        # Add more xinput mappings
+    elif input_mode == 'dinput':
+        if control_name.startswith('P1_BUTTON'):
+            button_num = int(control_name.replace('P1_BUTTON', '')) - 1
+            return f'P1 Button {button_num}'
+    elif input_mode == 'joycode':
+        if control_name.startswith('P1_BUTTON'):
+            button_num = control_name.replace('P1_BUTTON', '')
+            return f'Joy 1 Btn {button_num}'
+    elif input_mode == 'keycode':
+        return "No Key Assigned"
+    
+    return control_name
+
+def convert_mapping_to_xinput(mapping):
+    """Basic conversion to XInput format"""
+    # Simplified conversion - add full logic as needed
+    if mapping.startswith('JOYCODE_1_BUTTON1'):
+        return 'XINPUT_1_A'
+    elif mapping.startswith('JOYCODE_1_BUTTON2'):
+        return 'XINPUT_1_B'
+    # Add more conversions as needed
+    return mapping
+
+def convert_mapping_to_dinput(mapping):
+    """Basic conversion to DInput format"""
+    # Simplified conversion - add full logic as needed  
+    if mapping.startswith('JOYCODE_1_BUTTON1'):
+        return 'DINPUT_1_BUTTON0'
+    elif mapping.startswith('JOYCODE_1_BUTTON2'):
+        return 'DINPUT_1_BUTTON1'
+    # Add more conversions as needed
+    return mapping
+
 def set_dark_theme(app):
     """Apply a dark theme to the PyQt application"""
     from PyQt5.QtGui import QPalette, QColor
