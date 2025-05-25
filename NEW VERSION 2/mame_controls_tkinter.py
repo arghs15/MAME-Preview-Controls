@@ -7906,22 +7906,25 @@ class MAMEControlConfig(ctk.CTk):
                             display_text = "Not Assigned"
                 
                 # Determine actual mapping source by checking if mapping exists
-                if control_name in cfg_controls and cfg_controls[control_name].strip() not in ["", "NONE"]:
-                    # Check if we're using fallback in KEYCODE mode
-                    if (self.input_mode == 'keycode' and 
-                        control_name in all_mappings and 
-                        all_mappings[control_name]['source'] == 'Default CFG (fallback)'):
-                        source = "Default CFG (fallback)"
+                if 'mapping_source' in control and control['mapping_source']:
+                    source = control['mapping_source']
+                    if 'fallback' in source.lower():
                         source_color = "#FFA500"  # Orange for fallback
-                    else:
-                        source = f"ROM CFG ({romname}.cfg)"
+                    elif 'ROM CFG' in source:
                         source_color = self.theme_colors["success"]  # Green for ROM CFG
+                    elif 'Default CFG' in source:
+                        source_color = self.theme_colors["primary"]  # Primary for Default CFG
+                    else:
+                        source_color = "#888888"  # Gray for Game Data
+                elif control_name in cfg_controls and cfg_controls[control_name].strip() not in ["", "NONE"]:
+                    source = f"ROM CFG ({romname}.cfg)"
+                    source_color = self.theme_colors["success"]
                 elif hasattr(self, 'default_controls') and control_name in self.default_controls:
                     source = "Default CFG"
-                    source_color = self.theme_colors["primary"]  # Primary color for Default CFG
+                    source_color = self.theme_colors["primary"]
                 else:
                     source = "Game Data"  
-                    source_color = "#888888"  # Gray for Game Data
+                    source_color = "#888888"
                 
                 # Create row container with consistent background
                 row_height = 40
