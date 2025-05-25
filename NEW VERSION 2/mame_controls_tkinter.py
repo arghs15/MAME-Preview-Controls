@@ -174,7 +174,7 @@ class MAMEControlConfig(ctk.CTk):
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
-        
+        self.original_default_controls = {}  # Store original mappings for KEYCODE mode
         try:
             # Initialize with super().__init__ but don't show the window yet
             super().__init__()
@@ -1317,6 +1317,8 @@ class MAMEControlConfig(ctk.CTk):
     def parse_default_cfg(self, cfg_content):
         """Parse default.cfg to extract all control mappings focusing on XInput format"""
         controls = {}
+        original_controls = {}  # Store original mappings for KEYCODE mode
+        
         try:
             import xml.etree.ElementTree as ET
             from io import StringIO
@@ -1348,18 +1350,33 @@ class MAMEControlConfig(ctk.CTk):
                     inc = port.find('./newseq[@type="increment"]')
                     dec = port.find('./newseq[@type="decrement"]')
 
+                    # Store original mapping for KEYCODE mode
+                    original_mapping = None
+
                     if inc is not None and dec is not None and inc.text and dec.text:
+                        original_mapping = f"{inc.text.strip()} ||| {dec.text.strip()}"
                         inc_map = get_preferred_mapping(inc.text.strip())
                         dec_map = get_preferred_mapping(dec.text.strip())
                         controls[ctype] = f"{inc_map} ||| {dec_map}"
                     elif inc is not None and inc.text:
+                        original_mapping = inc.text.strip()
                         controls[ctype] = get_preferred_mapping(inc.text.strip())
                     elif dec is not None and dec.text:
+                        original_mapping = dec.text.strip()
                         controls[ctype] = get_preferred_mapping(dec.text.strip())
                     elif std is not None and std.text:
+                        original_mapping = std.text.strip()
                         controls[ctype] = get_preferred_mapping(std.text.strip())
+
+                    # Store the original mapping for KEYCODE mode
+                    if original_mapping:
+                        original_controls[ctype] = original_mapping
+
         except Exception as e:
             print(f"Error parsing default.cfg: {e}")
+        
+        # Store both processed and original mappings
+        self.original_default_controls = original_controls
         return controls
 
 
@@ -5940,6 +5957,106 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error launching preview: {e}")
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
 
+    def extract_keycode_from_mapping(self, mapping: str) -> str:
+        """Extract KEYCODE from mapping string like 'KEYCODE_LCONTROL OR JOYCODE_1_BUTTON2'"""
+        if not mapping:
+            return ""
+        
+        # Handle increment/decrement pairs
+        if " ||| " in mapping:
+            inc_mapping, dec_mapping = mapping.split(" ||| ")
+            inc_keycode = self.extract_keycode_from_mapping(inc_mapping)
+            dec_keycode = self.extract_keycode_from_mapping(dec_mapping)
+            
+            if inc_keycode and dec_keycode:
+                return f"{inc_keycode} | {dec_keycode}"
+            elif inc_keycode:
+                return inc_keycode
+            elif dec_keycode:
+                return dec_keycode
+            else:
+                return ""
+        
+        # Handle OR statements - look for KEYCODE part
+        if " OR " in mapping:
+            parts = mapping.split(" OR ")
+            for part in parts:
+                part = part.strip()
+                if part.startswith('KEYCODE_'):
+                    return self.format_keycode_display(part)
+            # If no KEYCODE found, return empty
+            return ""
+        
+        # Single mapping
+        if mapping.startswith('KEYCODE_'):
+            return self.format_keycode_display(mapping)
+        
+        # Not a keycode mapping
+        return ""
+
+    def format_keycode_display(self, mapping: str) -> str:
+        """Format KEYCODE mapping string for display"""
+        if not mapping or not mapping.startswith("KEYCODE_"):
+            return mapping
+            
+        key_name = mapping.replace("KEYCODE_", "")
+        
+        # Make common keys more readable
+        key_mappings = {
+            'LCONTROL': 'Left Ctrl',
+            'RCONTROL': 'Right Ctrl',
+            'LALT': 'Left Alt',
+            'RALT': 'Right Alt', 
+            'LSHIFT': 'Left Shift',
+            'RSHIFT': 'Right Shift',
+            'SPACE': 'Spacebar',
+            'ENTER': 'Enter',
+            'BACKSPACE': 'Backspace',
+            'TAB': 'Tab',
+            'ESC': 'Escape',
+            'UP': 'Up Arrow',
+            'DOWN': 'Down Arrow',
+            'LEFT': 'Left Arrow',
+            'RIGHT': 'Right Arrow',
+            'HOME': 'Home',
+            'END': 'End',
+            'PGUP': 'Page Up',
+            'PGDN': 'Page Down',
+            'DEL': 'Delete',
+            'INSERT': 'Insert',
+            'CAPSLOCK': 'Caps Lock',
+            'NUMLOCK': 'Num Lock',
+            'SCRLOCK': 'Scroll Lock',
+            'PRTSCR': 'Print Screen',
+            'PAUSE': 'Pause',
+            'MENU': 'Menu',
+            'LWIN': 'Left Windows',
+            'RWIN': 'Right Windows',
+            # Number pad keys
+            'NUMPAD0': 'Numpad 0',
+            'NUMPAD1': 'Numpad 1',
+            'NUMPAD2': 'Numpad 2',
+            'NUMPAD3': 'Numpad 3',
+            'NUMPAD4': 'Numpad 4',
+            'NUMPAD5': 'Numpad 5',
+            'NUMPAD6': 'Numpad 6',
+            'NUMPAD7': 'Numpad 7',
+            'NUMPAD8': 'Numpad 8',
+            'NUMPAD9': 'Numpad 9',
+            'NUMPADENTER': 'Numpad Enter',
+            'NUMPADPLUS': 'Numpad +',
+            'NUMPADMINUS': 'Numpad -',
+            'NUMPADSTAR': 'Numpad *',
+            'NUMPADSLASH': 'Numpad /',
+            'NUMPADDOT': 'Numpad .',
+            # Function keys
+            'F1': 'F1', 'F2': 'F2', 'F3': 'F3', 'F4': 'F4',
+            'F5': 'F5', 'F6': 'F6', 'F7': 'F7', 'F8': 'F8',
+            'F9': 'F9', 'F10': 'F10', 'F11': 'F11', 'F12': 'F12',
+        }
+        
+        friendly_name = key_mappings.get(key_name, key_name)
+        return f"Key {friendly_name}"
 
     def get_friendly_xinput_name(self, mapping: str) -> str:
         """Convert an XINPUT mapping code into a human-friendly button/stick name."""
@@ -5999,21 +6116,55 @@ class MAMEControlConfig(ctk.CTk):
         if hasattr(self, 'default_controls') and self.default_controls:
             game_data['has_default_cfg'] = True
         
-        # Combine ROM-specific and default mappings
+        # Combine ROM-specific and default mappings with smart KEYCODE fallback
         all_mappings = {}
-        
-        # First, add default mappings (always converted to current input mode)
+
+        # First, add default mappings
         if hasattr(self, 'default_controls') and self.default_controls:
             for control, mapping in self.default_controls.items():
-                # Convert to current input mode
-                converted_mapping = self.convert_mapping(mapping, self.input_mode)
-                all_mappings[control] = {'mapping': converted_mapping, 'source': 'Default CFG'}
-        
-        # Then override with ROM-specific mappings
+                if self.input_mode == 'keycode':
+                    # For keycode mode, use original mapping if available
+                    if hasattr(self, 'original_default_controls') and control in self.original_default_controls:
+                        original_mapping = self.original_default_controls[control]
+                    else:
+                        original_mapping = mapping  # Fallback to processed mapping
+                else:
+                    # For other modes, convert to current input mode
+                    original_mapping = self.convert_mapping(mapping, self.input_mode)
+                all_mappings[control] = {'mapping': original_mapping, 'source': 'Default CFG'}
+
+        # Then process ROM-specific mappings with smart KEYCODE fallback
         for control, mapping in cfg_controls.items():
-            # Make sure mapping is converted to current input mode
-            converted_mapping = self.convert_mapping(mapping, self.input_mode)
-            all_mappings[control] = {'mapping': converted_mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
+            if self.input_mode == 'keycode':
+                # For KEYCODE mode, check if ROM CFG has KEYCODE assignments
+                rom_keycode = self.extract_keycode_from_mapping(mapping)
+                
+                if rom_keycode:
+                    # ROM CFG has KEYCODE assignments, use them
+                    all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
+                else:
+                    # ROM CFG has no KEYCODE, check if default CFG has KEYCODE for this control
+                    if (hasattr(self, 'original_default_controls') and 
+                        control in self.original_default_controls):
+                        
+                        default_original = self.original_default_controls[control]
+                        default_keycode = self.extract_keycode_from_mapping(default_original)
+                        
+                        if default_keycode:
+                            # Default CFG has KEYCODE, use it but note the source
+                            all_mappings[control] = {
+                                'mapping': default_original, 
+                                'source': 'Default CFG (fallback)'
+                            }
+                        else:
+                            # Neither has KEYCODE, use ROM CFG anyway (will show "No Key Assigned")
+                            all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
+                    else:
+                        # No default mapping available, use ROM CFG
+                        all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
+            else:
+                # For non-KEYCODE modes, use ROM CFG as-is
+                all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
         
         # IMPORTANT: Now check each control in the game data and ensure it gets a mapping
         for player in game_data.get('players', []):
@@ -6153,6 +6304,19 @@ class MAMEControlConfig(ctk.CTk):
                                 inc_friendly = self.get_friendly_dinput_name(inc_converted) if 'DINPUT' in inc_converted else inc_converted
                                 dec_friendly = self.get_friendly_dinput_name(dec_converted) if 'DINPUT' in dec_converted else dec_converted
                                 label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+                        elif self.input_mode == 'keycode':
+                            # Handle KEYCODE format for both directions
+                            inc_keycode = self.extract_keycode_from_mapping(inc_mapping)
+                            dec_keycode = self.extract_keycode_from_mapping(dec_mapping)
+                            
+                            if inc_keycode and dec_keycode:
+                                label['target_button'] = f"{inc_keycode} | {dec_keycode}"
+                            elif inc_keycode:
+                                label['target_button'] = inc_keycode
+                            elif dec_keycode:
+                                label['target_button'] = dec_keycode
+                            else:
+                                label['target_button'] = "No Key Assigned"
                         else:  # joycode mode
                             # Use direct JOYCODE formatting
                             if inc_mapping == "NONE":
@@ -6174,18 +6338,27 @@ class MAMEControlConfig(ctk.CTk):
                         elif self.input_mode == 'joycode' and 'JOYCODE' in mapping_info['mapping']:
                             # Format JOYCODE display
                             label['target_button'] = self.format_joycode_display(mapping_info['mapping'])
+                        elif self.input_mode == 'keycode':
+                            # Extract KEYCODE from the original mapping
+                            keycode_display = self.extract_keycode_from_mapping(mapping_info['mapping'])
+                            label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
                         else:
                             # Try conversion if not in the right format
-                            converted = self.convert_mapping(mapping_info['mapping'], self.input_mode)
-                            if self.input_mode == 'xinput' and 'XINPUT' in converted:
-                                label['target_button'] = self.get_friendly_xinput_name(converted)
-                            elif self.input_mode == 'dinput' and 'DINPUT' in converted:
-                                label['target_button'] = self.get_friendly_dinput_name(converted)
-                            elif self.input_mode == 'joycode' and 'JOYCODE' in converted:
-                                label['target_button'] = self.format_joycode_display(converted)
+                            if self.input_mode == 'keycode':
+                                # For keycode mode, extract from original mapping
+                                keycode_display = self.extract_keycode_from_mapping(mapping_info['mapping'])
+                                label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
                             else:
-                                # Fallback to original format
-                                label['target_button'] = self.format_mapping_display(mapping_info['mapping'])
+                                converted = self.convert_mapping(mapping_info['mapping'], self.input_mode)
+                                if self.input_mode == 'xinput' and 'XINPUT' in converted:
+                                    label['target_button'] = self.get_friendly_xinput_name(converted)
+                                elif self.input_mode == 'dinput' and 'DINPUT' in converted:
+                                    label['target_button'] = self.get_friendly_dinput_name(converted)
+                                elif self.input_mode == 'joycode' and 'JOYCODE' in converted:
+                                    label['target_button'] = self.format_joycode_display(converted)
+                                else:
+                                    # Fallback to original format
+                                    label['target_button'] = self.format_mapping_display(mapping_info['mapping'])
                     
                     # Add debug output
                     print(f"Applied mapping for {control_name}: {label['mapping']} from {label['mapping_source']} (Mode: {self.input_mode})")
@@ -6369,11 +6542,11 @@ class MAMEControlConfig(ctk.CTk):
                 if 'show_button_names' in settings:
                     self.show_button_names = bool(settings.get('show_button_names', True))
                     
-                # Load input mode setting (Now supports 'joycode', 'xinput', or 'dinput')
+                # Load input mode setting (Now supports 'joycode', 'xinput', 'dinput', or 'keycode')
                 if 'input_mode' in settings:
                     self.input_mode = settings.get('input_mode', 'xinput')
                     # Ensure valid value
-                    if self.input_mode not in ['joycode', 'xinput', 'dinput']:
+                    if self.input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
                         self.input_mode = 'xinput'
                     
                 # Load XInput Only Mode setting
@@ -6853,13 +7026,17 @@ class MAMEControlConfig(ctk.CTk):
                 elif self.input_mode == 'joycode' and "JOYCODE" in part:
                     mapping = part
                     break
+                elif self.input_mode == 'keycode' and "KEYCODE" in part:
+                    mapping = part
+                    break
             
             # If no matching part found, convert first part to current mode
             if " OR " in mapping:
                 mapping = parts[0].strip()
-                converted = self.convert_mapping(mapping, self.input_mode)
-                if converted != mapping:
-                    mapping = converted
+                if self.input_mode != 'keycode':  # Don't convert for keycode mode
+                    converted = self.convert_mapping(mapping, self.input_mode)
+                    if converted != mapping:
+                        mapping = converted
         
         # Format based on the current input mode
         if self.input_mode == 'xinput':
@@ -6918,6 +7095,11 @@ class MAMEControlConfig(ctk.CTk):
                 if "JOYCODE" in converted:
                     # Recursive call to format the converted mapping
                     return self.format_mapping_display(converted)
+        
+        elif self.input_mode == 'keycode':
+            # For keycode mode, extract and display only KEYCODE mappings
+            keycode_display = self.extract_keycode_from_mapping(mapping)
+            return keycode_display if keycode_display else "No Key Assigned"
         
         # For keyboard mappings, convert to "Key X" format
         if mapping.startswith("KEYCODE"):
@@ -7120,7 +7302,14 @@ class MAMEControlConfig(ctk.CTk):
             anchor="w"
         ).pack(side="left")
         
-        # Show 'XInput Mode' indicator (always showing XInput now)
+        # Show input mode indicator
+        mode_display_names = {
+            'xinput': 'XInput Mode',
+            'dinput': 'DInput Mode', 
+            'joycode': 'JOYCODE Mode',
+            'keycode': 'KEYCODE Mode'
+        }
+        
         ctk.CTkLabel(
             indicator_frame,
             text="  |  Input Mode: ",
@@ -7130,7 +7319,7 @@ class MAMEControlConfig(ctk.CTk):
         
         ctk.CTkLabel(
             indicator_frame,
-            text="XInput Mode",
+            text=mode_display_names.get(self.input_mode, "Unknown Mode"),
             font=("Arial", 13, "bold"),
             text_color=self.theme_colors["primary"],
             anchor="w"
@@ -7212,7 +7401,18 @@ class MAMEControlConfig(ctk.CTk):
             fg_color=self.theme_colors["primary"],
             hover_color=self.theme_colors["secondary"]
         )
-        mode_dinput.pack(side="left")
+        mode_dinput.pack(side="left", padx=(0, 15))
+
+        mode_keycode = ctk.CTkRadioButton(
+            input_mode_frame,
+            text="KEYCODE",
+            variable=self.input_mode_var,
+            value="keycode",
+            command=self.toggle_input_mode,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["secondary"]
+        )
+        mode_keycode.pack(side="left")
         
         # Title on the left
         ctk.CTkLabel(
@@ -7586,6 +7786,10 @@ class MAMEControlConfig(ctk.CTk):
                                 display_text = self.get_friendly_dinput_name(converted)
                             else:
                                 display_text = self.format_mapping_display(mapping_value)
+                    elif self.input_mode == 'keycode':
+                        # For keycode mode, extract and display KEYCODE mappings
+                        keycode_display = self.extract_keycode_from_mapping(mapping_value)
+                        display_text = keycode_display if keycode_display else "No Key Assigned"
                     else:  # joycode mode
                         if "JOYCODE" in mapping_value:
                             display_text = self.format_joycode_display(mapping_value)
@@ -7620,8 +7824,15 @@ class MAMEControlConfig(ctk.CTk):
                 
                 # Determine actual mapping source by checking if mapping exists
                 if control_name in cfg_controls and cfg_controls[control_name].strip() not in ["", "NONE"]:
-                    source = f"ROM CFG ({romname}.cfg)"
-                    source_color = self.theme_colors["success"]  # Green for ROM CFG
+                    # Check if we're using fallback in KEYCODE mode
+                    if (self.input_mode == 'keycode' and 
+                        control_name in all_mappings and 
+                        all_mappings[control_name]['source'] == 'Default CFG (fallback)'):
+                        source = "Default CFG (fallback)"
+                        source_color = "#FFA500"  # Orange for fallback
+                    else:
+                        source = f"ROM CFG ({romname}.cfg)"
+                        source_color = self.theme_colors["success"]  # Green for ROM CFG
                 elif hasattr(self, 'default_controls') and control_name in self.default_controls:
                     source = "Default CFG"
                     source_color = self.theme_colors["primary"]  # Primary color for Default CFG
@@ -7642,8 +7853,11 @@ class MAMEControlConfig(ctk.CTk):
                 # Column 1: Raw MAME Control Name (new column!)
                 control_name = control['name']
                 
-                # Column 2: Display Name (Controller Input) - THE ENHANCED COLUMN
-                display_name = control.get('display_name', self.format_control_name(control['name']))
+                # Column 2: Display Name (Controller Input)
+                # Fallback to 'target_button' or raw mapping if 'display_name' is missing
+                display_name = control.get('display_name') or control.get('target_button') or control.get('mapping') or "Not Assigned"
+                print(f"Mapping display for {control['name']}: {display_name}")
+
                 
                 # Check if the controller input text needs truncation
                 controller_input_font = ("Arial", 13)
