@@ -2750,14 +2750,16 @@ class MAMEControlConfig(ctk.CTk):
     def display_game_info(self, rom_name):
         """Display game information and controls"""
         try:
+            print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}")
+            
             # Update toolbar status when a new ROM is selected
             if hasattr(self, 'update_toolbar_status'):
                 self.update_toolbar_status()
                 
             # Get game data
             game_data = self.get_game_data(rom_name)
+            print(f"DEBUG display_game_info: Got game_data with {len(game_data.get('players', []))} players")
             
-            # Update UI with game data
             if not game_data:
                 # Clear display for ROMs without control data
                 self.game_title.configure(text=f"No control data: {rom_name}")
@@ -2825,11 +2827,9 @@ class MAMEControlConfig(ctk.CTk):
             if rom_name in self.custom_configs:
                 # Parse the custom config
                 cfg_content = self.custom_configs[rom_name]
-                # Add debug output to check if there are any mappings in the file
                 parsed_controls = self.parse_cfg_controls(cfg_content)
                 if parsed_controls:
                     print(f"Found {len(parsed_controls)} control mappings in ROM CFG for {rom_name}")
-                    # Convert using current mode
                     cfg_controls = {
                         control: self.convert_mapping(mapping, current_mode)
                         for control, mapping in parsed_controls.items()
@@ -2845,7 +2845,28 @@ class MAMEControlConfig(ctk.CTk):
             # Clear existing display
             for widget in self.control_frame.winfo_children():
                 widget.destroy()
-                
+            
+            # CRITICAL: Apply custom mappings BEFORE displaying
+            print(f"DEBUG: About to call update_game_data_with_custom_mappings")
+            print(f"DEBUG: game_data players BEFORE: {len(game_data.get('players', []))}")
+            if game_data.get('players'):
+                for player in game_data['players']:
+                    print(f"DEBUG: Player {player.get('number')} has {len(player.get('labels', []))} labels BEFORE")
+                    if len(player.get('labels', [])) > 0:
+                        sample_label = player['labels'][0]
+                        print(f"DEBUG: Sample label BEFORE: {sample_label}")
+            
+            self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+            
+            print(f"DEBUG: game_data players AFTER: {len(game_data.get('players', []))}")
+            if game_data.get('players'):
+                for player in game_data['players']:
+                    print(f"DEBUG: Player {player.get('number')} has {len(player.get('labels', []))} labels AFTER")
+                    if len(player.get('labels', [])) > 0:
+                        sample_label = player['labels'][0]
+                        print(f"DEBUG: Sample label AFTER: {sample_label}")
+                        print(f"DEBUG: Sample label keys AFTER: {list(sample_label.keys())}")
+            
             # Display controls with enhanced styling
             row = 0
             self.display_controls_table(row, game_data, cfg_controls)
@@ -5959,7 +5980,10 @@ class MAMEControlConfig(ctk.CTk):
 
     def extract_keycode_from_mapping(self, mapping: str) -> str:
         """Extract KEYCODE from mapping string like 'KEYCODE_LCONTROL OR JOYCODE_1_BUTTON2'"""
+        print(f"DEBUG extract_keycode_from_mapping: input='{mapping}'")
+        
         if not mapping:
+            print(f"DEBUG extract_keycode_from_mapping: empty mapping, returning ''")
             return ""
         
         # Handle increment/decrement pairs
@@ -5969,29 +5993,42 @@ class MAMEControlConfig(ctk.CTk):
             dec_keycode = self.extract_keycode_from_mapping(dec_mapping)
             
             if inc_keycode and dec_keycode:
-                return f"{inc_keycode} | {dec_keycode}"
+                result = f"{inc_keycode} | {dec_keycode}"
+                print(f"DEBUG extract_keycode_from_mapping: inc/dec result='{result}'")
+                return result
             elif inc_keycode:
+                print(f"DEBUG extract_keycode_from_mapping: inc only result='{inc_keycode}'")
                 return inc_keycode
             elif dec_keycode:
+                print(f"DEBUG extract_keycode_from_mapping: dec only result='{dec_keycode}'")
                 return dec_keycode
             else:
+                print(f"DEBUG extract_keycode_from_mapping: no inc/dec keycode found, returning ''")
                 return ""
         
         # Handle OR statements - look for KEYCODE part
         if " OR " in mapping:
             parts = mapping.split(" OR ")
+            print(f"DEBUG extract_keycode_from_mapping: OR parts={parts}")
             for part in parts:
                 part = part.strip()
+                print(f"DEBUG extract_keycode_from_mapping: checking part='{part}'")
                 if part.startswith('KEYCODE_'):
-                    return self.format_keycode_display(part)
+                    result = self.format_keycode_display(part)
+                    print(f"DEBUG extract_keycode_from_mapping: found keycode part, formatted='{result}'")
+                    return result
             # If no KEYCODE found, return empty
+            print(f"DEBUG extract_keycode_from_mapping: no KEYCODE part found in OR, returning ''")
             return ""
         
         # Single mapping
         if mapping.startswith('KEYCODE_'):
-            return self.format_keycode_display(mapping)
+            result = self.format_keycode_display(mapping)
+            print(f"DEBUG extract_keycode_from_mapping: single keycode, formatted='{result}'")
+            return result
         
         # Not a keycode mapping
+        print(f"DEBUG extract_keycode_from_mapping: not a keycode mapping, returning ''")
         return ""
 
     def format_keycode_display(self, mapping: str) -> str:
@@ -6093,7 +6130,11 @@ class MAMEControlConfig(ctk.CTk):
 
     def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
         """Update game_data to include the custom control mappings with support for multiple input modes"""
+        print(f"DEBUG update_game_data_with_custom_mappings: input_mode={self.input_mode}")
+        print(f"DEBUG update_game_data_with_custom_mappings: cfg_controls keys={list(cfg_controls.keys())}")
+        
         if not cfg_controls and not hasattr(self, 'default_controls'):
+            print("DEBUG: No cfg_controls and no default_controls, returning early")
             return
                             
         # Debug output: Print all available cfg_controls
@@ -6166,10 +6207,13 @@ class MAMEControlConfig(ctk.CTk):
                 # For non-KEYCODE modes, use ROM CFG as-is
                 all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({game_data['romname']}.cfg)"}
         
-        # IMPORTANT: Now check each control in the game data and ensure it gets a mapping
+        # IMPORTANT: Add debug when processing each control
         for player in game_data.get('players', []):
+            print(f"DEBUG: Processing player {player.get('number')}")
             for label in player.get('labels', []):
                 control_name = label['name']
+                print(f"DEBUG: Processing control {control_name}")
+                print(f"DEBUG: Label BEFORE modification: {label}")
                 
                 # Debug output for paddle specifically
                 if control_name == 'P1_PADDLE':
@@ -6177,9 +6221,30 @@ class MAMEControlConfig(ctk.CTk):
                     print(f"  In cfg_controls: {control_name in cfg_controls}")
                     print(f"  In default_controls: {control_name in getattr(self, 'default_controls', {})}")
                     print(f"  In all_mappings: {control_name in all_mappings}")
+                    # Check if this control has a mapping in all_mappings
                     if control_name in all_mappings:
-                        print(f"  Mapping: {all_mappings[control_name]['mapping']}")
-                        print(f"  Source: {all_mappings[control_name]['source']}")
+                        mapping_info = all_mappings[control_name]
+                        
+                        # Add mapping information to the label
+                        label['mapping'] = mapping_info['mapping']
+                        label['mapping_source'] = mapping_info['source']
+                        label['is_custom'] = 'ROM CFG' in mapping_info['source']
+                        label['cfg_mapping'] = True
+                        
+                        # Also store the input mode
+                        label['input_mode'] = self.input_mode
+                        
+                        # Process for target_button
+                        if self.input_mode == 'keycode':
+                            keycode_display = self.extract_keycode_from_mapping(mapping_info['mapping'])
+                            label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
+                            print(f"DEBUG: Set target_button for keycode: {label['target_button']}")
+                        
+                        print(f"DEBUG: Label AFTER modification: {label}")
+                        print(f"Applied mapping for {control_name}: {label['mapping']} from {label['mapping_source']} (Mode: {self.input_mode})")
+                    else:
+                        print(f"DEBUG: No mapping found for {control_name}")
+                        label['is_custom'] = False
         
         # Add current input mode to game_data
         game_data['input_mode'] = self.input_mode
@@ -6393,6 +6458,9 @@ class MAMEControlConfig(ctk.CTk):
                     elif self.input_mode == 'joycode':
                         # Keep JOYCODE format
                         label['display_name'] = label["target_button"]
+                    elif self.input_mode == 'keycode':
+                        # For keycode mode, use the target_button as-is (it should be formatted keycode)
+                        label['display_name'] = label["target_button"]
                     else:
                         # XInput format
                         label['display_name'] = f'P1 {label["target_button"]}'
@@ -6430,6 +6498,9 @@ class MAMEControlConfig(ctk.CTk):
                             label['display_name'] = 'Joy Right'
                         else:
                             label['display_name'] = control_name
+                    elif self.input_mode == 'keycode':
+                        # For keycode mode with no mapping, show "No Key Assigned"
+                        label['display_name'] = "No Key Assigned"
                     else:
                         # XInput uses named buttons
                         if control_name == 'P1_BUTTON1':
@@ -7010,33 +7081,53 @@ class MAMEControlConfig(ctk.CTk):
     def format_mapping_display(self, mapping: str) -> str:
         """Format the mapping string for display using friendly names for the current input mode."""
         
+        print(f"DEBUG format_mapping_display: input='{mapping}', mode='{self.input_mode}'")
+        
         # Handle OR statements by finding matching parts
         if " OR " in mapping:
             parts = mapping.split(" OR ")
+            print(f"DEBUG format_mapping_display: OR parts={parts}")
             
             # Find part matching the current input mode
             for part in parts:
                 part = part.strip()
+                print(f"DEBUG format_mapping_display: checking part='{part}'")
                 if self.input_mode == 'xinput' and "XINPUT" in part:
                     mapping = part
+                    print(f"DEBUG format_mapping_display: selected xinput part: {part}")
                     break
                 elif self.input_mode == 'dinput' and "DINPUT" in part:
                     mapping = part
+                    print(f"DEBUG format_mapping_display: selected dinput part: {part}")
                     break
                 elif self.input_mode == 'joycode' and "JOYCODE" in part:
                     mapping = part
+                    print(f"DEBUG format_mapping_display: selected joycode part: {part}")
                     break
                 elif self.input_mode == 'keycode' and "KEYCODE" in part:
                     mapping = part
+                    print(f"DEBUG format_mapping_display: selected keycode part: {part}")
                     break
             
-            # If no matching part found, convert first part to current mode
-            if " OR " in mapping:
-                mapping = parts[0].strip()
-                if self.input_mode != 'keycode':  # Don't convert for keycode mode
-                    converted = self.convert_mapping(mapping, self.input_mode)
-                    if converted != mapping:
-                        mapping = converted
+            # If no matching part found, use the first keycode part in keycode mode
+            if " OR " in mapping and self.input_mode == 'keycode':
+                for part in parts:
+                    if "KEYCODE" in part.strip():
+                        mapping = part.strip()
+                        print(f"DEBUG format_mapping_display: fallback to keycode part: {part}")
+                        break
+        
+        print(f"DEBUG format_mapping_display: final mapping to format: '{mapping}'")
+        
+        # Format based on the current input mode
+        if self.input_mode == 'keycode':
+            if mapping.startswith("KEYCODE"):
+                result = self.format_keycode_display(mapping)
+                print(f"DEBUG format_mapping_display: keycode result: '{result}'")
+                return result
+            else:
+                print(f"DEBUG format_mapping_display: not a keycode, returning 'No Key Assigned'")
+                return "No Key Assigned"
         
         # Format based on the current input mode
         if self.input_mode == 'xinput':
@@ -7468,31 +7559,39 @@ class MAMEControlConfig(ctk.CTk):
         
         # When collecting controls, add this debug print
         all_controls = []
-        #print(f"DEBUG: Starting to collect Player 1 controls")
-        
+        print(f"DEBUG: Starting to collect Player 1 controls for {romname}")
+
         for player in game_data.get('players', []):
             player_num = player.get('number')
-            #print(f"DEBUG: Player {player_num} has {len(player.get('labels', []))} labels")
+            print(f"DEBUG: Player {player_num} has {len(player.get('labels', []))} labels")
             
             if player.get('number') == 1:  # Only include Player 1
                 for label in player.get('labels', []):
-                    # Add debug information
                     control_name = label['name']
                     action = label['value']
-                    #print(f"DEBUG: Processing control {control_name}: {action}")
                     
-                    # For AD_STICK controls, ensure they're processed
-                    if "AD_STICK" in control_name:
-                        #print(f"DEBUG: Found AD_STICK control: {control_name}")
-                        # Force flag to true for these controls
-                        label['is_custom'] = control_name in cfg_controls
-                        # Set display mode to ensure it shows up
-                        if "AD_STICK_X" in control_name:
-                            label['display_style'] = 'move_horizontal'
-                        elif "AD_STICK_Y" in control_name:
-                            label['display_style'] = 'move_vertical'
-                        elif "AD_STICK_Z" in control_name:
-                            label['display_style'] = 'analog_input'
+                    # DEBUG: Print the full label data
+                    print(f"DEBUG: Raw label data for {control_name}:")
+                    for key, value in label.items():
+                        print(f"  {key}: {value}")
+                    
+                    # Extract display name from the label for display
+                    display_name = None
+                    if 'display_name' in label:
+                        display_name = label['display_name']
+                        print(f"DEBUG: Found display_name in label: {display_name}")
+                    elif 'target_button' in label:
+                        target_button = label['target_button']
+                        print(f"DEBUG: Found target_button in label: {target_button}")
+                        # For keycode mode, use target_button directly
+                        if self.input_mode == 'keycode':
+                            display_name = target_button
+                        else:
+                            display_name = f"P1 {target_button}"
+                        print(f"DEBUG: Created display_name from target_button: {display_name}")
+                    else:
+                        display_name = self.format_control_name(control_name)
+                        print(f"DEBUG: Created display_name from format_control_name: {display_name}")
                     
                     # Determine mapping information
                     is_custom = control_name in cfg_controls
@@ -7504,8 +7603,7 @@ class MAMEControlConfig(ctk.CTk):
                     elif is_default:
                         mapping_source = "Default CFG"
                         default_mapping = self.default_controls[control_name]
-                        # Always convert to XInput
-                        mapping_value = self.convert_mapping(default_mapping, 'xinput')
+                        mapping_value = default_mapping  # Keep original mapping
                     else:
                         mapping_source = "Game Data"
                         mapping_value = ""
@@ -7517,17 +7615,29 @@ class MAMEControlConfig(ctk.CTk):
                         'mapping': mapping_value,
                         'is_custom': is_custom,
                         'is_default': is_default,
-                        'source': mapping_source
+                        'source': mapping_source,
+                        'display_name': display_name  # Use the display_name we determined above
                     }
                     
                     # Extract display name from the label for display
                     if 'target_button' in label:
-                        control_data['display_name'] = f"P1 {label['target_button']}"
+                        # FIXED: Don't add P1 prefix for keycode mode
+                        if self.input_mode == 'keycode':
+                            control_data['display_name'] = label['target_button']  # Use as-is for keycode
+                            print(f"DEBUG: Using target_button as-is for keycode: {label['target_button']}")
+                        else:
+                            control_data['display_name'] = f"P1 {label['target_button']}"  # Add P1 for other modes
+                            print(f"DEBUG: Adding P1 prefix: P1 {label['target_button']}")
                     elif 'display_name' in label:
                         control_data['display_name'] = label['display_name']
+                        print(f"DEBUG: Using existing display_name: {label['display_name']}")
                     else:
                         control_data['display_name'] = self.format_control_name(control_name)
-                    
+                        print(f"DEBUG: Using format_control_name: {control_data['display_name']}")
+
+                    # Also add debug to see what we're setting:
+                    print(f"DEBUG: Final display_name for {control_name}: {control_data['display_name']}")
+
                     all_controls.append(control_data)
         
         # Sort controls to keep a consistent order (BUTTON1, BUTTON2, etc.)
@@ -7682,7 +7792,14 @@ class MAMEControlConfig(ctk.CTk):
             # Use a single consistent background color matching card_bg
             bg_color = self.theme_colors["card_bg"]
 
-            # When creating each row:
+            # First, add debug output to see what's in all_controls:
+            print(f"DEBUG: Processing control data for display:")
+            for i, ctrl in enumerate(all_controls[:2]):  # Just first 2 for debugging
+                print(f"  Control {i}: {ctrl}")
+            print(f"DEBUG: End control data")
+
+            # Then replace the main processing loop:
+
             for i in range(visible_rows):
                 control = all_controls[i]
                 control_name = control['name']
@@ -7697,130 +7814,96 @@ class MAMEControlConfig(ctk.CTk):
                                     "LIGHTGUN" in control_name or
                                     "MOUSE" in control_name)
                 
-                # Process mapping with OR statements or increment/decrement pairs
-                mapping_value = control.get('mapping', '')
-                primary_mapping = ""
-                all_mappings = []
-                display_text = ""
-
-                # Special handling for increment/decrement pairs
-                if " ||| " in mapping_value:
-                    # Split into increment and decrement parts
-                    inc_mapping, dec_mapping = mapping_value.split(" ||| ")
-                    
-                    # Format each part
-                    inc_display = self.format_mapping_display(inc_mapping)
-                    dec_display = self.format_mapping_display(dec_mapping)
-                    
-                    # Combine with a vertical bar
-                    display_text = f"{inc_display} | {dec_display}"
-                    all_mappings = [inc_display, dec_display]
-                    primary_mapping = display_text
-                # Handle OR statements
-                elif " OR " in mapping_value:
-                    # This is the existing code for OR statements
-                    mapping_parts = mapping_value.split(" OR ")
-                    
-                    # Look for parts matching the current input mode
-                    joycode_part = None
-                    for part in mapping_parts:
-                        part = part.strip()
-                        if self.input_mode == 'xinput' and "JOYCODE" in part:
-                            joycode_part = part
-                            # Convert the JOYCODE part to the current input mode
-                            converted = self.convert_mapping(joycode_part, self.input_mode)
-                            if "XINPUT" in converted:
-                                primary_mapping = self.get_friendly_xinput_name(converted)
-                                break
-                        elif self.input_mode == 'dinput' and "JOYCODE" in part:
-                            joycode_part = part
-                            converted = self.convert_mapping(joycode_part, self.input_mode)
-                            if "DINPUT" in converted:
-                                primary_mapping = self.get_friendly_dinput_name(converted)
-                                break
-                        elif self.input_mode == 'joycode' and "JOYCODE" in part:
-                            joycode_part = part
-                            primary_mapping = self.format_joycode_display(joycode_part)
-                            break
-                    
-                    # Only proceed with normal processing if no JOYCODE part was found or converted
-                    if not primary_mapping:
-                        # Get all formatted mappings for tooltip
-                        for part in mapping_parts:
-                            if "XINPUT" in part:
-                                primary_mapping = self.get_friendly_xinput_name(part)
-                            elif "JOYCODE" in part:
-                                # Try to convert JOYCODE to XINPUT
-                                converted = self.convert_mapping(part, 'xinput')
-                                if "XINPUT" in converted:
-                                    primary_mapping = self.get_friendly_xinput_name(converted)
-                    
-                    # If no XINPUT mapping found, use first mapping as primary
-                    if not primary_mapping and all_mappings:
-                        primary_mapping = all_mappings[0]
-                        
-                    # Create display text with counter
-                    if len(all_mappings) > 1:
-                        display_text = f"{primary_mapping} (+{len(all_mappings)-1})"
+                # IMPORTANT: Check if we already have processed display data (from cache)
+                # This avoids re-processing mappings when we already have the correct display values
+                if 'display_name' in control and control['display_name']:
+                    # Use the cached display_name directly
+                    display_text = control['display_name']
+                    print(f"Using cached display_name for {control_name}: {display_text}")
+                elif 'target_button' in control and control['target_button']:
+                    # Use the cached target_button
+                    if self.input_mode == 'keycode':
+                        # For keycode mode, use target_button as-is (it should already be formatted)
+                        display_text = control['target_button']
                     else:
-                        display_text = primary_mapping
-                elif mapping_value:
-                    # Use the appropriate display format based on current input mode
-                    if self.input_mode == 'xinput':
-                        if "XINPUT" in mapping_value:
-                            display_text = self.get_friendly_xinput_name(mapping_value)
+                        # For other modes, add P1 prefix if not already there
+                        target = control['target_button']
+                        if not target.startswith('P1 '):
+                            display_text = f"P1 {target}"
                         else:
-                            # Try to convert to XInput
-                            converted = self.convert_mapping(mapping_value, 'xinput')
-                            if "XINPUT" in converted:
-                                display_text = self.get_friendly_xinput_name(converted)
-                            else:
-                                display_text = self.format_mapping_display(mapping_value)
-                    elif self.input_mode == 'dinput':
-                        if "DINPUT" in mapping_value:
-                            display_text = self.get_friendly_dinput_name(mapping_value)
-                        else:
-                            # Try to convert to DInput
-                            converted = self.convert_mapping(mapping_value, 'dinput')
-                            if "DINPUT" in converted:
-                                display_text = self.get_friendly_dinput_name(converted)
-                            else:
-                                display_text = self.format_mapping_display(mapping_value)
-                    elif self.input_mode == 'keycode':
-                        # For keycode mode, extract and display KEYCODE mappings
-                        keycode_display = self.extract_keycode_from_mapping(mapping_value)
-                        display_text = keycode_display if keycode_display else "No Key Assigned"
-                    else:  # joycode mode
-                        if "JOYCODE" in mapping_value:
-                            display_text = self.format_joycode_display(mapping_value)
-                        else:
-                            # Try to convert to Joycode
-                            converted = self.convert_mapping(mapping_value, 'joycode')
-                            if "JOYCODE" in converted:
-                                display_text = self.format_joycode_display(converted)
-                            else:
-                                display_text = self.format_mapping_display(mapping_value)
-                    all_mappings = [display_text]
+                            display_text = target
+                    print(f"Using cached target_button for {control_name}: {display_text}")
                 else:
-                    # No mapping - for analog controls show a description
-                    if is_analog_control:
-                        if "AD_STICK_X" in control_name:
-                            display_text = "Left/Right Controls"
-                        elif "AD_STICK_Y" in control_name:
-                            display_text = "Up/Down Controls"
-                        elif "AD_STICK_Z" in control_name:
-                            display_text = "Throttle Controls"
-                        elif "DIAL" in control_name:
-                            display_text = "Dial Controls"
-                        elif "PADDLE" in control_name:
-                            display_text = "Paddle Controls"
-                        elif "PEDAL" in control_name:
-                            display_text = "Pedal Controls"
-                        elif "TRACKBALL" in control_name or "MOUSE" in control_name or "LIGHTGUN" in control_name:
-                            display_text = "Positional Controls"
+                    # Fallback: Process mapping if no cached display data
+                    mapping_value = control.get('mapping', '')
+                    primary_mapping = ""
+                    all_mappings = []
+                    display_text = ""
+
+                    print(f"No cached display data for {control_name}, processing mapping: {mapping_value}")
+
+                    # Special handling for increment/decrement pairs
+                    if " ||| " in mapping_value:
+                        # Split into increment and decrement parts
+                        inc_mapping, dec_mapping = mapping_value.split(" ||| ")
+                        
+                        # Format each part
+                        inc_display = self.format_mapping_display(inc_mapping)
+                        dec_display = self.format_mapping_display(dec_mapping)
+                        
+                        # Combine with a vertical bar
+                        display_text = f"{inc_display} | {dec_display}"
+                        all_mappings = [inc_display, dec_display]
+                        primary_mapping = display_text
+                    # Handle OR statements
+                    elif " OR " in mapping_value:
+                        mapping_parts = mapping_value.split(" OR ")
+                        
+                        # Look for parts matching the current input mode
+                        for part in mapping_parts:
+                            part = part.strip()
+                            if self.input_mode == 'xinput' and "XINPUT" in part:
+                                primary_mapping = self.get_friendly_xinput_name(part)
+                                break
+                            elif self.input_mode == 'dinput' and "DINPUT" in part:
+                                primary_mapping = self.get_friendly_dinput_name(part)
+                                break
+                            elif self.input_mode == 'joycode' and "JOYCODE" in part:
+                                primary_mapping = self.format_joycode_display(part)
+                                break
+                            elif self.input_mode == 'keycode' and "KEYCODE" in part:
+                                primary_mapping = self.format_keycode_display(part)
+                                break
+                        
+                        # If no mode-specific part found, use format_mapping_display
+                        if not primary_mapping:
+                            primary_mapping = self.format_mapping_display(mapping_value)
+                            
+                        display_text = primary_mapping
+                    elif mapping_value:
+                        # Single mapping
+                        display_text = self.format_mapping_display(mapping_value)
+                    else:
+                        # No mapping - for analog controls show a description
+                        if is_analog_control:
+                            if "AD_STICK_X" in control_name:
+                                display_text = "Left/Right Controls"
+                            elif "AD_STICK_Y" in control_name:
+                                display_text = "Up/Down Controls"
+                            elif "AD_STICK_Z" in control_name:
+                                display_text = "Throttle Controls"
+                            elif "DIAL" in control_name:
+                                display_text = "Dial Controls"
+                            elif "PADDLE" in control_name:
+                                display_text = "Paddle Controls"
+                            elif "PEDAL" in control_name:
+                                display_text = "Pedal Controls"
+                            elif "TRACKBALL" in control_name or "MOUSE" in control_name or "LIGHTGUN" in control_name:
+                                display_text = "Positional Controls"
+                            else:
+                                display_text = "Analog Controls"
                         else:
-                            display_text = "Analog Controls"
-                        all_mappings = [display_text]
+                            display_text = "Not Assigned"
                 
                 # Determine actual mapping source by checking if mapping exists
                 if control_name in cfg_controls and cfg_controls[control_name].strip() not in ["", "NONE"]:
@@ -8085,7 +8168,7 @@ class MAMEControlConfig(ctk.CTk):
         return row
 
     def toggle_input_mode(self):
-        """Handle toggling between input modes (JOYCODE, XInput, DInput)"""
+        """Handle toggling between input modes (JOYCODE, XInput, DInput, KEYCODE)"""
         if hasattr(self, 'input_mode_var'):
             # Get the current toggle state
             old_mode = self.input_mode
@@ -8095,19 +8178,9 @@ class MAMEControlConfig(ctk.CTk):
             # Save the setting
             self.save_settings()
             
-            # Clear cache for current game
-            if self.current_game and hasattr(self, 'rom_data_cache') and self.current_game in self.rom_data_cache:
-                print(f"Clearing ROM data cache for {self.current_game} due to input mode change")
-                del self.rom_data_cache[self.current_game]
-                
-                # Also clear cache file if it exists
-                cache_file = os.path.join(self.cache_dir, f"{self.current_game}_cache.json")
-                if os.path.exists(cache_file):
-                    try:
-                        os.remove(cache_file)
-                        print(f"Removed cache file for {self.current_game}")
-                    except Exception as e:
-                        print(f"Error removing cache file: {e}")
+            # CRITICAL FIX: Clear the LRU cache
+            self.get_game_data.cache_clear()
+            print("Cleared LRU cache")
             
             # Refresh the current game display if one is selected
             if self.current_game:
