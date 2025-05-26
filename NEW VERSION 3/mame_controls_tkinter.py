@@ -2737,17 +2737,17 @@ class MAMEControlConfig(ctk.CTk):
             # These we can get directly
             return sorted(self.custom_configs.keys())
         
-        # For these categories we need to check each ROM's data
+       # For these categories we need to check each ROM's data
         for rom in available_roms:
             # Quick check for category - only load data if absolutely necessary
             if self.current_view == "with_controls":
                 # Check if ROM has cached data or exists in database
-                if rom in self.rom_data_cache or rom_exists_in_db(romname, self.db_path):
+                if rom in self.rom_data_cache or rom_exists_in_db(rom, self.db_path):
                     with_controls.append(rom)
                 
             elif self.current_view == "missing":
                 # Opposite of with_controls
-                if rom not in self.rom_data_cache and not rom_exists_in_db(romname, self.db_path):
+                if rom not in self.rom_data_cache and not rom_exists_in_db(rom, self.db_path):
                     missing_controls.append(rom)
                     
             elif self.current_view == "generic":
