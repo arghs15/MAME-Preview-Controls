@@ -322,7 +322,7 @@ def main():
         parser.add_argument('--screen', type=int, default=1, help='Screen number to display preview on (default: 1)')
         parser.add_argument('--auto-close', action='store_true', help='Automatically close preview when MAME exits')
         parser.add_argument('--no-buttons', action='store_true', help='Hide buttons in preview mode (overrides settings)')
-        parser.add_argument('--use-db', action='store_true', help='Force using SQLite database if available')
+        parser.add_argument('--use-db', action='store_true', help='Force using SQLite database, bypass cache entirely')
         parser.add_argument('--precache', action='store_true', help='Precache game data without showing the preview')
         args = parser.parse_args()
         print("Arguments parsed.")
@@ -385,25 +385,27 @@ def main():
         # Ensure settings directory exists
         os.makedirs(settings_dir, exist_ok=True)
 
-        # Database usage logic - respects --use-db flag
+        # Database usage logic - updated to handle --use-db properly
         if args.use_db:
             if os.path.exists(db_path):
-                print(f"Found database at: {db_path}")
-                print("Database support FORCED by --use-db flag")
+                print(f"🗃️  FORCED DATABASE MODE: Using {db_path}")
+                print("📝 Cache will be bypassed entirely")
                 use_database = True
+                use_cache = False  # Force disable cache
             else:
-                print("ERROR: --use-db specified but no database found!")
-                use_database = False
+                print(f"❌ ERROR: --use-db specified but database not found at {db_path}")
+                print("💡 Run the main application first to build the database")
+                return 1
         elif not use_cache and os.path.exists(db_path):
             # Default behavior: use database if available and not using cache
-            print(f"Found database at: {db_path}")
-            print("Database support enabled for faster loading")
+            print(f"🗃️  Database found: {db_path}")
+            print("📊 Using database for faster loading")
             use_database = True
         else:
             if use_cache:
-                print("Using cache, skipping database")
+                print("💾 Using cache, skipping database")
             else:
-                print("No database found, will use traditional JSON lookup")
+                print("📄 No database found, will use JSON lookup")
             use_database = False
 
         # Check for preview-only mode or precache mode - always use PyQt for both
@@ -654,7 +656,13 @@ def main():
                     print("Added unified game data support")
                 
                 if args.precache:
-                    print(f"Precaching game data for: {args.game}")
+                    print(f"📦 Precaching game data for: {args.game}")
+                    
+                    # Handle --use-db flag for precache
+                    if args.use_db and not use_database:
+                        print("❌ Cannot use --use-db: database not available")
+                        return 1
+                    
                     import time
                     import json
                     start_time = time.time()
@@ -667,7 +675,7 @@ def main():
                     cache_file = os.path.join(cache_dir, f"{args.game}_cache.json")
                     
                     try:
-                        # OPTIMIZED: Import data utilities directly (no GUI needed)
+                        # Import data utilities directly
                         from mame_data_utils import (
                             load_gamedata_json, load_custom_configs, load_default_config,
                             parse_cfg_controls, convert_mapping, update_game_data_with_custom_mappings,
@@ -677,84 +685,107 @@ def main():
                         # Load input mode from settings
                         settings_path = os.path.join(settings_dir, "control_config_settings.json")
                         input_mode = 'xinput'  # Default
+                        xinput_only_mode = True  # Default
+                        
                         try:
                             if os.path.exists(settings_path):
                                 with open(settings_path, 'r') as f:
                                     settings = json.load(f)
                                 input_mode = settings.get('input_mode', 'xinput')
+                                xinput_only_mode = settings.get('xinput_only_mode', True)
+                                
                                 # Validate input mode
                                 if input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
                                     input_mode = 'xinput'
-                            print(f"Using input mode: {input_mode}")
+                                    
+                            print(f"🎮 Input mode: {input_mode}")
+                            print(f"🎯 XInput-only mode: {xinput_only_mode}")
                         except Exception as e:
-                            print(f"Error loading settings, using default xinput mode: {e}")
+                            print(f"⚠️  Error loading settings, using defaults: {e}")
                         
-                        # Load gamedata.json and parent lookup
-                        gamedata_path = os.path.join(settings_dir, "gamedata.json")
-                        if not os.path.exists(gamedata_path):
-                            # Try alternative locations
-                            alt_paths = [
-                                os.path.join(mame_dir, "gamedata.json"),
-                                os.path.join(os.path.dirname(mame_dir), "gamedata.json")
-                            ]
-                            for alt_path in alt_paths:
-                                if os.path.exists(alt_path):
-                                    gamedata_path = alt_path
-                                    break
+                        # Load game data based on --use-db flag
+                        game_data = None
                         
-                        if not os.path.exists(gamedata_path):
-                            print(f"ERROR: gamedata.json not found. Tried: {gamedata_path}")
-                            return 1
-                        
-                        # Load all data using utility functions
-                        gamedata_json, parent_lookup, clone_parents = load_gamedata_json(gamedata_path)
-                        print(f"Loaded gamedata.json with {len(gamedata_json)} games")
-                        
-                        # Load custom configs
-                        custom_configs = load_custom_configs(mame_dir)
-                        print(f"Loaded {len(custom_configs)} custom configs")
-                        
-                        # Load default controls
-                        default_controls, original_default_controls = load_default_config(mame_dir)
-                        print(f"Loaded {len(default_controls)} default controls")
-                        
-                        # Initialize ROM data cache
-                        rom_data_cache = {}
-                        
-                        # Use database if available
-                        db_path = os.path.join(settings_dir, "gamedata.db")
-                        
-                        # Get game data using utility function
-                        game_data = get_game_data(
-                            romname=args.game,
-                            gamedata_json=gamedata_json,
-                            parent_lookup=parent_lookup,
-                            db_path=db_path if os.path.exists(db_path) else None,
-                            rom_data_cache=rom_data_cache
-                        )
+                        if use_database and args.use_db:
+                            print(f"🗃️  FORCED DATABASE MODE: Loading {args.game} from database only")
+                            
+                            # Use database directly, bypass all other sources
+                            game_data = get_game_data_from_db(args.game, db_path)
+                            
+                            if game_data:
+                                print(f"✅ Retrieved {args.game} from database")
+                                game_data['source'] = 'gamedata.db (forced)'
+                            else:
+                                print(f"❌ ROM {args.game} not found in database")
+                                return 1
+                        else:
+                            # Standard loading process (database, then JSON fallback)
+                            print(f"📊 Loading {args.game} using standard process...")
+                            
+                            # Load all data files for fallback
+                            gamedata_path = os.path.join(settings_dir, "gamedata.json")
+                            if not os.path.exists(gamedata_path):
+                                # Try alternative locations
+                                alt_paths = [
+                                    os.path.join(mame_dir, "gamedata.json"),
+                                    os.path.join(os.path.dirname(mame_dir), "gamedata.json")
+                                ]
+                                for alt_path in alt_paths:
+                                    if os.path.exists(alt_path):
+                                        gamedata_path = alt_path
+                                        break
+                            
+                            if not os.path.exists(gamedata_path):
+                                print(f"❌ ERROR: gamedata.json not found")
+                                return 1
+                            
+                            # Load gamedata and parent lookup for fallback
+                            gamedata_json, parent_lookup, clone_parents = load_gamedata_json(gamedata_path)
+                            rom_data_cache = {}
+                            
+                            # Use the unified get_game_data function
+                            game_data = get_game_data(
+                                romname=args.game,
+                                gamedata_json=gamedata_json,
+                                parent_lookup=parent_lookup,
+                                db_path=db_path if use_database else None,
+                                rom_data_cache=rom_data_cache
+                            )
                         
                         if not game_data:
-                            print(f"ERROR: No game data found for {args.game}")
+                            print(f"❌ ERROR: No game data found for {args.game}")
                             return 1
                         
-                        print(f"Retrieved {args.game} from {game_data.get('source', 'unknown source')}")
+                        print(f"📋 Data source: {game_data.get('source', 'unknown')}")
+                        
+                        # Process custom mappings (same for both database and JSON)
+                        cfg_controls = {}
+                        
+                        # Load custom configs and default controls for processing
+                        if not args.use_db or not use_database:
+                            # Only load these if we're not in pure database mode
+                            custom_configs = load_custom_configs(mame_dir)
+                            default_controls, original_default_controls = load_default_config(mame_dir)
+                        else:
+                            # In pure database mode, we still need these for custom mapping processing
+                            print("🔧 Loading configs for custom mapping processing...")
+                            custom_configs = load_custom_configs(mame_dir)
+                            default_controls, original_default_controls = load_default_config(mame_dir)
                         
                         # Process custom mappings if they exist
-                        cfg_controls = {}
                         if args.game in custom_configs:
-                            # Parse the custom config using utility function
                             cfg_content = custom_configs[args.game]
                             parsed_controls = parse_cfg_controls(cfg_content, input_mode)
                             if parsed_controls:
-                                print(f"Found {len(parsed_controls)} control mappings in ROM CFG for {args.game}")
+                                print(f"🎛️  Found {len(parsed_controls)} control mappings in ROM CFG")
                                 cfg_controls = {
                                     control: convert_mapping(mapping, input_mode)
                                     for control, mapping in parsed_controls.items()
                                 }
                             else:
-                                print(f"ROM CFG exists for {args.game} but contains no control mappings")
+                                print(f"📄 ROM CFG exists but contains no control mappings")
                         
-                        # Apply custom mappings using utility function
+                        # Apply custom mappings and input mode processing
                         game_data = update_game_data_with_custom_mappings(
                             game_data=game_data,
                             cfg_controls=cfg_controls,
@@ -763,14 +794,10 @@ def main():
                             input_mode=input_mode
                         )
                         
-                        # Apply XInput-only filtering if enabled in settings
-                        try:
-                            xinput_only_mode = settings.get('xinput_only_mode', True) if 'settings' in locals() else True
-                            if xinput_only_mode:
-                                game_data = filter_xinput_controls(game_data)
-                                print(f"Applied XInput-only filter")
-                        except Exception as e:
-                            print(f"Error applying XInput filter: {e}")
+                        # Apply XInput-only filtering if enabled
+                        if xinput_only_mode:
+                            game_data = filter_xinput_controls(game_data)
+                            print(f"🎯 Applied XInput-only filter")
                         
                         # Save the processed game data to cache
                         try:
@@ -778,10 +805,24 @@ def main():
                                 json.dump(game_data, f, indent=2)
                             
                             load_time = time.time() - start_time
-                            print(f"✅ Precached {args.game} in {load_time:.3f} seconds using {input_mode} mode")
-                            print(f"📁 Saved to: {cache_file}")
-                            print(f"🔍 Source: {game_data.get('source', 'unknown')}")
-                            print(f"🎮 Input Mode: {game_data.get('input_mode', 'unknown')}")
+                            
+                            # Enhanced status output
+                            print("=" * 50)
+                            print(f"✅ PRECACHE COMPLETE")
+                            print(f"🎮 ROM: {args.game}")
+                            print(f"⏱️  Time: {load_time:.3f} seconds")
+                            print(f"📊 Source: {game_data.get('source', 'unknown')}")
+                            print(f"🎛️  Input Mode: {input_mode}")
+                            print(f"🎯 XInput-only: {xinput_only_mode}")
+                            print(f"📁 Cache File: {os.path.basename(cache_file)}")
+                            
+                            if use_database and args.use_db:
+                                print(f"🗃️  Database Mode: FORCED (bypassed cache)")
+                            elif use_database:
+                                print(f"🗃️  Database Mode: AUTO")
+                            else:
+                                print(f"📄 JSON Mode: Fallback")
+                            
                             print(f"👥 Players: {len(game_data.get('players', []))}")
                             
                             if game_data.get('players'):
@@ -789,15 +830,17 @@ def main():
                                     control_count = len(player.get('labels', []))
                                     custom_count = len([l for l in player.get('labels', []) if l.get('is_custom', False)])
                                     mapped_count = len([l for l in player.get('labels', []) if l.get('target_button')])
-                                    print(f"  Player {player['number']}: {control_count} controls ({custom_count} custom, {mapped_count} mapped)")
+                                    print(f"  P{player['number']}: {control_count} controls ({custom_count} custom, {mapped_count} mapped)")
                                     
-                                    # Show sample of processed data
+                                    # Show sample control
                                     if control_count > 0:
                                         sample_label = player['labels'][0]
                                         display_value = (sample_label.get('target_button') or 
                                                     sample_label.get('display_name') or 
                                                     sample_label['value'])
-                                        print(f"    Sample: {sample_label['name']} -> {display_value}")
+                                        print(f"    Sample: {sample_label['name']} → {display_value}")
+                            
+                            print("=" * 50)
                                         
                         except Exception as e:
                             print(f"❌ Error saving cache: {e}")
@@ -807,7 +850,7 @@ def main():
                         
                     except ImportError as e:
                         print(f"❌ Error importing data utilities: {e}")
-                        print("Make sure mame_data_utils.py is in the correct location")
+                        print("💡 Make sure mame_data_utils.py is in the correct location")
                         return 1
                     except Exception as e:
                         print(f"❌ Unexpected error in precache: {e}")
