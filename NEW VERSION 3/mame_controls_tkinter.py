@@ -2139,11 +2139,6 @@ class MAMEControlConfig(ctk.CTk):
         """Preview controls for a specific ROM with proper handling of prefixes"""
         # Clean the ROM name in case it has prefixes
         if rom_name:
-            # Remove common prefixes that might be part of the display format but not the actual ROM name
-            if rom_name.startswith("* "):
-                rom_name = rom_name[2:]
-            if rom_name.startswith("+ ") or rom_name.startswith("- "):
-                rom_name = rom_name[2:]
                 
             # Strip any leading/trailing whitespace
             rom_name = rom_name.strip()
@@ -2390,11 +2385,7 @@ class MAMEControlConfig(ctk.CTk):
             has_data = self.get_game_data(rom) is not None
             is_clone = rom in self.parent_lookup if hasattr(self, 'parent_lookup') else False
             
-            # Build the prefix
-            prefix = "* " if has_config else "  "
-            prefix += "+ " if has_data else "- "
-            
-            # Create display text
+            # Create display text without prefixes
             if is_clone and (self.current_view == "clones" or self.current_view == "all"):
                 parent_rom = self.parent_lookup.get(rom, "")
                 
@@ -2402,17 +2393,21 @@ class MAMEControlConfig(ctk.CTk):
                 if has_data:
                     game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                             self.db_path, getattr(self, 'rom_data_cache', {}))
-                    display_text = f"{prefix}{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
+                    display_text = f"{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
                 else:
-                    display_text = f"{prefix}{rom} [Clone of {parent_rom}]"
+                    display_text = f"{rom} [Clone of {parent_rom}]"
             else:
                 # Regular display for non-clones or when not in clone view
                 if has_data:
-                    game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
-                                            self.db_path, getattr(self, 'rom_data_cache', {}))
-                    display_text = f"{prefix}{rom} - {game_data['gamename']}"
+                    if hasattr(self, 'name_cache') and rom in self.name_cache:
+                        game_name = self.name_cache[rom].capitalize()
+                        display_text = f"{rom} - {game_name}"
+                    else:
+                        game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
+                                                self.db_path, getattr(self, 'rom_data_cache', {}))
+                        display_text = f"{rom} - {game_data['gamename']}"
                 else:
-                    display_text = f"{prefix}{rom}"
+                    display_text = f"{rom}"
             
             # Store both the ROM name and display text
             self.game_list_data.append((rom, display_text))
@@ -2482,8 +2477,11 @@ class MAMEControlConfig(ctk.CTk):
                 
             # Get game data
             game_data = self.get_game_data(rom_name)
-            print(f"DEBUG display_game_info: Got game_data with {len(game_data.get('players', []))} players")
-            
+            if game_data:
+                print(f"DEBUG display_game_info: Got game_data with {len(game_data.get('players', []))} players")
+            else:
+                print(f"DEBUG display_game_info: No game_data found for {rom_name}")
+
             if not game_data:
                 # Clear display for ROMs without control data
                 self.game_title.configure(text=f"No control data: {rom_name}")
@@ -5745,79 +5743,151 @@ class MAMEControlConfig(ctk.CTk):
             ).pack(anchor="w", fill="x")
         
         # Add indicators for config sources and input mode
+        # Add detailed data source indicators
         indicator_frame = ctk.CTkFrame(info_card, fg_color="transparent")
         indicator_frame.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
 
-        # First check if ROM CFG actually contains control mappings
-        has_rom_cfg = False
+        # Check data sources
+        has_rom_cfg_file = romname in self.custom_configs
+        has_rom_cfg_used = False
+        has_gamedata_entry = romname in self.gamedata_json or (hasattr(self, 'parent_lookup') and romname in self.parent_lookup)
+        has_control_mappings = bool(game_data.get('players', []))
         has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
-        has_gamedata = bool(game_data.get('players', []))
 
-        # See if this ROM has a custom config with actual control mappings
-        if romname in self.custom_configs:
-            # Parse the custom config to check if it has any control mappings
+        # Check if ROM CFG is actually being used
+        if has_rom_cfg_file:
             parsed_controls = self.parse_cfg_controls(self.custom_configs[romname])
-            if parsed_controls:
-                has_rom_cfg = True
-                print(f"ROM {romname} has {len(parsed_controls)} control mappings in its cfg file")
+            has_rom_cfg_used = bool(parsed_controls)
 
-        # Determine the primary source based on controls actually used
-        if has_rom_cfg and cfg_controls:
-            primary_source = "ROM CFG"
-            primary_color = self.theme_colors["success"]
-        elif has_default_cfg:
-            primary_source = "Default CFG"
-            primary_color = self.theme_colors["primary"]
-        else:
-            primary_source = "Game Data"
-            primary_color = "#888888"
-        
-        # Display source indicator
+        # Create status indicators in a grid layout
+        status_grid = ctk.CTkFrame(indicator_frame, fg_color="transparent")
+        status_grid.pack(fill="x")
+
+        # Row 1: ROM CFG Status
+        cfg_status_frame = ctk.CTkFrame(status_grid, fg_color="transparent")
+        cfg_status_frame.pack(fill="x", pady=2)
+
         ctk.CTkLabel(
-            indicator_frame,
-            text="Control Source: ",
-            font=("Arial", 13),
-            anchor="w"
-        ).pack(side="left", padx=(0, 5))
-        
-        # Color code based on source
-        primary_color = self.theme_colors["success"] if primary_source == "ROM CFG" else \
-                    self.theme_colors["primary"] if primary_source == "Default CFG" else \
-                    "#888888"  # Game Data
-        
-        ctk.CTkLabel(
-            indicator_frame,
-            text=primary_source,
-            font=("Arial", 13, "bold"),
-            text_color=primary_color,
-            anchor="w"
+            cfg_status_frame,
+            text="ROM CFG File:",
+            font=("Arial", 12),
+            anchor="w",
+            width=120
         ).pack(side="left")
-        
-        # Show input mode indicator
-        mode_display_names = {
-            'xinput': 'XInput Mode',
-            'dinput': 'DInput Mode', 
-            'joycode': 'JOYCODE Mode',
-            'keycode': 'KEYCODE Mode'
-        }
-        
+
+        if has_rom_cfg_file:
+            if has_rom_cfg_used:
+                cfg_text = f"EXISTS & USED ({romname}.cfg)"
+                cfg_color = self.theme_colors["success"]
+            else:
+                cfg_text = f"EXISTS BUT EMPTY ({romname}.cfg)"
+                cfg_color = self.theme_colors["warning"]
+        else:
+            cfg_text = "NOT FOUND"
+            cfg_color = self.theme_colors["text_dimmed"]
+
         ctk.CTkLabel(
-            indicator_frame,
-            text="  |  Input Mode: ",
-            font=("Arial", 13),
+            cfg_status_frame,
+            text=cfg_text,
+            font=("Arial", 12, "bold"),
+            text_color=cfg_color,
             anchor="w"
-        ).pack(side="left", padx=(10, 5))
-        
+        ).pack(side="left", padx=(10, 0))
+
+        # Row 2: GameData Status
+        gamedata_status_frame = ctk.CTkFrame(status_grid, fg_color="transparent")
+        gamedata_status_frame.pack(fill="x", pady=2)
+
         ctk.CTkLabel(
-            indicator_frame,
-            text=mode_display_names.get(self.input_mode, "Unknown Mode"),
-            font=("Arial", 13, "bold"),
+            gamedata_status_frame,
+            text="GameData Entry:",
+            font=("Arial", 12),
+            anchor="w",
+            width=120
+        ).pack(side="left")
+
+        if has_gamedata_entry:
+            if has_control_mappings:
+                gamedata_text = "EXISTS WITH CONTROLS"
+                gamedata_color = self.theme_colors["success"]
+            else:
+                gamedata_text = "EXISTS BUT NO CONTROLS"
+                gamedata_color = self.theme_colors["warning"]
+        else:
+            gamedata_text = "NOT FOUND"
+            gamedata_color = self.theme_colors["text_dimmed"]
+
+        ctk.CTkLabel(
+            gamedata_status_frame,
+            text=gamedata_text,
+            font=("Arial", 12, "bold"),
+            text_color=gamedata_color,
+            anchor="w"
+        ).pack(side="left", padx=(10, 0))
+
+        # Row 3: Active Control Source
+        source_status_frame = ctk.CTkFrame(status_grid, fg_color="transparent")
+        source_status_frame.pack(fill="x", pady=2)
+
+        ctk.CTkLabel(
+            source_status_frame,
+            text="Active Source:",
+            font=("Arial", 12),
+            anchor="w",
+            width=120
+        ).pack(side="left")
+
+        # Determine active source
+        if has_rom_cfg_used:
+            active_source = "ROM CFG"
+            source_color = self.theme_colors["success"]
+        elif has_default_cfg:
+            active_source = "DEFAULT CFG"
+            source_color = self.theme_colors["primary"]
+        elif has_control_mappings:
+            active_source = "GAMEDATA"
+            source_color = self.theme_colors["secondary"]
+        else:
+            active_source = "NONE"
+            source_color = self.theme_colors["danger"]
+
+        ctk.CTkLabel(
+            source_status_frame,
+            text=active_source,
+            font=("Arial", 12, "bold"),
+            text_color=source_color,
+            anchor="w"
+        ).pack(side="left", padx=(10, 0))
+        
+        # Row 4: Current Input Mode
+        mode_status_frame = ctk.CTkFrame(status_grid, fg_color="transparent")
+        mode_status_frame.pack(fill="x", pady=2)
+
+        ctk.CTkLabel(
+            mode_status_frame,
+            text="Input Mode:",
+            font=("Arial", 12),
+            anchor="w",
+            width=120
+        ).pack(side="left")
+
+        mode_display_names = {
+            'xinput': 'XINPUT',
+            'dinput': 'DINPUT', 
+            'joycode': 'JOYCODE',
+            'keycode': 'KEYCODE'
+        }
+
+        ctk.CTkLabel(
+            mode_status_frame,
+            text=mode_display_names.get(self.input_mode, "UNKNOWN"),
+            font=("Arial", 12, "bold"),
             text_color=self.theme_colors["primary"],
             anchor="w"
-        ).pack(side="left")
-        
+        ).pack(side="left", padx=(10, 0))
+
         # Show ROM CFG filename if applicable
-        if has_rom_cfg:
+        if has_rom_cfg_used:
             ctk.CTkLabel(
                 indicator_frame,
                 text=f"  |  ROM CFG: ",
@@ -6730,37 +6800,29 @@ class MAMEControlConfig(ctk.CTk):
                 has_data = self.get_game_data(rom) is not None
                 is_clone = rom in self.parent_lookup if hasattr(self, 'parent_lookup') else False
                 
-                # Build the prefix
-                prefix = "* " if has_config else "  "
-                prefix += "+ " if has_data else "- "
-                
-                # Create display text
+                # Create display text without prefixes
                 if is_clone and (self.current_view == "clones" or self.current_view == "all"):
                     parent_rom = self.parent_lookup.get(rom, "")
                     
-                    # Get game name if available (use name cache if available)
+                    # Get game name if available
                     if has_data:
-                        if hasattr(self, 'name_cache') and rom in self.name_cache:
-                            game_name = self.name_cache[rom].capitalize()
-                            display_text = f"{prefix}{rom} - {game_name} [Clone of {parent_rom}]"
-                        else:
-                            game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
-                                                    self.db_path, getattr(self, 'rom_data_cache', {}))
-                            display_text = f"{prefix}{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
+                        game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
+                                                self.db_path, getattr(self, 'rom_data_cache', {}))
+                        display_text = f"{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
                     else:
-                        display_text = f"{prefix}{rom} [Clone of {parent_rom}]"
+                        display_text = f"{rom} [Clone of {parent_rom}]"
                 else:
                     # Regular display for non-clones or when not in clone view
                     if has_data:
                         if hasattr(self, 'name_cache') and rom in self.name_cache:
                             game_name = self.name_cache[rom].capitalize()
-                            display_text = f"{prefix}{rom} - {game_name}"
+                            display_text = f"{rom} - {game_name}"
                         else:
                             game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                                     self.db_path, getattr(self, 'rom_data_cache', {}))
-                            display_text = f"{prefix}{rom} - {game_data['gamename']}"
+                            display_text = f"{rom} - {game_data['gamename']}"
                     else:
-                        display_text = f"{prefix}{rom}"
+                        display_text = f"{rom}"
                 
                 # Store both the ROM name and display text
                 self.game_list_data.append((rom, display_text))
