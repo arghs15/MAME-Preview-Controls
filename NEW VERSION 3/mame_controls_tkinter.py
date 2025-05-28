@@ -719,9 +719,8 @@ class MAMEControlConfig(ctk.CTk):
         
         return clean_cache_directory(self.cache_dir, max_age_days, max_files)
 
-    # Replace your clear_cache function with this enhanced version
     def clear_cache(self):
-        """Show cache management dialog with options to clear cache and configure settings"""
+        """Show cache management dialog with options to clear cache and configure settings - FIXED"""
         try:
             # Ensure settings are loaded
             if not hasattr(self, 'cache_max_age'):
@@ -747,7 +746,8 @@ class MAMEControlConfig(ctk.CTk):
             total_size = 0
             for filename in cache_files:
                 filepath = os.path.join(cache_dir, filename)
-                total_size += os.path.getsize(filepath)
+                if os.path.exists(filepath):
+                    total_size += os.path.getsize(filepath)
             
             # Convert size to readable format
             if total_size < 1024:
@@ -825,15 +825,62 @@ class MAMEControlConfig(ctk.CTk):
             )
             max_files_entry.grid(row=1, column=1, padx=(10, 0), pady=5)
             
+            # FIXED: Correct cache clearing functions
+            def clear_all_cache():
+                """Clear all cache files"""
+                try:
+                    from mame_data_utils import perform_cache_clear
+                    success = perform_cache_clear(cache_dir, all_files=True)
+                    
+                    if success:
+                        # Update dialog display
+                        dialog.destroy()
+                        # Show success message
+                        messagebox.showinfo("Cache Cleared", "All cache files have been cleared successfully.")
+                        
+                        # Clear in-memory caches too
+                        if hasattr(self, 'rom_data_cache'):
+                            self.rom_data_cache.clear()
+                        if hasattr(self, 'processed_cache'):
+                            self.processed_cache.clear()
+                        
+                        print("All cache cleared successfully")
+                    else:
+                        messagebox.showwarning("Cache Clear", "No cache files were found to clear.")
+                except Exception as e:
+                    print(f"Error clearing cache: {e}")
+                    messagebox.showerror("Error", f"Failed to clear cache: {str(e)}")
+            
+            def clear_old_cache():
+                """Clear old cache files based on settings"""
+                try:
+                    max_age = int(self.max_age_var.get()) if self.max_age_var.get().isdigit() else 7
+                    max_files = int(self.max_files_var.get()) if self.max_files_var.get().isdigit() else 100
+                    
+                    from mame_data_utils import clean_cache_directory
+                    success = clean_cache_directory(cache_dir, max_age, max_files)
+                    
+                    if success:
+                        dialog.destroy()
+                        messagebox.showinfo("Cache Cleaned", f"Old cache files have been cleaned based on your settings.")
+                        print("Cache cleaned successfully")
+                    else:
+                        messagebox.showwarning("Cache Clean", "No old cache files were found to clean.")
+                except Exception as e:
+                    print(f"Error cleaning cache: {e}")
+                    messagebox.showerror("Error", f"Failed to clean cache: {str(e)}")
+            
             # Buttons section
             buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
             buttons_frame.pack(pady=20)
             
-            # Clear all button
+            # Clear all button - FIXED
             ctk.CTkButton(
                 buttons_frame, 
                 text="Clear All Cache", 
-                command=lambda: perform_cache_clear(dialog, all_files=True)
+                command=clear_all_cache,
+                fg_color=self.theme_colors["danger"],
+                hover_color="#c82333"
             ).pack(side="left", padx=10)
             
             # Save settings button
@@ -1185,7 +1232,7 @@ class MAMEControlConfig(ctk.CTk):
                 height=34,
                 font=("Arial", 12),
                 fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"],
+                hover_color="#218838",  # Darker green for hover
                 corner_radius=4
             )
             self.open_rom_cfg_button.pack(side="left", padx=(0, 10))
@@ -1561,7 +1608,7 @@ class MAMEControlConfig(ctk.CTk):
         # Add "All ROMs" tab
         self.sidebar_tabs["all"] = CustomSidebarTab(
             tabs_frame, 
-            text="All ROMs",
+            text="All Your ROMs",
             command=lambda: set_tab_active("all")
         )
         self.sidebar_tabs["all"].pack(fill="x", padx=5, pady=2)
@@ -1569,15 +1616,24 @@ class MAMEControlConfig(ctk.CTk):
         # Add "With Controls" tab
         self.sidebar_tabs["with_controls"] = CustomSidebarTab(
             tabs_frame, 
-            text="With Controls",
+            text="Exist in Database",
             command=lambda: set_tab_active("with_controls")
         )
         self.sidebar_tabs["with_controls"].pack(fill="x", padx=5, pady=2)
         
+        
+        # ADD this NEW tab for Custom Actions:
+        self.sidebar_tabs["custom_actions"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Have Game Actions",               # NEW TAB
+            command=lambda: set_tab_active("custom_actions")
+        )
+        self.sidebar_tabs["custom_actions"].pack(fill="x", padx=5, pady=2)
+        
         # Add "Generic Controls" tab
         self.sidebar_tabs["generic"] = CustomSidebarTab(
             tabs_frame, 
-            text="Generic Controls",
+            text="No Game Actions",
             command=lambda: set_tab_active("generic")
         )
         self.sidebar_tabs["generic"].pack(fill="x", padx=5, pady=2)
@@ -1585,23 +1641,15 @@ class MAMEControlConfig(ctk.CTk):
         # Add "Missing Controls" tab
         self.sidebar_tabs["missing"] = CustomSidebarTab(
             tabs_frame, 
-            text="Missing Controls",
+            text="Missing from Database",
             command=lambda: set_tab_active("missing")
         )
         self.sidebar_tabs["missing"].pack(fill="x", padx=5, pady=2)
         
-        # Add "Custom Config" tab
-        self.sidebar_tabs["custom_config"] = CustomSidebarTab(
-            tabs_frame, 
-            text="With Custom Config",
-            command=lambda: set_tab_active("custom_config")
-        )
-        self.sidebar_tabs["custom_config"].pack(fill="x", padx=5, pady=2)
-        
         # Add "Clone ROMs" tab
         self.sidebar_tabs["clones"] = CustomSidebarTab(
             tabs_frame, 
-            text="Clone ROMs",
+            text="Clones",
             command=lambda: set_tab_active("clones")
         )
         self.sidebar_tabs["clones"].pack(fill="x", padx=5, pady=2)
@@ -2217,7 +2265,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection with enhanced filtering options"""
+        """Update game list based on current sidebar category selection with FIXED categorization - COMPLETE VERSION"""
         # Remember currently selected ROM if any
         previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
         
@@ -2237,6 +2285,7 @@ class MAMEControlConfig(ctk.CTk):
         analog_roms = []        # ROMs with analog controls
         multiplayer_roms = []   # ROMs with more than 1 player
         singleplayer_roms = []  # ROMs with exactly 1 player
+        custom_actions_roms = [] # ROMs with meaningful action names
         
         # Build parent->clone lookup if needed
         if not hasattr(self, 'parent_lookup') or not self.parent_lookup:
@@ -2264,88 +2313,78 @@ class MAMEControlConfig(ctk.CTk):
             if has_custom:
                 with_custom_config.append(rom)
             
-            # Check if ROM has control data
-            game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
-                                    self.db_path, getattr(self, 'rom_data_cache', {}))
-            if game_data:
+            # Categorize controls using the new method
+            categories = self.categorize_controls_properly(rom)
+            
+            if categories['has_controls']:
                 with_controls.append(rom)
                 
-                # Check player count for single/multiplayer categories
-                player_count = int(game_data.get('numPlayers', 1))
-                if player_count == 1:
-                    singleplayer_roms.append(rom)
-                elif player_count > 1:
-                    multiplayer_roms.append(rom)
-                
-                # NEW: Check for specialized controls
-                has_specialized = False
-                has_analog = False
-                has_buttons = False
-                
-                # Specialized input detection
-                specialized_types = [
-                    "TRACKBALL", "LIGHTGUN", "MOUSE", "DIAL", "PADDLE", 
-                    "POSITIONAL", "GAMBLE", "AD_STICK"
-                ]
-                
-                # Analog input detection
-                analog_types = [
-                    "AD_STICK", "DIAL", "PADDLE", "PEDAL", "POSITIONAL"
-                ]
-                
-                # Check each player's controls
-                for player in game_data.get('players', []):
-                    for label in player.get('labels', []):
-                        control_name = label['name']
-                        
-                        # Check for buttons
-                        if "BUTTON" in control_name:
-                            has_buttons = True
-                        
-                        # Check for specialized controls
-                        for specialized_type in specialized_types:
-                            if specialized_type in control_name:
-                                has_specialized = True
-                                break
-                                
-                        # Check for analog controls
-                        for analog_type in analog_types:
-                            if analog_type in control_name:
-                                has_analog = True
-                                break
-                
-                # Add to specialized category if it has specialized controls
-                if has_specialized:
-                    specialized_roms.append(rom)
-                    
-                # Add to analog category if it has analog controls
-                if has_analog:
-                    analog_roms.append(rom)
-                    
-                # Add to no_buttons category if it has controls but no buttons
-                if not has_buttons:
-                    no_buttons_roms.append(rom)
-                    
-                # Check if controls are generic
-                has_custom_controls = False
-                for player in game_data.get('players', []):
-                    for label in player.get('labels', []):
-                        action = label['value']
-                        # Standard generic actions
-                        generic_actions = [
-                            "A Button", "B Button", "X Button", "Y Button", 
-                            "LB Button", "RB Button", "LT Button", "RT Button",
-                            "Up", "Down", "Left", "Right"
-                        ]
-                        # If we find any non-generic action, mark as having custom controls
-                        if action not in generic_actions:
-                            has_custom_controls = True
-                            break
-                    if has_custom_controls:
-                        break
-                
-                if not has_custom_controls:
+                # Use the new categorization
+                if categories['has_generic_controls']:
                     generic_controls.append(rom)
+                elif categories['has_custom_controls']:
+                    custom_actions_roms.append(rom)
+                
+                # Get game data for additional categorization
+                from mame_data_utils import get_game_data
+                game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
+                                        self.db_path, getattr(self, 'rom_data_cache', {}))
+                if game_data:
+                    # Check player count for single/multiplayer categories
+                    player_count = int(game_data.get('numPlayers', 1))
+                    if player_count == 1:
+                        singleplayer_roms.append(rom)
+                    elif player_count > 1:
+                        multiplayer_roms.append(rom)
+                    
+                    # Check for specialized controls
+                    has_specialized = False
+                    has_analog = False
+                    has_buttons = False
+                    
+                    # Specialized input detection
+                    specialized_types = [
+                        "TRACKBALL", "LIGHTGUN", "MOUSE", "DIAL", "PADDLE", 
+                        "POSITIONAL", "GAMBLE", "AD_STICK"
+                    ]
+                    
+                    # Analog input detection
+                    analog_types = [
+                        "AD_STICK", "DIAL", "PADDLE", "PEDAL", "POSITIONAL"
+                    ]
+                    
+                    # Check each player's controls
+                    for player in game_data.get('players', []):
+                        for label in player.get('labels', []):
+                            control_name = label['name']
+                            
+                            # Check for buttons
+                            if "BUTTON" in control_name:
+                                has_buttons = True
+                            
+                            # Check for specialized controls
+                            for specialized_type in specialized_types:
+                                if specialized_type in control_name:
+                                    has_specialized = True
+                                    break
+                                    
+                            # Check for analog controls
+                            for analog_type in analog_types:
+                                if analog_type in control_name:
+                                    has_analog = True
+                                    break
+                    
+                    # Add to specialized category if it has specialized controls
+                    if has_specialized:
+                        specialized_roms.append(rom)
+                        
+                    # Add to analog category if it has analog controls
+                    if has_analog:
+                        analog_roms.append(rom)
+                        
+                    # Add to no_buttons category if it has controls but no buttons
+                    if not has_buttons:
+                        no_buttons_roms.append(rom)
             else:
                 missing_controls.append(rom)
         
@@ -2363,7 +2402,9 @@ class MAMEControlConfig(ctk.CTk):
             display_roms = generic_controls
         elif self.current_view == "clones":
             display_roms = sorted(clone_roms)
-        # NEW CATEGORIES
+        elif self.current_view == "custom_actions":  # NEW CATEGORY
+            display_roms = custom_actions_roms
+        # EXISTING CATEGORIES
         elif self.current_view == "no_buttons":
             display_roms = no_buttons_roms
         elif self.current_view == "specialized":
@@ -2408,6 +2449,7 @@ class MAMEControlConfig(ctk.CTk):
                 
                 # Get game name if available
                 if has_data:
+                    from mame_data_utils import get_game_data
                     game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                             self.db_path, getattr(self, 'rom_data_cache', {}))
                     display_text = f"{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
@@ -2420,6 +2462,7 @@ class MAMEControlConfig(ctk.CTk):
                         game_name = self.name_cache[rom].capitalize()
                         display_text = f"{rom} - {game_name}"
                     else:
+                        from mame_data_utils import get_game_data
                         game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                                 self.db_path, getattr(self, 'rom_data_cache', {}))
                         display_text = f"{rom} - {game_data['gamename']}"
@@ -2457,6 +2500,7 @@ class MAMEControlConfig(ctk.CTk):
             "missing": "ROMs Missing Controls",
             "custom_config": "ROMs with Custom Config",
             "generic": "ROMs with Generic Controls",
+            "custom_actions": "ROMs with Custom Actions",  # NEW
             "clones": "Clone ROMs",
             # NEW CATEGORIES
             "no_buttons": "ROMs with No Buttons",
@@ -5945,7 +5989,7 @@ class MAMEControlConfig(ctk.CTk):
                 self.input_mode_var = tk.StringVar(value=self.input_mode)
             
             mode_buttons = [
-                ("JOYCODE", "joycode"),
+                #("JOYCODE", "joycode"),
                 ("XInput", "xinput"), 
                 ("DInput", "dinput"),
                 ("KEYCODE", "keycode")
@@ -6106,60 +6150,12 @@ class MAMEControlConfig(ctk.CTk):
             canvas.update_idletasks()
             update_canvas_width()
             
-            # === CUSTOM CONFIG SECTION (same as original) ===
-            if romname in self.custom_configs:
-                config_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
-                config_card.pack(fill="x", padx=10, pady=10, expand=True)
-                config_card.columnconfigure(0, weight=1)
-                
-                cfg_title_frame = ctk.CTkFrame(config_card, fg_color="transparent")
-                cfg_title_frame.pack(fill="x", padx=15, pady=(15, 10))
-                
-                ctk.CTkLabel(
-                    cfg_title_frame,
-                    text="Custom Configuration File",
-                    font=("Arial", 16, "bold"),
-                    anchor="w"
-                ).pack(side="left")
-                
-                ctk.CTkLabel(
-                    cfg_title_frame,
-                    text=f"({romname}.cfg)",
-                    font=("Arial", 12),
-                    text_color=self.theme_colors["text_dimmed"],
-                    anchor="w"
-                ).pack(side="left", padx=(10, 0))
-                
-                view_button = ctk.CTkButton(
-                    config_card,
-                    text="View Full Config",
-                    command=lambda r=romname: self.show_custom_config(r),
-                    fg_color=self.theme_colors["primary"],
-                    hover_color=self.theme_colors["button_hover"],
-                    width=120,
-                    height=28
-                )
-                view_button.pack(anchor="e", padx=15, pady=(0, 10))
-                
-                config_preview = ctk.CTkTextbox(
-                    config_card, 
-                    font=("Consolas", 12),
-                    height=100,
-                    fg_color=self.theme_colors["background"]
-                )
-                config_preview.pack(fill="x", padx=15, pady=(0, 15), expand=True)
-                
-                # Preview text (first 10 lines)
-                config_lines = self.custom_configs[romname].split('\n')
-                preview_text = '\n'.join(config_lines[:10])
-                if len(config_lines) > 10:
-                    preview_text += '\n...'
-                
-                config_preview.insert("1.0", preview_text)
-                config_preview.configure(state="disabled")
+            # === REMOVED: CUSTOM CONFIG SECTION ===
+            # The custom config section has been completely removed from here
+            # It's now only available via right-click context menu
             
             return row + 1
-            
+
         except Exception as e:
             print(f"Error in optimized controls display: {e}")
             import traceback
@@ -6191,61 +6187,124 @@ class MAMEControlConfig(ctk.CTk):
                 # Update status message
                 self.update_status_message(f"Input mode changed to {self.input_mode.upper()}")
         
-    def update_stats_label(self):
-        """Update the statistics label with enhanced formatting including clone stats"""
-        try:
-            unmatched = len(self.find_unmatched_roms())
-            matched = len(self.available_roms) - unmatched
-            
-            # Count ROMs with custom configs
-            custom_count = len(self.custom_configs)
-            
-            # Count clone ROMs
-            clone_count = len(self.parent_lookup) if hasattr(self, 'parent_lookup') else 0
-            
-            # Count ROMs with generic controls
-            generic_count = 0
-            for rom in self.available_roms:
-                game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
-                                        self.db_path, getattr(self, 'rom_data_cache', {}))
-                if not game_data or not game_data.get('players'):
-                    continue
-                    
-                # Check if controls are generic
-                has_custom_controls = False
-                for player in game_data.get('players', []):
-                    for label in player.get('labels', []):
-                        action = label['value']
-                        # Standard generic actions
-                        generic_actions = [
-                            "A Button", "B Button", "X Button", "Y Button", 
-                            "LB Button", "RB Button", "LT Button", "RT Button",
-                            "Up", "Down", "Left", "Right"
-                        ]
-                        # If we find any non-generic action, mark as having custom controls
-                        if action not in generic_actions:
-                            has_custom_controls = True
-                            break
-                    if has_custom_controls:
+    def categorize_controls_properly(self, rom_name):
+        """
+        Properly categorize a ROM's controls
+        Returns: dict with boolean flags for each category
+        """
+        result = {
+            'has_controls': False,
+            'has_generic_controls': False,  # Basic "Button 1", "Button 2" etc.
+            'has_custom_controls': False,   # Meaningful action names
+            'has_cfg_file': False          # Has .cfg file override
+        }
+        
+        # Check if ROM has a .cfg file
+        result['has_cfg_file'] = rom_name in self.custom_configs
+        
+        # Get game data
+        from mame_data_utils import get_game_data
+        game_data = get_game_data(rom_name, self.gamedata_json, self.parent_lookup, 
+                                self.db_path, getattr(self, 'rom_data_cache', {}))
+        
+        if not game_data or not game_data.get('players'):
+            return result
+        
+        result['has_controls'] = True
+        
+        # Analyze the control names/actions to determine if they're generic or custom
+        generic_patterns = [
+            # Basic button names you added
+            r'^Button \d+$',           # "Button 1", "Button 2", etc.
+            r'^A Button$', r'^B Button$', r'^X Button$', r'^Y Button$',
+            r'^LB Button$', r'^RB Button$', r'^LT Button$', r'^RT Button$',
+            r'^Up$', r'^Down$', r'^Left$', r'^Right$',
+            r'^Left Stick Button$', r'^Right Stick Button$',
+            r'^Start$', r'^Select$', r'^Coin$'
+        ]
+        
+        has_any_custom = False
+        has_any_generic = False
+        
+        for player in game_data.get('players', []):
+            for label in player.get('labels', []):
+                action = label.get('value', '')
+                
+                # Check if this action matches generic patterns
+                is_generic = False
+                import re
+                for pattern in generic_patterns:
+                    if re.match(pattern, action, re.IGNORECASE):
+                        is_generic = True
                         break
                 
-                if not has_custom_controls:
-                    generic_count += 1
+                if is_generic:
+                    has_any_generic = True
+                else:
+                    # If it's not generic, it's custom (meaningful action name)
+                    if action.strip() and action not in ['', 'NONE']:
+                        has_any_custom = True
+        
+        result['has_generic_controls'] = has_any_generic and not has_any_custom
+        result['has_custom_controls'] = has_any_custom
+        
+        return result
+
+    def update_stats_label(self):
+        """Update the statistics label with corrected categorization"""
+        try:
+            total_roms = len(self.available_roms)
             
-            # Format the stats
+            # Categorize all ROMs properly
+            with_controls = 0
+            missing_controls = 0
+            generic_controls = 0
+            custom_controls = 0
+            with_cfg_files = 0
+            clone_roms = 0
+            
+            for rom in self.available_roms:
+                # Check if it's a clone
+                if hasattr(self, 'parent_lookup') and rom in self.parent_lookup:
+                    clone_roms += 1
+                
+                # Categorize controls
+                categories = self.categorize_controls_properly(rom)
+                
+                if categories['has_controls']:
+                    with_controls += 1
+                    
+                    if categories['has_generic_controls']:
+                        generic_controls += 1
+                    elif categories['has_custom_controls']:
+                        custom_controls += 1
+                else:
+                    missing_controls += 1
+                
+                if categories['has_cfg_file']:
+                    with_cfg_files += 1
+            
+            # Format the stats with clearer labels
             stats = (
-                f"ROMs: {len(self.available_roms)}\n"
-                f"With Controls: {matched} ({matched/max(len(self.available_roms), 1)*100:.1f}%)\n"
-                f"Missing Controls: {unmatched}\n"
-                f"Clone ROMs: {clone_count}\n"  # Add clone count
-                f"With Custom Config: {custom_count}"
+                f"ROMs: {total_roms}\n"
+                f"With Controls: {with_controls} ({with_controls/max(total_roms, 1)*100:.1f}%)\n"
+                f"Missing Controls: {missing_controls}\n"
+                f"Custom Actions: {custom_controls}\n"  # Meaningful action names
+                f"Generic Controls: {generic_controls}\n"  # Basic "Button 1" etc.
+                f"Clone ROMs: {clone_roms}\n"
             )
             
-            # Update the label
             self.stats_label.configure(text=stats)
+            
+            # Debug output
+            print(f"Stats: Total={total_roms}, WithControls={with_controls}, "
+                f"Missing={missing_controls}, Custom={custom_controls}, "
+                f"Generic={generic_controls}, CFG={with_cfg_files}, Clones={clone_roms}")
             
         except Exception as e:
             print(f"Error updating stats: {e}")
+            import traceback
+            traceback.print_exc()
             self.stats_label.configure(text="Statistics: Error")
     
     def find_unmatched_roms(self) -> Set[str]:
