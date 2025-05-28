@@ -248,93 +248,89 @@ def rom_exists_in_db(romname: str, db_path: str) -> bool:
     except:
         return False
 
+# Global connection cache to avoid repeated database connections
+_db_connection_cache = {}
+
 def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
-    """Get control data for a ROM from the SQLite database with better handling of unnamed controls"""
+    """Get control data from SQLite database with optimized connection handling"""
     
     if not os.path.exists(db_path):
         return None
     
-    conn = None
+    # Use connection cache to avoid repeated connections
+    global _db_connection_cache
+    
+    if db_path not in _db_connection_cache:
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row  # Enable column access by name
+            _db_connection_cache[db_path] = conn
+        except Exception as e:
+            print(f"Database connection error: {e}")
+            return None
+    
+    conn = _db_connection_cache[db_path]
+    
     try:
-        # Create connection
-        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Get basic game info
+        # Single optimized query with JOIN to get all data at once
         cursor.execute("""
-            SELECT rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom 
-            FROM games WHERE rom_name = ?
+            SELECT g.rom_name, g.game_name, g.player_count, g.buttons, g.sticks, 
+                   g.alternating, g.is_clone, g.parent_rom,
+                   c.control_name, c.display_name
+            FROM games g
+            LEFT JOIN game_controls c ON g.rom_name = c.rom_name
+            WHERE g.rom_name = ?
+            ORDER BY c.control_name
         """, (romname,))
-        game_row = cursor.fetchone()
         
-        if not game_row:
-            # Check if this is a clone with a different name in the database
+        rows = cursor.fetchall()
+        
+        if not rows:
+            # Try parent lookup if this is a clone
             cursor.execute("""
                 SELECT parent_rom FROM games WHERE rom_name = ? AND is_clone = 1
             """, (romname,))
             parent_result = cursor.fetchone()
             
-            if parent_result and parent_result[0]:
-                # This is a clone, get parent data
-                parent_rom = parent_result[0]
-                conn.close()
-                return get_game_data_from_db(parent_rom, db_path)
-            else:
-                # No data found
-                conn.close()
-                return None
+            if parent_result:
+                # Recursively get parent data
+                return get_game_data_from_db(parent_result['parent_rom'], db_path)
+            
+            return None
         
-        # Access columns by index
-        rom_name = game_row[0]
-        game_name = game_row[1] 
-        player_count = game_row[2]
-        buttons = game_row[3]
-        sticks = game_row[4]
-        alternating = bool(game_row[5])
-        is_clone = bool(game_row[6])
-        parent_rom = game_row[7]
-        
-        # Build game data structure
+        # Process all rows at once (more efficient than multiple queries)
+        first_row = rows[0]
         game_data = {
             'romname': romname,
-            'gamename': game_name,
-            'numPlayers': player_count,
-            'alternating': alternating,
+            'gamename': first_row['game_name'],
+            'numPlayers': first_row['player_count'],
+            'alternating': bool(first_row['alternating']),
             'mirrored': False,
-            'miscDetails': f"Buttons: {buttons}, Sticks: {sticks}",
+            'miscDetails': f"Buttons: {first_row['buttons']}, Sticks: {first_row['sticks']}",
             'players': [],
             'source': 'gamedata.db'
         }
         
-        # Get control data
-        cursor.execute("""
-            SELECT control_name, display_name FROM game_controls WHERE rom_name = ?
-        """, (romname,))
-        control_rows = cursor.fetchall()
-        
-        # If no controls found and this is a clone, try parent controls
-        if not control_rows and is_clone and parent_rom:
-            cursor.execute("""
-                SELECT control_name, display_name FROM game_controls WHERE rom_name = ?
-            """, (parent_rom,))
-            control_rows = cursor.fetchall()
-            
-        # Process controls
+        # Process controls efficiently in single pass
         p1_controls = []
         p2_controls = []
         
-        # Default action names - used if no name is specified
         default_actions = get_default_control_actions()
         
-        for control in control_rows:
-            control_name = control[0]
-            display_name = control[1]
+        for row in rows:
+            if not row['control_name']:  # Skip rows without controls
+                continue
+                
+            control_name = row['control_name']
+            display_name = row['display_name']
             
-            # If display_name is empty, try to use a default
+            # Use default if no display name
             if not display_name and control_name in default_actions:
                 display_name = default_actions[control_name]
             
-            # If still no display name, try to extract from control name
+            # Generate fallback display name
             if not display_name:
                 parts = control_name.split('_')
                 if len(parts) > 1:
@@ -342,116 +338,91 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
                 else:
                     display_name = control_name
             
+            control_entry = {
+                'name': control_name,
+                'value': display_name
+            }
+            
             # Add to appropriate player list
             if control_name.startswith('P1_'):
-                p1_controls.append({
-                    'name': control_name,
-                    'value': display_name
-                })
+                p1_controls.append(control_entry)
             elif control_name.startswith('P2_'):
-                p2_controls.append({
-                    'name': control_name,
-                    'value': display_name
-                })
+                p2_controls.append(control_entry)
         
-        # Sort controls by name for consistent order
+        # Sort controls once at the end for consistent order
         p1_controls.sort(key=lambda x: x['name'])
         p2_controls.sort(key=lambda x: x['name'])
         
-        # Add player 1 if we have controls
+        # Add players if they have controls
         if p1_controls:
             game_data['players'].append({
                 'number': 1,
-                'numButtons': buttons,
+                'numButtons': first_row['buttons'],
                 'labels': p1_controls
             })
-            
-        # Add player 2 if we have controls
+        
         if p2_controls:
             game_data['players'].append({
                 'number': 2,
-                'numButtons': buttons,
+                'numButtons': first_row['buttons'],
                 'labels': p2_controls
             })
-            
-        conn.close()
+        
         return game_data
         
     except sqlite3.Error as e:
         print(f"Database error: {e}")
-        if conn:
-            conn.close()
         return None
-    except Exception as e:
-        print(f"Error getting game data from DB: {e}")
-        if conn:
-            conn.close()
-        return None
-
+    
 def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict, 
                   db_path: str = None, rom_data_cache: Dict = None) -> Optional[Dict]:
     """
-    Get game data with integrated database prioritization and improved handling of unnamed controls
-    
-    Args:
-        romname: ROM name to get data for
-        gamedata_json: Loaded gamedata.json dictionary
-        parent_lookup: Dictionary mapping clone ROM names to parent ROM names
-        db_path: Path to SQLite database (optional)
-        rom_data_cache: In-memory cache dictionary (optional)
+    Get game data with optimized caching and single database hit
     """
-    # Check cache first
+    # Always check cache first (fastest path)
     if rom_data_cache and romname in rom_data_cache:
         return rom_data_cache[romname]
     
-    # Try database first if available
+    result = None
+    
+    # Try database first if available (single optimized query)
     if db_path and os.path.exists(db_path):
-        db_data = get_game_data_from_db(romname, db_path)
-        if db_data:
-            # Cache the result
+        result = get_game_data_from_db(romname, db_path)
+        if result:
+            # Cache immediately and return
             if rom_data_cache is not None:
-                rom_data_cache[romname] = db_data
-            return db_data
+                rom_data_cache[romname] = result
+            return result
     
-    # Fall back to JSON lookup
+    # Fallback to JSON lookup
     if romname in gamedata_json:
-        game_data = gamedata_json[romname]
-        converted_data = _convert_gamedata_json_to_standard_format(
-            romname, game_data, gamedata_json, parent_lookup
+        result = _convert_gamedata_json_to_standard_format(
+            romname, gamedata_json[romname], gamedata_json, parent_lookup
         )
-        
-        # Cache the result
-        if rom_data_cache is not None:
-            rom_data_cache[romname] = converted_data
-            
-        return converted_data
-    
-    # Try parent lookup before giving up
-    if romname in parent_lookup:
+    elif romname in parent_lookup:
+        # Try parent lookup
         parent_rom = parent_lookup[romname]
-        parent_data = get_game_data(parent_rom, gamedata_json, parent_lookup, db_path, rom_data_cache)
-        if parent_data:
-            # Update with this ROM's info and cache
-            parent_data['romname'] = romname
-            if romname in gamedata_json:
-                parent_data['gamename'] = gamedata_json[romname].get('description', f"{romname} (Clone)")
-            
-            # Cache and return
-            if rom_data_cache is not None:
-                rom_data_cache[romname] = parent_data
-            return parent_data
+        if parent_rom in gamedata_json:
+            result = _convert_gamedata_json_to_standard_format(
+                parent_rom, gamedata_json[parent_rom], gamedata_json, parent_lookup
+            )
+            if result:
+                # Update with clone info
+                result['romname'] = romname
+                if romname in gamedata_json:
+                    result['gamename'] = gamedata_json[romname].get('description', f"{romname} (Clone)")
     
-    # Not found anywhere
-    return None
+    # Cache the result if found
+    if result and rom_data_cache is not None:
+        rom_data_cache[romname] = result
+        
+    return result
 
 def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
                                             gamedata_json: Dict, parent_lookup: Dict) -> Dict:
-    """Convert gamedata.json format to standard game data format"""
+    """Convert gamedata.json format to standard game data format - optimized"""
     
-    # Simple name defaults - these are the fallback button names if none are specified
-    default_actions = get_default_control_actions()
-    
-    # Basic structure conversion
+    # Pre-allocate result structure
     converted_data = {
         'romname': romname,
         'gamename': game_data.get('description', romname),
@@ -459,96 +430,58 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         'alternating': game_data.get('alternating', False),
         'mirrored': False,
         'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
-        'players': []
+        'players': [],
+        'source': 'gamedata.json'
     }
     
-    # Check if this is a clone and needs to inherit controls from parent
-    needs_parent_controls = False
-    
-    # Find controls (direct or in a clone)
-    controls = None
-    if 'controls' in game_data:
-        controls = game_data['controls']
-    else:
-        needs_parent_controls = True
-        
-    # If no controls and this is a clone, try to use parent controls
-    if needs_parent_controls:
-        parent_rom = None
-        
-        # Check explicit parent field
-        if 'parent' in game_data:
-            parent_rom = game_data['parent']
-        # Also check parent lookup table for redundancy
-        elif romname in parent_lookup:
-            parent_rom = parent_lookup[romname]
-        
-        # If we found a parent, try to get its controls
+    # Find controls efficiently
+    controls = game_data.get('controls')
+    if not controls:
+        # Try parent controls
+        parent_rom = game_data.get('parent') or parent_lookup.get(romname)
         if parent_rom and parent_rom in gamedata_json:
-            parent_data = gamedata_json[parent_rom]
-            if 'controls' in parent_data:
-                controls = parent_data['controls']
+            controls = gamedata_json[parent_rom].get('controls')
     
-    # Now process the controls (either direct or inherited from parent)
     if controls:
-        # Process player controls
+        # Pre-allocate lists and get default actions once
         p1_controls = []
-        p2_controls = []
+        default_actions = get_default_control_actions()
         
+        # Control types we care about (pre-defined for efficiency)
+        valid_control_types = [
+            'JOYSTICK', 'BUTTON', 'PEDAL', 'AD_STICK', 'DIAL', 'PADDLE', 
+            'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE'
+        ]
+        
+        # Single pass through controls
         for control_name, control_data in controls.items():
-            # Add P1 controls
-            if control_name.startswith('P1_'):
-                # Include standard controls AND specialized analog/positional controls
-                specialized_control_types = ['JOYSTICK', 'BUTTON', 'PEDAL', 'AD_STICK', 'DIAL', 'PADDLE', 
-                                           'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE']
+            # Only process P1 controls and valid types
+            if not control_name.startswith('P1_'):
+                continue
                 
-                if any(control_type in control_name for control_type in specialized_control_types):
-                    # Get the friendly name - IMPORTANT: Always provide a fallback
-                    friendly_name = None
-                    
-                    # First check for explicit name
-                    if 'name' in control_data and control_data['name']:
-                        friendly_name = control_data['name']
-                    # Then check for default actions
-                    elif control_name in default_actions:
-                        friendly_name = default_actions[control_name]
-                    # ALWAYS provide a fallback - never leave friendly_name as None
-                    else:
-                        parts = control_name.split('_')
-                        if len(parts) > 1:
-                            friendly_name = parts[-1].replace('_', ' ').title()
-                        else:
-                            friendly_name = control_name
-                    
-                    # ALWAYS add the control
-                    control_entry = {
-                        'name': control_name,
-                        'value': friendly_name
-                    }
-                    p1_controls.append(control_entry)
+            if not any(control_type in control_name for control_type in valid_control_types):
+                continue
+            
+            # Get friendly name efficiently (single lookup chain)
+            friendly_name = (
+                control_data.get('name') or 
+                default_actions.get(control_name) or 
+                control_name.split('_')[-1].replace('_', ' ').title()
+            )
+            
+            p1_controls.append({
+                'name': control_name,
+                'value': friendly_name
+            })
         
-        # Sort controls by name to ensure consistent order
-        p1_controls.sort(key=lambda x: x['name'])
-        p2_controls.sort(key=lambda x: x['name'])
-                    
-        # Add player 1 if we have controls
+        # Sort once and add to result
         if p1_controls:
+            p1_controls.sort(key=lambda x: x['name'])
             converted_data['players'].append({
                 'number': 1,
                 'numButtons': int(game_data.get('buttons', 1)),
                 'labels': p1_controls
             })
-
-        # Add player 2 if we have controls
-        if p2_controls:
-            converted_data['players'].append({
-                'number': 2,
-                'numButtons': int(game_data.get('buttons', 1)),
-                'labels': p2_controls
-            })
-    
-    # Mark as gamedata source
-    converted_data['source'] = 'gamedata.json'
     
     return converted_data
 
@@ -1486,257 +1419,151 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
                                         default_controls: Dict, original_default_controls: Dict,
                                         input_mode: str = 'xinput') -> Dict:
     """
-    Update game_data to include the custom control mappings with support for multiple input modes
-    
-    Args:
-        game_data: Game data dictionary to update
-        cfg_controls: Custom control mappings from ROM CFG
-        default_controls: Default control mappings
-        original_default_controls: Original default mappings for KEYCODE mode
-        input_mode: Current input mode ('xinput', 'dinput', 'joycode', 'keycode')
-    
-    Returns:
-        Updated game_data dictionary
+    Update game_data with custom mappings - optimized for single-pass processing
     """
-    print(f"DEBUG update_game_data_with_custom_mappings: input_mode={input_mode}")
-    
     if not cfg_controls and not default_controls:
-        print("DEBUG: No cfg_controls and no default_controls, returning early")
         return game_data
     
-    # Get romname from game_data
+    # Pre-process all mappings in one pass
+    all_mappings = {}
     romname = game_data.get('romname', '')
     
-    # Add flags to the game_data to indicate sources
-    if cfg_controls:
-        game_data['has_rom_cfg'] = True
-        game_data['rom_cfg_file'] = f"{romname}.cfg"
-    
-    if default_controls:
-        game_data['has_default_cfg'] = True
-    
-    # Combine ROM-specific and default mappings with smart KEYCODE fallback
-    all_mappings = {}
-
-    # First, add default mappings
+    # Process default mappings efficiently
     if default_controls:
         for control, mapping in default_controls.items():
-            if input_mode == 'keycode':
-                # For keycode mode, use original mapping if available
-                if original_default_controls and control in original_default_controls:
-                    original_mapping = original_default_controls[control]
-                else:
-                    original_mapping = mapping  # Fallback to processed mapping
+            processed_mapping = mapping
+            if input_mode == 'keycode' and original_default_controls and control in original_default_controls:
+                original_mapping = original_default_controls[control]
+                keycode = extract_keycode_from_mapping(original_mapping)
+                if keycode:
+                    processed_mapping = original_mapping
             else:
-                # For other modes, convert to current input mode
-                original_mapping = convert_mapping(mapping, input_mode)
-            all_mappings[control] = {'mapping': original_mapping, 'source': 'Default CFG'}
-
-    # Then process ROM-specific mappings with smart KEYCODE fallback
-    for control, mapping in cfg_controls.items():
-        if input_mode == 'keycode':
-            # For KEYCODE mode, check if ROM CFG has KEYCODE assignments
-            rom_keycode = extract_keycode_from_mapping(mapping)
+                processed_mapping = convert_mapping(mapping, input_mode)
             
-            if rom_keycode:
-                # ROM CFG has KEYCODE assignments, use them
-                all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({romname}.cfg)"}
-            else:
-                # ROM CFG has no KEYCODE, check if default CFG has KEYCODE for this control
-                if (original_default_controls and control in original_default_controls):
-                    default_original = original_default_controls[control]
-                    default_keycode = extract_keycode_from_mapping(default_original)
-                    
-                    if default_keycode:
-                        # Default CFG has KEYCODE, use it but note the source
-                        all_mappings[control] = {
-                            'mapping': default_original, 
-                            'source': 'Default CFG (fallback)'
-                        }
-                    else:
-                        # Neither has KEYCODE, use ROM CFG anyway (will show "No Key Assigned")
-                        all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({romname}.cfg)"}
-                else:
-                    # No default mapping available, use ROM CFG
-                    all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({romname}.cfg)"}
-        else:
-            # For non-KEYCODE modes, use ROM CFG as-is
-            all_mappings[control] = {'mapping': mapping, 'source': f"ROM CFG ({romname}.cfg)"}
+            all_mappings[control] = {
+                'mapping': processed_mapping, 
+                'source': 'Default CFG'
+            }
     
-    # Define functional categories for organizing controls
-    functional_categories = {
-        'move_horizontal': ['P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT', 'P1_AD_STICK_X', 'P1_DIAL'],
-        'move_vertical': ['P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_AD_STICK_Y', 'P1_DIAL_V'],
-        'action_primary': ['P1_BUTTON1', 'P1_BUTTON2'],
-        'action_secondary': ['P1_BUTTON3', 'P1_BUTTON4'],
-        'action_special': ['P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8'],
-        'system_control': ['P1_START', 'P1_SELECT', 'P1_COIN'],
-        'analog_input': ['P1_PEDAL', 'P1_PEDAL2', 'P1_PADDLE', 'P1_AD_STICK_Z'],
-        'precision_aim': ['P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y'],
-        'special_function': ['P1_GAMBLE_HIGH', 'P1_GAMBLE_LOW']
-    }
+    # Override with ROM-specific mappings
+    for control, mapping in cfg_controls.items():
+        processed_mapping = mapping
+        if input_mode == 'keycode':
+            keycode = extract_keycode_from_mapping(mapping)
+            if not keycode and control in all_mappings:
+                # Use default if ROM CFG has no keycode
+                continue
+        
+        all_mappings[control] = {
+            'mapping': processed_mapping, 
+            'source': f"ROM CFG ({romname}.cfg)"
+        }
     
-    # Process each control in the game data
+    # Apply mappings to game data in single pass
     for player in game_data.get('players', []):
         for label in player.get('labels', []):
             control_name = label['name']
             
-            # Get the functional category for this control
-            func_category = 'other'
-            for category, controls in functional_categories.items():
-                if control_name in controls:
-                    func_category = category
-                    break
-                    
-            # Additional catch-all logic for controls not explicitly listed
-            if func_category == 'other' and control_name.startswith('P1_'):
-                if 'BUTTON' in control_name:
-                    try:
-                        button_num = int(control_name.replace('P1_BUTTON', ''))
-                        if button_num <= 2:
-                            func_category = 'action_primary'
-                        elif button_num <= 4:
-                            func_category = 'action_secondary'
-                        else:
-                            func_category = 'action_special'
-                    except ValueError:
-                        pass
-                elif 'JOYSTICK' in control_name:
-                    if 'LEFT' in control_name or 'RIGHT' in control_name:
-                        func_category = 'move_horizontal'
-                    elif 'UP' in control_name or 'DOWN' in control_name:
-                        func_category = 'move_vertical'
-                # Additional categorization logic...
-            
-            # Store the functional category
-            label['func_category'] = func_category
-            
-            # Check if this control has a mapping in all_mappings
             if control_name in all_mappings:
                 mapping_info = all_mappings[control_name]
                 
-                # Add mapping information to the label
-                label['mapping'] = mapping_info['mapping']
-                label['mapping_source'] = mapping_info['source']
-                label['is_custom'] = 'ROM CFG' in mapping_info['source']
-                label['cfg_mapping'] = True
-                label['input_mode'] = input_mode
+                # Apply all mapping data at once
+                label.update({
+                    'mapping': mapping_info['mapping'],
+                    'mapping_source': mapping_info['source'],
+                    'is_custom': 'ROM CFG' in mapping_info['source'],
+                    'cfg_mapping': True,
+                    'input_mode': input_mode
+                })
                 
-                # Process target_button based on input mode
+                # Process target_button efficiently
                 _process_target_button_for_label(label, mapping_info['mapping'], input_mode)
-                
             else:
                 label['is_custom'] = False
             
-            # Set display name based on input mode conventions
+            # Set display name
             _set_display_name_for_label(label, input_mode)
     
-    # Add current input mode to game_data
+    # Add metadata
     game_data['input_mode'] = input_mode
+    if cfg_controls:
+        game_data['has_rom_cfg'] = True
+        game_data['rom_cfg_file'] = f"{romname}.cfg"
+    if default_controls:
+        game_data['has_default_cfg'] = True
     
     return game_data
 
 def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str):
-    """Process target_button for a label based on the mapping and input mode"""
+    """Process target_button efficiently with minimal string operations"""
     
-    # Special handling for increment/decrement pairs
     if " ||| " in mapping:
+        # Handle increment/decrement pairs
         inc_mapping, dec_mapping = mapping.split(" ||| ")
         
         if input_mode == 'xinput':
-            if 'XINPUT' in inc_mapping and 'XINPUT' in dec_mapping:
-                if inc_mapping == "NONE" and dec_mapping != "NONE":
-                    dec_friendly = get_friendly_xinput_name(dec_mapping)
-                    label['target_button'] = dec_friendly
-                elif dec_mapping == "NONE" and inc_mapping != "NONE":
-                    inc_friendly = get_friendly_xinput_name(inc_mapping)
-                    label['target_button'] = inc_friendly
-                else:
-                    inc_friendly = get_friendly_xinput_name(inc_mapping)
-                    dec_friendly = get_friendly_xinput_name(dec_mapping)
-                    label['target_button'] = f"{inc_friendly} | {dec_friendly}"
-        elif input_mode == 'dinput':
-            inc_converted = convert_mapping(inc_mapping, 'dinput')
-            dec_converted = convert_mapping(dec_mapping, 'dinput')
+            inc_friendly = get_friendly_xinput_name(inc_mapping) if inc_mapping != "NONE" else ""
+            dec_friendly = get_friendly_xinput_name(dec_mapping) if dec_mapping != "NONE" else ""
             
-            if inc_mapping == "NONE" or inc_converted == "NONE":
-                dec_friendly = get_friendly_dinput_name(dec_converted) if 'DINPUT' in dec_converted else dec_converted
-                if dec_mapping != "NONE" and dec_friendly != "NONE":
-                    label['target_button'] = dec_friendly
-            elif dec_mapping == "NONE" or dec_converted == "NONE":
-                inc_friendly = get_friendly_dinput_name(inc_converted) if 'DINPUT' in inc_converted else inc_converted
-                if inc_mapping != "NONE" and inc_friendly != "NONE":
-                    label['target_button'] = inc_friendly
-            else:
-                inc_friendly = get_friendly_dinput_name(inc_converted) if 'DINPUT' in inc_converted else inc_converted
-                dec_friendly = get_friendly_dinput_name(dec_converted) if 'DINPUT' in dec_converted else dec_converted
+            if inc_friendly and dec_friendly:
                 label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+            else:
+                label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
         elif input_mode == 'keycode':
             inc_keycode = extract_keycode_from_mapping(inc_mapping)
             dec_keycode = extract_keycode_from_mapping(dec_mapping)
             
             if inc_keycode and dec_keycode:
                 label['target_button'] = f"{inc_keycode} | {dec_keycode}"
-            elif inc_keycode:
-                label['target_button'] = inc_keycode
-            elif dec_keycode:
-                label['target_button'] = dec_keycode
+            elif inc_keycode or dec_keycode:
+                label['target_button'] = inc_keycode or dec_keycode
             else:
                 label['target_button'] = "No Key Assigned"
-        else:  # joycode mode
-            if inc_mapping == "NONE":
-                label['target_button'] = format_joycode_display(dec_mapping)
-            elif dec_mapping == "NONE":
-                label['target_button'] = format_joycode_display(inc_mapping)
-            else:
-                inc_display = format_joycode_display(inc_mapping)
-                dec_display = format_joycode_display(dec_mapping)
-                label['target_button'] = f"{inc_display} | {dec_display}"
+        else:
+            label['target_button'] = format_mapping_display(mapping, input_mode)
     else:
-        # Regular mapping handling for standard controls
+        # Regular mapping
         if input_mode == 'xinput' and 'XINPUT' in mapping:
             label['target_button'] = get_friendly_xinput_name(mapping)
         elif input_mode == 'dinput' and 'DINPUT' in mapping:
             label['target_button'] = get_friendly_dinput_name(mapping)
-        elif input_mode == 'joycode' and 'JOYCODE' in mapping:
-            label['target_button'] = format_joycode_display(mapping)
         elif input_mode == 'keycode':
             keycode_display = extract_keycode_from_mapping(mapping)
             label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
         else:
-            # Try conversion if not in the right format
-            if input_mode == 'keycode':
-                keycode_display = extract_keycode_from_mapping(mapping)
-                label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
-            else:
-                converted = convert_mapping(mapping, input_mode)
-                if input_mode == 'xinput' and 'XINPUT' in converted:
-                    label['target_button'] = get_friendly_xinput_name(converted)
-                elif input_mode == 'dinput' and 'DINPUT' in converted:
-                    label['target_button'] = get_friendly_dinput_name(converted)
-                elif input_mode == 'joycode' and 'JOYCODE' in converted:
-                    label['target_button'] = format_joycode_display(converted)
-                else:
-                    label['target_button'] = format_mapping_display(mapping, input_mode)
+            label['target_button'] = format_mapping_display(mapping, input_mode)
 
 def _set_display_name_for_label(label: Dict, input_mode: str):
-    """Set display name for a label based on input mode"""
-    control_name = label['name']
+    """Set display name efficiently"""
     
     if 'target_button' in label:
-        # Always use target_button if available from mapping
-        if input_mode == 'dinput':
-            label['display_name'] = f'P1 {label["target_button"]}'
-        elif input_mode == 'joycode':
-            label['display_name'] = label["target_button"]
-        elif input_mode == 'keycode':
-            label['display_name'] = label["target_button"]
+        if input_mode == 'keycode':
+            label['display_name'] = label['target_button']
         else:
-            # XInput format
-            label['display_name'] = f'P1 {label["target_button"]}'
+            target = label['target_button']
+            if not target.startswith('P1 '):
+                label['display_name'] = f'P1 {target}'
+            else:
+                label['display_name'] = target
     else:
-        # No mapping, use default display names based on input mode
-        label['display_name'] = format_control_name_for_mode(control_name, input_mode)
+        # Fallback to control name formatting
+        control_name = label['name']
+        if input_mode == 'keycode':
+            label['display_name'] = "No Key Assigned"
+        else:
+            label['display_name'] = f"P1 {control_name.split('_')[-1]}"
+
+def cleanup_database_connections():
+    """Clean up cached database connections"""
+    global _db_connection_cache
+    
+    for conn in _db_connection_cache.values():
+        try:
+            conn.close()
+        except:
+            pass
+    _db_connection_cache.clear()
+    print("Cleaned up database connections")
 
 def format_control_name_for_mode(control_name: str, input_mode: str) -> str:
     """Convert MAME control names to friendly names based on input mode"""
