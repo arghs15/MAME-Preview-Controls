@@ -303,7 +303,7 @@ class MAMEControlConfig(ctk.CTk):
             self.update_splash_message("Scanning ROMs directory...")
             
             # Scan ROMs directory
-            self.scan_roms_directory()
+            self.available_roms = scan_roms_directory(self.mame_dir)
             
             # Update message
             self.update_splash_message("Updating game list...")
@@ -1090,19 +1090,6 @@ class MAMEControlConfig(ctk.CTk):
         # Add an explicit exit call
         import sys
         sys.exit(0)
-        
-    def load_custom_configs(self):
-        """Load custom configs using utility function"""
-        self.custom_configs = load_custom_configs(self.mame_dir)
-    
-    def parse_cfg_controls(self, cfg_content):
-        """Parse CFG controls using utility function"""
-        return parse_cfg_controls(cfg_content, self.input_mode)
-
-    def load_default_config(self):
-        """Load default config using utility function"""
-        self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
-        return bool(self.default_controls)
 
     def parse_default_cfg(self, cfg_content):
         """Parse default.cfg to extract all control mappings focusing on XInput format"""
@@ -1168,7 +1155,6 @@ class MAMEControlConfig(ctk.CTk):
         # Store both processed and original mappings
         self.original_default_controls = original_controls
         return controls
-
 
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen state"""
@@ -2270,7 +2256,7 @@ class MAMEControlConfig(ctk.CTk):
                 print(f"Loaded {len(self.available_roms)} database ROMs")
             else:
                 # Load physical ROMs from mame\roms directory
-                self.scan_roms_directory()
+                self.available_roms = scan_roms_directory(self.mame_dir)
                 print(f"Loaded {len(self.available_roms)} physical ROMs")
                 
         except Exception as e:
@@ -3089,18 +3075,24 @@ class MAMEControlConfig(ctk.CTk):
 
                 # IMPORTANT: Apply custom mappings ONCE here
                 if rom_name in self.custom_configs:
-                    cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                    cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
                     cfg_controls = {
                         control: convert_mapping(mapping, self.input_mode)
                         for control, mapping in cfg_controls.items()
                     }
 
                 # Apply all processing ONCE
-                game_data = self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                game_data = update_game_data_with_custom_mappings(
+                    game_data, 
+                    cfg_controls, 
+                    getattr(self, 'default_controls', {}),
+                    getattr(self, 'original_default_controls', {}),
+                    self.input_mode
+                )
 
                 # Apply XInput filtering if enabled
                 if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
-                    game_data = self.filter_xinput_controls(game_data)
+                    game_data = filter_xinput_controls(game_data)
                 
                 # Cache the processed result
                 self.processed_cache[cache_key] = game_data
@@ -3110,7 +3102,7 @@ class MAMEControlConfig(ctk.CTk):
 
             # For cached data, we need to regenerate cfg_controls if it exists
             if not cfg_controls and rom_name in self.custom_configs:
-                cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
                 cfg_controls = {
                     control: convert_mapping(mapping, self.input_mode)
                     for control, mapping in cfg_controls.items()
@@ -5765,56 +5757,6 @@ class MAMEControlConfig(ctk.CTk):
         
         return list_frame
     
-    def identify_generic_controls(self):
-        """Identify games that only have generic control names"""
-        return identify_generic_controls(
-            self.available_roms, 
-            self.gamedata_json, 
-            self.parent_lookup,
-            self.db_path,
-            getattr(self, 'rom_data_cache', {})
-        )
-
-    def filter_xinput_controls(self, game_data):
-        """Filter game_data to only include XInput-compatible controls"""
-        if not game_data:
-            return game_data
-                
-        # Make a copy to avoid modifying the original
-        import copy
-        filtered_data = copy.deepcopy(game_data)
-            
-        # Define strictly which controls are valid in XInput mode
-        xinput_controls = {
-            'P1_BUTTON1', 'P1_BUTTON2', 'P1_BUTTON3', 'P1_BUTTON4',
-            'P1_BUTTON5', 'P1_BUTTON6', 'P1_BUTTON7', 'P1_BUTTON8',
-            'P1_BUTTON9', 'P1_BUTTON10', 
-            'P1_JOYSTICK_UP', 'P1_JOYSTICK_DOWN', 'P1_JOYSTICK_LEFT', 'P1_JOYSTICK_RIGHT',
-            'P1_JOYSTICKRIGHT_UP', 'P1_JOYSTICKRIGHT_DOWN', 'P1_JOYSTICKRIGHT_LEFT', 'P1_JOYSTICKRIGHT_RIGHT',
-            # Add these left joystick controls
-            'P1_JOYSTICKLEFT_UP', 'P1_JOYSTICKLEFT_DOWN', 'P1_JOYSTICKLEFT_LEFT', 'P1_JOYSTICKLEFT_RIGHT',
-            'P1_DPAD_UP', 'P1_DPAD_DOWN', 'P1_DPAD_LEFT', 'P1_DPAD_RIGHT',
-            'P1_START', 'P1_SELECT',
-            # Add these analog controls that were missing
-            'P1_AD_STICK_X', 'P1_AD_STICK_Y', 'P1_AD_STICK_Z',
-            'P1_DIAL', 'P1_DIAL_V', 'P1_PADDLE', 'P1_PEDAL', 'P1_PEDAL2',
-            'P1_TRACKBALL_X', 'P1_TRACKBALL_Y', 'P1_MOUSE_X', 'P1_MOUSE_Y',
-            'P1_LIGHTGUN_X', 'P1_LIGHTGUN_Y', 'P1_POSITIONAL'
-        }
-        
-        # For each player, filter labels to only XInput controls
-        for player in filtered_data.get('players', []):
-            original_count = len(player.get('labels', []))
-            filtered_labels = [label for label in player.get('labels', []) 
-                            if label['name'] in xinput_controls]
-            player['labels'] = filtered_labels
-            print(f"Filtered player {player['number']} controls from {original_count} to {len(filtered_labels)}")
-        
-        # Mark data as XInput only
-        filtered_data['xinput_only_mode'] = True
-        
-        return filtered_data
-    
     def show_preview(self):
         """Launch the preview window with caching to ensure default controls are included"""
         if not self.current_game:
@@ -5831,7 +5773,7 @@ class MAMEControlConfig(ctk.CTk):
         cfg_controls = {}
         if self.current_game in self.custom_configs:
             # Parse the custom config
-            cfg_controls = self.parse_cfg_controls(self.custom_configs[self.current_game])
+            cfg_controls = parse_cfg_controls(self.custom_configs[self.current_game], self.input_mode)
             
             # Convert based on current input mode
             current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
@@ -5841,11 +5783,17 @@ class MAMEControlConfig(ctk.CTk):
             }
             
             # Modify game_data to include custom mappings
-            self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+            game_data = update_game_data_with_custom_mappings(
+                game_data, 
+                cfg_controls, 
+                getattr(self, 'default_controls', {}),
+                getattr(self, 'original_default_controls', {}),
+                self.input_mode
+            )
 
         # NEW CODE: Filter out non-XInput controls if in XInput Only mode
         if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
-            game_data = self.filter_xinput_controls(game_data)
+            game_data = filter_xinput_controls(game_data)
         
         # Create cache directory if it doesn't exist yet
         cache_dir = os.path.join(self.preview_dir, "cache")
@@ -5916,16 +5864,6 @@ class MAMEControlConfig(ctk.CTk):
         except Exception as e:
             print(f"Error launching preview: {e}")
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
-
-    def update_game_data_with_custom_mappings(self, game_data, cfg_controls):
-        """Update game data using utility function"""
-        return update_game_data_with_custom_mappings(
-            game_data=game_data,
-            cfg_controls=cfg_controls,
-            default_controls=getattr(self, 'default_controls', {}),
-            original_default_controls=getattr(self, 'original_default_controls', {}),
-            input_mode=self.input_mode
-        )
 
     def toggle_hide_preview_buttons(self):
         """Toggle whether preview buttons should be hidden"""
@@ -6824,16 +6762,6 @@ class MAMEControlConfig(ctk.CTk):
             import traceback
             traceback.print_exc()
             self.stats_label.configure(text="Statistics: Error")
-    
-    def find_unmatched_roms(self) -> Set[str]:
-        """Find ROMs that don't have matching control data"""
-        return find_unmatched_roms(
-            self.available_roms,
-            self.gamedata_json,
-            self.parent_lookup, 
-            self.db_path,
-            getattr(self, 'rom_data_cache', {})
-        )
    
     def update_game_list(self):
         """Update the game list to show all available ROMs with improved performance"""
@@ -6986,11 +6914,6 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error in search filtering: {e}")
             import traceback
             traceback.print_exc()
-
-    # Update scan_roms_directory method 
-    def scan_roms_directory(self):
-        """Scan ROMs directory using utility function"""
-        self.available_roms = scan_roms_directory(self.mame_dir)
 
     def load_text_positions(self, rom_name):
         """Load text positions with simplified path handling"""
@@ -7908,7 +7831,7 @@ class MAMEControlConfig(ctk.CTk):
                         cfg_controls = {}
                         if rom_name in self.custom_configs:
                             # Parse the custom config
-                            cfg_controls = self.parse_cfg_controls(self.custom_configs[rom_name])
+                            cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
                             
                             # Convert if XInput is enabled
                             if self.use_xinput:
@@ -7918,7 +7841,13 @@ class MAMEControlConfig(ctk.CTk):
                                 }
                             
                             # Update game_data with custom mappings
-                            self.update_game_data_with_custom_mappings(game_data, cfg_controls)
+                            game_data = update_game_data_with_custom_mappings(
+                                game_data, 
+                                cfg_controls, 
+                                getattr(self, 'default_controls', {}),
+                                getattr(self, 'original_default_controls', {}),
+                                self.input_mode
+                            )
                             print(f"Applied custom mapping from ROM CFG for {rom_name}")
                         
                         # Export the image using preview_export_image which respects settings
