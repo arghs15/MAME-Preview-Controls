@@ -1701,16 +1701,18 @@ def scan_roms_directory(mame_dir: str) -> Set[str]:
 def identify_generic_controls(available_roms: Set[str], gamedata_json: Dict, 
                              parent_lookup: Dict, db_path: str = None, 
                              rom_data_cache: Dict = None) -> Tuple[List[Tuple[str, str]], List[str]]:
-    """Identify games that only have generic control names"""
+    """Identify games that only have generic control names - CORRECTED VERSION"""
     generic_control_games = []
     missing_control_games = []
     
-    # Generic action names that indicate default mappings
-    generic_actions = [
-        "A Button", "B Button", "X Button", "Y Button", 
-        "LB Button", "RB Button", "LT Button", "RT Button",
-        "Up", "Down", "Left", "Right"
-    ]
+    def check_controls_for_names(controls_dict):
+        """Check if any controls have non-empty 'name' fields"""
+        for control_name, control_data in controls_dict.items():
+            if isinstance(control_data, dict) and 'name' in control_data:
+                name_value = control_data['name']
+                if name_value and name_value.strip():  # Non-empty name
+                    return True
+        return False
     
     for rom_name in sorted(available_roms):
         # First check if game data exists at all
@@ -1718,21 +1720,29 @@ def identify_generic_controls(available_roms: Set[str], gamedata_json: Dict,
         if not game_data:
             missing_control_games.append(rom_name)
             continue
-            
-        # Check if controls are just generic
-        has_custom_controls = False
-        for player in game_data.get('players', []):
-            for label in player.get('labels', []):
-                action = label['value']
-                # If we find any non-generic action, mark this game as having custom controls
-                if action not in generic_actions:
-                    has_custom_controls = True
-                    break
-            if has_custom_controls:
-                break
-                
-        # If no custom controls found, add to list
-        if not has_custom_controls and game_data.get('players'):
+        
+        # Check if ROM has controls in gamedata.json
+        has_gamedata_controls = False
+        has_custom_names = False
+        
+        # Check ROM directly
+        if rom_name in gamedata_json:
+            rom_data = gamedata_json[rom_name]
+            if 'controls' in rom_data and rom_data['controls']:
+                has_gamedata_controls = True
+                has_custom_names = check_controls_for_names(rom_data['controls'])
+        
+        # Check parent if this is a clone
+        elif rom_name in parent_lookup:
+            parent_rom = parent_lookup[rom_name]
+            if parent_rom in gamedata_json:
+                parent_data = gamedata_json[parent_rom]
+                if 'controls' in parent_data and parent_data['controls']:
+                    has_gamedata_controls = True
+                    has_custom_names = check_controls_for_names(parent_data['controls'])
+        
+        # GENERIC = has gamedata controls but NO "name" fields
+        if has_gamedata_controls and not has_custom_names:
             generic_control_games.append((rom_name, game_data.get('gamename', rom_name)))
     
     return generic_control_games, missing_control_games

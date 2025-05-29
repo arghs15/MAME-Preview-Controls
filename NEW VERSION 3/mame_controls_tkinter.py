@@ -2725,7 +2725,7 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection with FIXED categorization - COMPLETE VERSION"""
+        """Update game list based on current sidebar category selection with FIXED categorization"""
         # Remember currently selected ROM if any
         previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
         
@@ -2737,15 +2737,15 @@ class MAMEControlConfig(ctk.CTk):
         missing_controls = []
         with_custom_config = []
         generic_controls = []
-        clone_roms = []  # List for clone ROMs
+        custom_actions_roms = []  # FIXED: This will now properly identify custom controls
+        clone_roms = []
         
         # NEW CATEGORIES
-        no_buttons_roms = []    # ROMs with controls but no buttons
-        specialized_roms = []   # ROMs with specialized inputs (trackball, lightgun, etc.)
-        analog_roms = []        # ROMs with analog controls
-        multiplayer_roms = []   # ROMs with more than 1 player
-        singleplayer_roms = []  # ROMs with exactly 1 player
-        custom_actions_roms = [] # ROMs with meaningful action names
+        no_buttons_roms = []
+        specialized_roms = []
+        analog_roms = []
+        multiplayer_roms = []
+        singleplayer_roms = []
         
         # Build parent->clone lookup if needed
         if not hasattr(self, 'parent_lookup') or not self.parent_lookup:
@@ -2760,11 +2760,11 @@ class MAMEControlConfig(ctk.CTk):
                 if 'clones' in parent_data and isinstance(parent_data['clones'], dict):
                     for clone_rom in parent_data['clones'].keys():
                         self.parent_lookup[clone_rom] = parent_rom
-                        clone_roms.append(clone_rom)  # Add to our clones list
+                        clone_roms.append(clone_rom)
         
-        # Process and categorize ROMs
+        # Process and categorize ROMs using the FIXED categorization
         for rom in available_roms:
-            # Check if ROM is a clone (if not already identified)
+            # Check if ROM is a clone
             if rom not in clone_roms and rom in self.parent_lookup:
                 clone_roms.append(rom)
                 
@@ -2773,42 +2773,40 @@ class MAMEControlConfig(ctk.CTk):
             if has_custom:
                 with_custom_config.append(rom)
             
-            # Categorize controls using the new method
+            # Use the FIXED categorization method
             categories = self.categorize_controls_properly(rom)
             
             if categories['has_controls']:
                 with_controls.append(rom)
                 
-                # Use the new categorization
+                # FIXED: Now properly distinguishes between generic and custom
                 if categories['has_generic_controls']:
                     generic_controls.append(rom)
                 elif categories['has_custom_controls']:
-                    custom_actions_roms.append(rom)
+                    custom_actions_roms.append(rom)  # This will now properly capture analog/directional controls
                 
                 # Get game data for additional categorization
                 from mame_data_utils import get_game_data
                 game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                         self.db_path, getattr(self, 'rom_data_cache', {}))
                 if game_data:
-                    # Check player count for single/multiplayer categories
+                    # Player count categorization
                     player_count = int(game_data.get('numPlayers', 1))
                     if player_count == 1:
                         singleplayer_roms.append(rom)
                     elif player_count > 1:
                         multiplayer_roms.append(rom)
                     
-                    # Check for specialized controls
+                    # Control type analysis
                     has_specialized = False
                     has_analog = False
                     has_buttons = False
                     
-                    # Specialized input detection
                     specialized_types = [
                         "TRACKBALL", "LIGHTGUN", "MOUSE", "DIAL", "PADDLE", 
                         "POSITIONAL", "GAMBLE", "AD_STICK"
                     ]
                     
-                    # Analog input detection
                     analog_types = [
                         "AD_STICK", "DIAL", "PADDLE", "PEDAL", "POSITIONAL"
                     ]
@@ -2818,37 +2816,29 @@ class MAMEControlConfig(ctk.CTk):
                         for label in player.get('labels', []):
                             control_name = label['name']
                             
-                            # Check for buttons
                             if "BUTTON" in control_name:
                                 has_buttons = True
                             
-                            # Check for specialized controls
                             for specialized_type in specialized_types:
                                 if specialized_type in control_name:
                                     has_specialized = True
                                     break
                                     
-                            # Check for analog controls
                             for analog_type in analog_types:
                                 if analog_type in control_name:
                                     has_analog = True
                                     break
                     
-                    # Add to specialized category if it has specialized controls
                     if has_specialized:
                         specialized_roms.append(rom)
-                        
-                    # Add to analog category if it has analog controls
                     if has_analog:
                         analog_roms.append(rom)
-                        
-                    # Add to no_buttons category if it has controls but no buttons
                     if not has_buttons:
                         no_buttons_roms.append(rom)
             else:
                 missing_controls.append(rom)
         
-        # Filter list based on current view
+        # Filter list based on current view (rest of the method remains the same)
         display_roms = []
         if self.current_view == "all":
             display_roms = available_roms
@@ -2859,12 +2849,11 @@ class MAMEControlConfig(ctk.CTk):
         elif self.current_view == "custom_config":
             display_roms = with_custom_config
         elif self.current_view == "generic":
-            display_roms = generic_controls
+            display_roms = generic_controls  # Now properly filtered
         elif self.current_view == "clones":
             display_roms = sorted(clone_roms)
-        elif self.current_view == "custom_actions":  # NEW CATEGORY
-            display_roms = custom_actions_roms
-        # EXISTING CATEGORIES
+        elif self.current_view == "custom_actions":
+            display_roms = custom_actions_roms  # Now properly includes analog/directional
         elif self.current_view == "no_buttons":
             display_roms = no_buttons_roms
         elif self.current_view == "specialized":
@@ -6713,64 +6702,62 @@ class MAMEControlConfig(ctk.CTk):
         
     def categorize_controls_properly(self, rom_name):
         """
-        Properly categorize a ROM's controls
+        Properly categorize a ROM's controls - CORRECTED VERSION
         Returns: dict with boolean flags for each category
         """
         result = {
             'has_controls': False,
-            'has_generic_controls': False,  # Basic "Button 1", "Button 2" etc.
-            'has_custom_controls': False,   # Meaningful action names
+            'has_generic_controls': False,  # Has controls but no "name" fields
+            'has_custom_controls': False,   # Has controls with "name" fields
             'has_cfg_file': False          # Has .cfg file override
         }
         
         # Check if ROM has a .cfg file
         result['has_cfg_file'] = rom_name in self.custom_configs
         
-        # Get game data
-        from mame_data_utils import get_game_data
-        game_data = get_game_data(rom_name, self.gamedata_json, self.parent_lookup, 
-                                self.db_path, getattr(self, 'rom_data_cache', {}))
-        
-        if not game_data or not game_data.get('players'):
-            return result
-        
-        result['has_controls'] = True
-        
-        # Analyze the control names/actions to determine if they're generic or custom
-        generic_patterns = [
-            # Basic button names you added
-            r'^Button \d+$',           # "Button 1", "Button 2", etc.
-            r'^A Button$', r'^B Button$', r'^X Button$', r'^Y Button$',
-            r'^LB Button$', r'^RB Button$', r'^LT Button$', r'^RT Button$',
-            r'^Up$', r'^Down$', r'^Left$', r'^Right$',
-            r'^Left Stick Button$', r'^Right Stick Button$',
-            r'^Start$', r'^Select$', r'^Coin$'
-        ]
-        
-        has_any_custom = False
-        has_any_generic = False
-        
-        for player in game_data.get('players', []):
-            for label in player.get('labels', []):
-                action = label.get('value', '')
-                
-                # Check if this action matches generic patterns
-                is_generic = False
-                import re
-                for pattern in generic_patterns:
-                    if re.match(pattern, action, re.IGNORECASE):
-                        is_generic = True
+        # Function to check if controls have "name" fields
+        def check_controls_for_names(controls_dict):
+            has_names = False
+            for control_name, control_data in controls_dict.items():
+                if isinstance(control_data, dict) and 'name' in control_data:
+                    name_value = control_data['name']
+                    if name_value and name_value.strip():  # Non-empty name
+                        has_names = True
                         break
-                
-                if is_generic:
-                    has_any_generic = True
-                else:
-                    # If it's not generic, it's custom (meaningful action name)
-                    if action.strip() and action not in ['', 'NONE']:
-                        has_any_custom = True
+            return has_names
         
-        result['has_generic_controls'] = has_any_generic and not has_any_custom
-        result['has_custom_controls'] = has_any_custom
+        # Check ROM directly
+        if rom_name in self.gamedata_json:
+            rom_data = self.gamedata_json[rom_name]
+            if 'controls' in rom_data and rom_data['controls']:
+                result['has_controls'] = True
+                # Check if any controls have "name" fields
+                if check_controls_for_names(rom_data['controls']):
+                    result['has_custom_controls'] = True
+                else:
+                    result['has_generic_controls'] = True
+        
+        # Check parent ROM if this is a clone
+        elif hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup:
+            parent_rom = self.parent_lookup[rom_name]
+            if parent_rom in self.gamedata_json:
+                parent_data = self.gamedata_json[parent_rom]
+                if 'controls' in parent_data and parent_data['controls']:
+                    result['has_controls'] = True
+                    # Check if any controls have "name" fields
+                    if check_controls_for_names(parent_data['controls']):
+                        result['has_custom_controls'] = True
+                    else:
+                        result['has_generic_controls'] = True
+        
+        # If no gamedata.json entry, check if it has control data from other sources
+        if not result['has_controls']:
+            from mame_data_utils import get_game_data
+            game_data = get_game_data(rom_name, self.gamedata_json, self.parent_lookup, 
+                                    self.db_path, getattr(self, 'rom_data_cache', {}))
+            if game_data and game_data.get('players'):
+                result['has_controls'] = True
+                result['has_generic_controls'] = True  # Has controls but no gamedata.json names
         
         return result
 
