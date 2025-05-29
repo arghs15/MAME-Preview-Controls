@@ -6354,11 +6354,10 @@ class MAMEControlConfig(ctk.CTk):
                 # Ensure the selected item is visible
                 self.game_list.see(f"{line_index}.0")
 
-    # OPTIMIZED VERSION OF EXISTING display_controls_table - KEEP ALL FEATURES & APPEARANCE
+    # Complete updated display_controls_table method with proper mappings support and fixed alignment
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """
-        Optimized version of the existing controls table - keeps all features and appearance
-        but dramatically improves performance through better widget management
+        Display game information and controls with mappings support and proper alignment
         """
         try:
             row = start_row
@@ -6366,19 +6365,15 @@ class MAMEControlConfig(ctk.CTk):
             # Get romname from game_data
             romname = game_data.get('romname', '')
             
-            # OPTIMIZATION 1: Batch clear widgets instead of destroying one by one
-            # This is much faster for large numbers of widgets
+            # Clear existing controls
             children_to_destroy = list(self.control_frame.winfo_children())
             for widget in children_to_destroy:
                 widget.destroy()
             
-            # Force immediate cleanup (prevents memory buildup)
+            # Force immediate cleanup
             self.control_frame.update_idletasks()
             
-            # OPTIMIZATION 2: Pre-process ALL data before creating ANY widgets
-            # This avoids expensive recalculations during widget creation
-            
-            # Collect metadata once
+            # Collect metadata once - INCLUDING MAPPINGS
             metadata = {
                 'romname': romname,
                 'gamename': game_data['gamename'],
@@ -6386,11 +6381,12 @@ class MAMEControlConfig(ctk.CTk):
                 'alternating': game_data['alternating'],
                 'mirrored': game_data.get('mirrored', False),
                 'miscDetails': game_data.get('miscDetails', ''),
+                'mappings': game_data.get('mappings', []),  # ENSURE MAPPINGS ARE INCLUDED
                 'source': game_data.get('source', 'unknown'),
                 'input_mode': self.input_mode
             }
             
-            # Pre-process ALL control data in single pass
+            # Pre-process control data
             processed_controls = []
             has_rom_cfg_used = False
             has_default_cfg = hasattr(self, 'default_controls') and bool(self.default_controls)
@@ -6433,66 +6429,53 @@ class MAMEControlConfig(ctk.CTk):
                             'mapping': mapping
                         })
             
-            # OPTIMIZATION 3: Create widgets in optimal order (containers first, then content)
-            
             # === GAME INFO CARD ===
             info_card = ctk.CTkFrame(self.control_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
             info_card.pack(fill="x", padx=10, pady=10, expand=True)
             info_card.columnconfigure(0, weight=1)
             
-            # Metadata section - simplified but same visual result
+            # Metadata section - SINGLE COLUMN LAYOUT
             metadata_frame = ctk.CTkFrame(info_card, fg_color="transparent")
             metadata_frame.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
             metadata_frame.columnconfigure(0, weight=1)
-            metadata_frame.columnconfigure(1, weight=1)
             
-            # Left column - Basic info
-            basic_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
-            basic_info.grid(row=0, column=0, sticky="ew", padx=(0, 10))
-            basic_info.columnconfigure(0, weight=1)
+            # Single info section with everything together
+            info_section = ctk.CTkFrame(metadata_frame, fg_color="transparent")
+            info_section.grid(row=0, column=0, sticky="ew")
+            info_section.columnconfigure(0, weight=1)
             
             ctk.CTkLabel(
-                basic_info,
+                info_section,
                 text="ROM Information",
                 font=("Arial", 14, "bold"),
                 anchor="w"
             ).pack(anchor="w", pady=(0, 10), fill="x")
             
-            # Pre-build info text
+            # Build complete info text including additional details
             info_text = f"ROM Name: {metadata['romname']}\n"
             info_text += f"Players: {metadata['numPlayers']}\n"
             info_text += f"Alternating Play: {'Yes' if metadata['alternating'] else 'No'}\n"
             info_text += f"Mirrored Controls: {'Yes' if metadata['mirrored'] else 'No'}"
             
+            # Add miscDetails if available
+            if metadata['miscDetails']:
+                info_text += f"\n{metadata['miscDetails']}"
+            
+            # Add mappings if available
+            if metadata['mappings']:
+                if len(metadata['mappings']) == 1:
+                    info_text += f"\nMapping: {metadata['mappings'][0]}"
+                else:
+                    mappings_str = ", ".join(metadata['mappings'])
+                    info_text += f"\nMappings: {mappings_str}"
+            
             ctk.CTkLabel(
-                basic_info,
+                info_section,
                 text=info_text,
                 font=("Arial", 13),
                 justify="left",
                 anchor="w"
             ).pack(anchor="w", fill="x")
-            
-            # Right column - Additional info (if available)
-            if metadata['miscDetails']:
-                additional_info = ctk.CTkFrame(metadata_frame, fg_color="transparent")
-                additional_info.grid(row=0, column=1, sticky="ew", padx=(10, 0))
-                additional_info.columnconfigure(0, weight=1)
-                
-                ctk.CTkLabel(
-                    additional_info,
-                    text="Additional Details",
-                    font=("Arial", 14, "bold"),
-                    anchor="w"
-                ).pack(anchor="w", pady=(0, 10), fill="x")
-                
-                ctk.CTkLabel(
-                    additional_info,
-                    text=metadata['miscDetails'],
-                    font=("Arial", 13),
-                    justify="left",
-                    anchor="w",
-                    wraplength=300
-                ).pack(anchor="w", fill="x")
             
             # === STATUS INDICATORS ===
             indicator_frame = ctk.CTkFrame(info_card, fg_color="transparent")
@@ -6568,7 +6551,7 @@ class MAMEControlConfig(ctk.CTk):
             title_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
             title_frame.pack(fill="x", padx=15, pady=(15, 10))
             
-            # Input mode toggle (same as original)
+            # Input mode toggle
             input_mode_frame = ctk.CTkFrame(controls_card, fg_color="transparent")
             input_mode_frame.pack(fill="x", padx=15, pady=(5, 10))
             
@@ -6579,12 +6562,11 @@ class MAMEControlConfig(ctk.CTk):
                 anchor="w"
             ).pack(side="left", padx=(0, 10))
             
-            # Create radio buttons efficiently (reuse existing input_mode_var if it exists)
+            # Create radio buttons efficiently
             if not hasattr(self, 'input_mode_var'):
                 self.input_mode_var = tk.StringVar(value=self.input_mode)
             
             mode_buttons = [
-                #("JOYCODE", "joycode"),
                 ("XInput", "xinput"), 
                 ("DInput", "dinput"),
                 ("KEYCODE", "keycode")
@@ -6621,8 +6603,7 @@ class MAMEControlConfig(ctk.CTk):
             )
             edit_button.pack(side="right", padx=5)
             
-            # === OPTIMIZED CONTROLS DISPLAY ===
-            
+            # === CONTROLS DISPLAY ===
             if not processed_controls:
                 # No controls message
                 empty_frame = ctk.CTkFrame(controls_card, fg_color=self.theme_colors["background"], corner_radius=4)
@@ -6637,16 +6618,16 @@ class MAMEControlConfig(ctk.CTk):
                 
                 return row + 1
             
-            # OPTIMIZATION 4: Use efficient canvas approach but with pre-processed data
+            # Controls display with canvas
             canvas_container = ctk.CTkFrame(controls_card, fg_color="transparent")
             canvas_container.pack(fill="both", expand=True, padx=15, pady=5)
             
-            # Header frame (same as original)
+            # Header frame
             header_frame = ctk.CTkFrame(canvas_container, fg_color=self.theme_colors["primary"], height=36)
             header_frame.pack(fill="x", pady=(0, 5))
             header_frame.pack_propagate(False)
             
-            # Header setup (pre-calculated positions)
+            # Header setup
             header_titles = ["MAME Control", "Controller Input", "Game Action", "Mapping Source"]
             col_widths = [180, 200, 180, 160]
             x_positions = [15]
@@ -6664,11 +6645,10 @@ class MAMEControlConfig(ctk.CTk):
                 )
                 header_label.place(x=x_positions[i], y=5)
             
-            # OPTIMIZATION 5: Create canvas with pre-calculated height
+            # Canvas for controls
             num_controls = len(processed_controls)
             canvas_height = min(400, num_controls * 40 + 10)
             
-            # Use native tk.Canvas for maximum performance
             canvas = tk.Canvas(
                 canvas_container,
                 height=canvas_height,
@@ -6678,7 +6658,7 @@ class MAMEControlConfig(ctk.CTk):
             )
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             
-            # CTkScrollbar (same as original)
+            # Scrollbar
             scrollbar = ctk.CTkScrollbar(
                 canvas_container, 
                 orientation="vertical",
@@ -6693,15 +6673,13 @@ class MAMEControlConfig(ctk.CTk):
             
             canvas.configure(yscrollcommand=scrollbar.set)
             
-            # OPTIMIZATION 6: Create controls frame and populate efficiently
+            # Controls frame
             controls_frame = tk.Frame(canvas, background=self.theme_colors["card_bg"])
             canvas_window = canvas.create_window((0, 0), window=controls_frame, anchor=tk.NW)
             
-            # OPTIMIZATION 7: Bulk create control rows with pre-processed data
-            # Use same background color for all rows (no alternating)
+            # Create control rows
             alt_colors = [self.theme_colors["card_bg"], self.theme_colors["card_bg"]]
             
-            # Create all rows efficiently using pre-processed data
             for i, control in enumerate(processed_controls):
                 row_frame = tk.Frame(
                     controls_frame,
@@ -6711,7 +6689,7 @@ class MAMEControlConfig(ctk.CTk):
                 row_frame.pack(fill=tk.X, pady=1, expand=True)
                 row_frame.pack_propagate(False)
                 
-                # Create labels with pre-processed data (no more string processing needed)
+                # Create labels with pre-processed data
                 labels_data = [
                     (control['control_name'], ("Consolas", 12), "#888888"),
                     (control['display_name'], ("Arial", 13), self.theme_colors["primary"]),
@@ -6731,7 +6709,7 @@ class MAMEControlConfig(ctk.CTk):
                     )
                     label.place(x=x_positions[j], y=10, width=col_widths[j])
             
-            # Canvas update functions (same as original)
+            # Canvas update functions
             def update_canvas_width(event=None):
                 canvas_width = canvas.winfo_width()
                 canvas.itemconfig(canvas_window, width=canvas_width)
@@ -6745,14 +6723,10 @@ class MAMEControlConfig(ctk.CTk):
             canvas.update_idletasks()
             update_canvas_width()
             
-            # === REMOVED: CUSTOM CONFIG SECTION ===
-            # The custom config section has been completely removed from here
-            # It's now only available via right-click context menu
-            
             return row + 1
 
         except Exception as e:
-            print(f"Error in optimized controls display: {e}")
+            print(f"Error in controls display: {e}")
             import traceback
             traceback.print_exc()
             return start_row + 1

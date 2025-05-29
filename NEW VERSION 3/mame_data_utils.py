@@ -487,7 +487,7 @@ def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict,
 # Also update the data loading function in mame_data_utils.py
 def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
                                             gamedata_json: Dict, parent_lookup: Dict) -> Dict:
-    """Convert gamedata.json format to standard game data format - optimized"""
+    """Convert gamedata.json format to standard game data format - optimized with mappings support"""
     
     # Pre-allocate result structure
     converted_data = {
@@ -499,8 +499,7 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
         'players': [],
         'source': 'gamedata.json',
-        # NEW: Add mappings information
-        'mappings': game_data.get('mappings', [])
+        'mappings': game_data.get('mappings', [])  # ENSURE MAPPINGS ARE PRESERVED
     }
     
     # Find controls efficiently
@@ -509,7 +508,11 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         # Try parent controls
         parent_rom = game_data.get('parent') or parent_lookup.get(romname)
         if parent_rom and parent_rom in gamedata_json:
-            controls = gamedata_json[parent_rom].get('controls')
+            parent_data = gamedata_json[parent_rom]
+            controls = parent_data.get('controls')
+            # ALSO GET PARENT MAPPINGS IF CURRENT GAME DOESN'T HAVE THEM
+            if not converted_data['mappings'] and 'mappings' in parent_data:
+                converted_data['mappings'] = parent_data.get('mappings', [])
     
     if controls:
         # Pre-allocate lists and get default actions once
