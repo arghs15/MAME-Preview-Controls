@@ -196,6 +196,11 @@ class MAMEControlConfig(ctk.CTk):
         self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
         self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
         self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
+        
+        # Add ROM source mode tracking
+        self.rom_source_mode = "physical"  # "physical" or "database"
+        self.database_roms = set()  # Will hold all parent ROMs from gamedata
+        
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -323,7 +328,7 @@ class MAMEControlConfig(ctk.CTk):
             self.after(1000, self._load_secondary_data)
 
     def _load_secondary_data(self):
-        """Load secondary data synchronously to avoid async issues"""
+        """Load secondary data synchronously to avoid async issues - UPDATED to load ROM set"""
         try:
             self.update_splash_message("Loading default controls...")
             
@@ -343,6 +348,10 @@ class MAMEControlConfig(ctk.CTk):
             if check_db_update_needed(self.gamedata_path, self.db_path):
                 self.update_splash_message("Building database...")
                 build_gamedata_db(self.gamedata_json, self.db_path)
+            
+            # NEW: Load the appropriate ROM set based on saved setting
+            self.update_splash_message("Loading ROM collection...")
+            self.load_rom_set_for_current_mode()
             
             # Move directly to finish loading
             self.after(100, self._finish_loading)
@@ -1553,6 +1562,355 @@ class MAMEControlConfig(ctk.CTk):
             
         except Exception as e:
             print(f"Error during cleanup: {e}")
+
+    # ==============================================================================
+    # NEW: DATABASE CONTROLS PANEL
+    # ==============================================================================
+
+    def create_database_controls_panel(self, parent_frame):
+        """Create a panel for managing ALL gamedata.json entries (thousands of ROMs)"""
+        
+        # Main container frame with scrolling
+        container = ctk.CTkScrollableFrame(
+            parent_frame,
+            fg_color="transparent",
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        container.pack(expand=True, fill="both", padx=10, pady=10)
+        
+        # Title and description
+        header_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        header_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="Database Controls Manager",
+            font=("Arial", 16, "bold")
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        description_text = (
+            "Browse and manage ALL games in the gamedata.json database. "
+            "This includes games you own and thousands of other arcade games. "
+            "Use this to add control mappings for games you don't have yet."
+        )
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=description_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=(0, 15))
+        
+        # Statistics frame
+        stats_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        stats_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        # Calculate database statistics
+        total_games_in_db = len(self.gamedata_json)
+        total_clones_in_db = 0
+        games_with_controls = 0
+        games_without_controls = 0
+        
+        for rom_name, rom_data in self.gamedata_json.items():
+            # Count clones
+            if 'clones' in rom_data and isinstance(rom_data['clones'], dict):
+                total_clones_in_db += len(rom_data['clones'])
+            
+            # Count games with/without controls
+            if 'controls' in rom_data and rom_data['controls']:
+                games_with_controls += 1
+            else:
+                games_without_controls += 1
+        
+        total_entries = total_games_in_db + total_clones_in_db
+        
+        stats_text = (
+            f"Database Statistics:\n"
+            f"• Total parent games: {total_games_in_db:,}\n"
+            f"• Total clone games: {total_clones_in_db:,}\n"
+            f"• Total database entries: {total_entries:,}\n"
+            f"• Games with controls: {games_with_controls:,}\n"
+            f"• Games without controls: {games_without_controls:,}\n"
+            f"• Coverage: {(games_with_controls/max(total_games_in_db, 1)*100):.1f}%"
+        )
+        
+        ctk.CTkLabel(
+            stats_frame,
+            text="Database Overview",
+            font=("Arial", 14, "bold")
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        ctk.CTkLabel(
+            stats_frame,
+            text=stats_text,
+            font=("Arial", 13),
+            justify="left"
+        ).pack(anchor="w", padx=15, pady=(0, 15))
+        
+        # Action buttons frame
+        actions_frame = ctk.CTkFrame(container, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        actions_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            actions_frame,
+            text="Database Actions",
+            font=("Arial", 14, "bold")
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        # Button grid
+        button_grid = ctk.CTkFrame(actions_frame, fg_color="transparent")
+        button_grid.pack(fill="x", padx=15, pady=(0, 15))
+        
+        # Row 1: Browse categories
+        ctk.CTkButton(
+            button_grid,
+            text="Browse Games with Controls",
+            command=lambda: self.show_database_category("with_controls"),
+            width=200,
+            height=40,
+            fg_color=self.theme_colors["success"],
+            hover_color="#218838"
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        
+        ctk.CTkButton(
+            button_grid,
+            text="Browse Games without Controls", 
+            command=lambda: self.show_database_category("without_controls"),
+            width=200,
+            height=40,
+            fg_color=self.theme_colors["warning"],
+            hover_color="#e0a800"
+        ).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Row 2: Search and advanced
+        ctk.CTkButton(
+            button_grid,
+            text="Search All Games",
+            command=self.show_database_search,
+            width=200,
+            height=40,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"]
+        ).grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+        
+        ctk.CTkButton(
+            button_grid,
+            text="Browse Clone Games",
+            command=lambda: self.show_database_category("clones"),
+            width=200,
+            height=40,
+            fg_color=self.theme_colors["secondary"],
+            hover_color=self.theme_colors["primary"]
+        ).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Make grid columns expand evenly
+        button_grid.columnconfigure(0, weight=1)
+        button_grid.columnconfigure(1, weight=1)
+
+    # ==============================================================================
+    # DATABASE CATEGORY BROWSER
+    # ==============================================================================
+
+    def show_database_category(self, category):
+        """Show a category of games from the database"""
+        
+        # Create new dialog for browsing
+        browser = ctk.CTkToplevel(self)
+        browser.title(f"Database Browser - {category.replace('_', ' ').title()}")
+        browser.geometry("900x700")
+        browser.transient(self)
+        browser.grab_set()
+        
+        # Header
+        header_frame = ctk.CTkFrame(browser, fg_color=self.theme_colors["primary"], height=60)
+        header_frame.pack(fill="x")
+        header_frame.pack_propagate(False)
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=f"Database Browser - {category.replace('_', ' ').title()}",
+            font=("Arial", 18, "bold"),
+            text_color="white"
+        ).pack(side="left", padx=20, pady=15)
+        
+        # Search box in header
+        search_var = tk.StringVar()
+        search_entry = ctk.CTkEntry(
+            header_frame,
+            width=200,
+            placeholder_text="Search...",
+            textvariable=search_var
+        )
+        search_entry.pack(side="right", padx=20, pady=15)
+        
+        # Main content area
+        content_frame = ctk.CTkFrame(browser, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Results area with stats
+        stats_label = ctk.CTkLabel(content_frame, text="Loading...", font=("Arial", 12))
+        stats_label.pack(anchor="w", pady=(0, 10))
+        
+        # Game list with virtual scrolling
+        list_frame = ctk.CTkFrame(content_frame)
+        list_frame.pack(fill="both", expand=True)
+        
+        # Create the virtualized list
+        game_listbox = tk.Listbox(
+            list_frame,
+            font=("Arial", 12),
+            height=25,
+            background=self.theme_colors["card_bg"],
+            foreground=self.theme_colors["text"],
+            selectbackground=self.theme_colors["primary"]
+        )
+        game_listbox.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        # Scrollbar
+        scrollbar = ctk.CTkScrollbar(list_frame, orientation="vertical", command=game_listbox.yview)
+        scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
+        game_listbox.configure(yscrollcommand=scrollbar.set)
+        
+        # Populate the list based on category
+        games_data = []
+        
+        if category == "with_controls":
+            for rom_name, rom_data in self.gamedata_json.items():
+                if 'controls' in rom_data and rom_data['controls']:
+                    games_data.append({
+                        'rom_name': rom_name,
+                        'game_name': rom_data.get('description', rom_name),
+                        'owned': rom_name in self.available_roms,
+                        'has_controls': True
+                    })
+        
+        elif category == "without_controls":
+            for rom_name, rom_data in self.gamedata_json.items():
+                if 'controls' not in rom_data or not rom_data['controls']:
+                    games_data.append({
+                        'rom_name': rom_name,
+                        'game_name': rom_data.get('description', rom_name),
+                        'owned': rom_name in self.available_roms,
+                        'has_controls': False
+                    })
+        
+        elif category == "clones":
+            for parent_rom, parent_data in self.gamedata_json.items():
+                if 'clones' in parent_data and isinstance(parent_data['clones'], dict):
+                    for clone_rom, clone_data in parent_data['clones'].items():
+                        games_data.append({
+                            'rom_name': clone_rom,
+                            'game_name': clone_data.get('description', clone_rom),
+                            'owned': clone_rom in self.available_roms,
+                            'parent': parent_rom,
+                            'is_clone': True
+                        })
+        
+        # Sort games alphabetically
+        games_data.sort(key=lambda x: x['rom_name'])
+        
+        # Populate listbox (limit to first 1000 for performance)
+        display_limit = 1000
+        displayed_games = games_data[:display_limit]
+        
+        for game in displayed_games:
+            status = "★" if game['owned'] else "○"
+            rom_name = game['rom_name']
+            game_name = game['game_name']
+            
+            if game.get('is_clone'):
+                display_text = f"{status} {rom_name} - {game_name} [Clone of {game.get('parent', '')}]"
+            else:
+                display_text = f"{status} {rom_name} - {game_name}"
+            
+            game_listbox.insert(tk.END, display_text)
+        
+        # Update stats
+        total_count = len(games_data)
+        displayed_count = len(displayed_games)
+        owned_count = sum(1 for game in games_data if game['owned'])
+        
+        stats_text = f"Total: {total_count:,} games | Displayed: {displayed_count:,} | You own: {owned_count:,}"
+        if total_count > display_limit:
+            stats_text += f" | Use search to find specific games"
+        
+        stats_label.configure(text=stats_text)
+        
+        # Bind double-click to edit
+        def on_double_click(event):
+            selection = game_listbox.curselection()
+            if selection and selection[0] < len(displayed_games):
+                game = displayed_games[selection[0]]
+                rom_name = game['rom_name']
+                browser.destroy()  # Close browser
+                self.show_control_editor(rom_name)  # Open editor
+        
+        game_listbox.bind("<Double-Button-1>", on_double_click)
+        
+        # Search functionality
+        def perform_search(*args):
+            search_text = search_var.get().lower().strip()
+            if not search_text:
+                return
+            
+            # Filter games based on search
+            filtered_games = [
+                game for game in games_data 
+                if search_text in game['rom_name'].lower() or search_text in game['game_name'].lower()
+            ]
+            
+            # Update listbox
+            game_listbox.delete(0, tk.END)
+            
+            display_filtered = filtered_games[:500]  # Limit search results
+            for game in display_filtered:
+                status = "★" if game['owned'] else "○"
+                rom_name = game['rom_name']
+                game_name = game['game_name']
+                
+                if game.get('is_clone'):
+                    display_text = f"{status} {rom_name} - {game_name} [Clone of {game.get('parent', '')}]"
+                else:
+                    display_text = f"{status} {rom_name} - {game_name}"
+                
+                game_listbox.insert(tk.END, display_text)
+            
+            # Update displayed_games for double-click
+            nonlocal displayed_games
+            displayed_games = display_filtered
+            
+            # Update stats
+            stats_label.configure(text=f"Search results: {len(filtered_games):,} games | Displayed: {len(display_filtered):,}")
+        
+        search_var.trace("w", perform_search)
+        
+        # Buttons
+        button_frame = ctk.CTkFrame(browser, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Close",
+            command=browser.destroy,
+            width=100
+        ).pack(side="right")
+        
+        # Instructions
+        ctk.CTkLabel(
+            button_frame,
+            text="★ = Games you own | ○ = Available in database | Double-click to edit",
+            font=("Arial", 11),
+            text_color=self.theme_colors["text_dimmed"]
+        ).pack(side="left")
+
+    def show_database_search(self):
+        """Show advanced search interface for all database games"""
+        # This could be implemented as a more advanced search dialog
+        # with multiple filters, etc. For now, just show the "without_controls" category
+        # as that's probably what users want to search through most
+        self.show_database_category("without_controls")
     
     def create_sidebar(self):
         """Create sidebar with enhanced category filters including specialized control types"""
@@ -1770,7 +2128,7 @@ class MAMEControlConfig(ctk.CTk):
         self.current_view = "all"
 
     def create_top_bar(self):
-        """Create top bar with control buttons"""
+        """Create top bar with control buttons - UPDATED with ROM source toggle"""
         self.top_bar = ctk.CTkFrame(self.main_content, height=60, fg_color=self.theme_colors["card_bg"], corner_radius=0)
         self.top_bar.grid(row=0, column=0, sticky="ew")
         
@@ -1818,19 +2176,34 @@ class MAMEControlConfig(ctk.CTk):
         toggle_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
         toggle_frame.pack(side="right", padx=20, pady=10)
         
-        # CHANGED ORDER: The packing order is reversed to get correct right-to-left appearance
+        # NEW: ROM Source Toggle (rightmost)
+        self.rom_source_toggle = ctk.CTkSwitch(
+            toggle_frame,
+            text="Show All Games",
+            command=self.toggle_rom_source,
+            button_color=self.theme_colors["primary"],
+            button_hover_color=self.theme_colors["secondary"]
+        )
+        # Set initial state based on settings
+        if hasattr(self, 'rom_source_mode') and self.rom_source_mode == "database":
+            self.rom_source_toggle.select()
+        else:
+            self.rom_source_toggle.deselect()
         
+        self.rom_source_toggle.pack(side="right", padx=10)
+        
+        # Preview button 
         self.preview_button = ctk.CTkButton(
             toggle_frame,
             text="Preview Controls",
             command=self.show_preview,
-            fg_color=self.theme_colors["success"],  # Changed from primary to success (green)
-            hover_color="#218838",  # Darker green for hover
+            fg_color=self.theme_colors["success"],
+            hover_color="#218838",
             height=32
         )
         self.preview_button.pack(side="right", padx=10)
         
-        # 3. Hide buttons toggle (will appear to the left of XInput only toggle)
+        # Hide buttons toggle
         self.hide_buttons_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="Hide Preview Buttons",
@@ -1845,6 +2218,93 @@ class MAMEControlConfig(ctk.CTk):
             self.hide_buttons_toggle.deselect()
         
         self.hide_buttons_toggle.pack(side="right", padx=10)
+    
+    def toggle_rom_source(self):
+        """Toggle between physical ROMs and database ROMs"""
+        try:
+            # Update the mode based on toggle state
+            if self.rom_source_toggle.get():
+                self.rom_source_mode = "database"
+                print("Switched to database ROM mode")
+            else:
+                self.rom_source_mode = "physical"
+                print("Switched to physical ROM mode")
+            
+            # Load the appropriate ROM set
+            self.load_rom_set_for_current_mode()
+            
+            # Update the game list display
+            self.update_game_list_by_category()
+            
+            # Update stats
+            self.update_stats_label()
+            
+            # Clear current selection since ROM list changed
+            self.current_game = None
+            self.game_title.configure(text="Select a game")
+            
+            # Clear the control frame
+            for widget in self.control_frame.winfo_children():
+                widget.destroy()
+            
+            # Save the setting
+            self.save_settings()
+            
+            # Update status message
+            mode_text = "all games in database" if self.rom_source_mode == "database" else "physical ROMs"
+            self.update_status_message(f"Now showing {mode_text}")
+            
+        except Exception as e:
+            print(f"Error toggling ROM source: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def load_rom_set_for_current_mode(self):
+        """Load the appropriate ROM set based on current mode"""
+        try:
+            if self.rom_source_mode == "database":
+                # Load all parent ROMs from gamedata.json
+                self.load_database_roms()
+                # Use database ROMs as available ROMs
+                self.available_roms = self.database_roms.copy()
+                print(f"Loaded {len(self.available_roms)} database ROMs")
+            else:
+                # Load physical ROMs from mame\roms directory
+                self.scan_roms_directory()
+                print(f"Loaded {len(self.available_roms)} physical ROMs")
+                
+        except Exception as e:
+            print(f"Error loading ROM set: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def load_database_roms(self):
+        """Load all parent ROMs from gamedata.json (exclude clones)"""
+        try:
+            # Ensure gamedata is loaded
+            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                self.load_gamedata_json()
+            
+            self.database_roms = set()
+            
+            # Add all parent ROMs (those that aren't clones themselves)
+            for rom_name, game_data in self.gamedata_json.items():
+                # Skip if this ROM is a clone (has 'parent' key)
+                if 'parent' not in game_data:
+                    self.database_roms.add(rom_name)
+            
+            print(f"Loaded {len(self.database_roms)} parent ROMs from database")
+            
+            # Sample output for debugging
+            if len(self.database_roms) > 0:
+                sample_roms = list(self.database_roms)[:5]
+                print(f"Sample database ROMs: {sample_roms}")
+                
+        except Exception as e:
+            print(f"Error loading database ROMs: {e}")
+            import traceback
+            traceback.print_exc()
+            self.database_roms = set()
     
     # 2. Replace the create_split_view method with this version:
     def create_split_view(self):
@@ -5488,17 +5948,18 @@ class MAMEControlConfig(ctk.CTk):
             self.save_settings()
         
     def save_settings(self):
-        """Save current settings to the standard settings file"""
+        """Save current settings to the standard settings file - UPDATED with ROM source mode"""
         settings = {
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
             "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
             "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
             "show_button_names": getattr(self, 'show_button_names', True),
-            "use_xinput": getattr(self, 'use_xinput', True),
-            "xinput_only_mode": getattr(self, 'xinput_only_mode', True)  # Change to True
+            "input_mode": getattr(self, 'input_mode', 'xinput'),
+            "xinput_only_mode": getattr(self, 'xinput_only_mode', True),
+            "rom_source_mode": getattr(self, 'rom_source_mode', 'physical')  # NEW SETTING
         }
         
-        print(f"Debug - saving settings: {settings}")  # Add this debug line
+        print(f"Debug - saving settings: {settings}")
         
         try:
             if hasattr(self, 'settings_path'):
@@ -5586,6 +6047,69 @@ class MAMEControlConfig(ctk.CTk):
             'input_mode': self.input_mode
         }
 
+    def load_settings(self):
+        """Load settings from JSON file in settings directory - UPDATED with ROM source mode"""
+        # Set sensible defaults
+        self.preferred_preview_screen = 1
+        self.visible_control_types = ["BUTTON"]
+        self.hide_preview_buttons = False
+        self.show_button_names = True
+        self.input_mode = 'xinput'
+        self.xinput_only_mode = True
+        self.rom_source_mode = 'physical'  # NEW DEFAULT
+        
+        # Load custom settings if available
+        if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
+            try:
+                with open(self.settings_path, 'r') as f:
+                    settings = json.load(f)
+                    
+                # Load existing settings...
+                if 'preferred_preview_screen' in settings:
+                    self.preferred_preview_screen = settings['preferred_preview_screen']
+                    
+                if 'visible_control_types' in settings:
+                    if isinstance(settings['visible_control_types'], list):
+                        self.visible_control_types = settings['visible_control_types']
+                    
+                    if "BUTTON" not in self.visible_control_types:
+                        self.visible_control_types.append("BUTTON")
+
+                if 'hide_preview_buttons' in settings:
+                    self.hide_preview_buttons = bool(settings.get('hide_preview_buttons', False))
+                    
+                if 'show_button_names' in settings:
+                    self.show_button_names = bool(settings.get('show_button_names', True))
+                    
+                if 'input_mode' in settings:
+                    self.input_mode = settings.get('input_mode', 'xinput')
+                    if self.input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
+                        self.input_mode = 'xinput'
+                    
+                if 'xinput_only_mode' in settings:
+                    self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
+                
+                # NEW: Load ROM source mode setting
+                if 'rom_source_mode' in settings:
+                    self.rom_source_mode = settings.get('rom_source_mode', 'physical')
+                    if self.rom_source_mode not in ['physical', 'database']:
+                        self.rom_source_mode = 'physical'
+                    
+            except Exception as e:
+                print(f"Error loading settings: {e}")
+        else:
+            # Create settings file with defaults
+            self.save_settings()
+        
+        return {
+            'preferred_preview_screen': self.preferred_preview_screen,
+            'visible_control_types': self.visible_control_types,
+            'hide_preview_buttons': self.hide_preview_buttons,
+            'show_button_names': self.show_button_names,
+            'input_mode': self.input_mode,
+            'rom_source_mode': self.rom_source_mode  # NEW
+        }
+    
     def save_settings(self):
         """Save current settings to the standard settings file"""
         settings = {
@@ -6251,9 +6775,12 @@ class MAMEControlConfig(ctk.CTk):
         return result
 
     def update_stats_label(self):
-        """Update the statistics label with corrected categorization"""
+        """Update the statistics label with corrected categorization - UPDATED for ROM source mode"""
         try:
             total_roms = len(self.available_roms)
+            
+            # Add mode indicator to stats
+            mode_text = "Database" if self.rom_source_mode == "database" else "Physical"
             
             # Categorize all ROMs properly
             with_controls = 0
@@ -6284,20 +6811,24 @@ class MAMEControlConfig(ctk.CTk):
                 if categories['has_cfg_file']:
                     with_cfg_files += 1
             
-            # Format the stats with clearer labels
+            # Format the stats with mode indicator
             stats = (
+                f"Mode: {mode_text}\n"
                 f"ROMs: {total_roms}\n"
                 f"With Controls: {with_controls} ({with_controls/max(total_roms, 1)*100:.1f}%)\n"
                 f"Missing Controls: {missing_controls}\n"
-                f"Custom Actions: {custom_controls}\n"  # Meaningful action names
-                f"Generic Controls: {generic_controls}\n"  # Basic "Button 1" etc.
-                f"Clone ROMs: {clone_roms}\n"
+                f"Custom Actions: {custom_controls}\n"
+                f"Generic Controls: {generic_controls}\n"
             )
+            
+            # Only show clone count in physical mode (database mode shows parents only)
+            if self.rom_source_mode == "physical":
+                stats += f"Clone ROMs: {clone_roms}\n"
             
             self.stats_label.configure(text=stats)
             
             # Debug output
-            print(f"Stats: Total={total_roms}, WithControls={with_controls}, "
+            print(f"Stats ({mode_text}): Total={total_roms}, WithControls={with_controls}, "
                 f"Missing={missing_controls}, Custom={custom_controls}, "
                 f"Generic={generic_controls}, CFG={with_cfg_files}, Clones={clone_roms}")
             
