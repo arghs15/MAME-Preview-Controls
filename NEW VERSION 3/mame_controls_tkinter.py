@@ -26,25 +26,21 @@ from mame_utils import (
 # Add this import after your existing imports
 from mame_data_utils import (
     # Data loading functions
-    load_gamedata_json, get_game_data, get_game_data_from_db, 
+    load_gamedata_json, get_game_data,
     build_gamedata_db, check_db_update_needed, rom_exists_in_db,
     
     # Config parsing functions
     load_custom_configs, load_default_config, parse_cfg_controls,
     
     # Mapping conversion functions
-    convert_mapping, convert_single_mapping, extract_keycode_from_mapping, format_keycode_display,
-    get_friendly_xinput_name, get_friendly_dinput_name, format_joycode_display,
-    format_mapping_display,
+    convert_mapping,
     
     # Data processing functions
     update_game_data_with_custom_mappings, filter_xinput_controls,
     scan_roms_directory,
     
     # Cache management functions
-    clean_cache_directory, perform_cache_clear,
-
-    identify_generic_controls, find_unmatched_roms, categorize_roms_by_controls
+    clean_cache_directory
 )
 
 # Theme settings for the application
@@ -1090,71 +1086,6 @@ class MAMEControlConfig(ctk.CTk):
         # Add an explicit exit call
         import sys
         sys.exit(0)
-
-    def parse_default_cfg(self, cfg_content):
-        """Parse default.cfg to extract all control mappings focusing on XInput format"""
-        controls = {}
-        original_controls = {}  # Store original mappings for KEYCODE mode
-        
-        try:
-            import xml.etree.ElementTree as ET
-            from io import StringIO
-
-            def get_preferred_mapping(mapping_str: str) -> str:
-                if not mapping_str:
-                    return "NONE"
-                parts = [p.strip() for p in mapping_str.strip().split("OR")]
-                for part in parts:
-                    if "XINPUT" in part:
-                        return part
-                for part in parts:
-                    if "JOYCODE" in part:
-                        xinput = convert_mapping(part, "xinput")
-                        return xinput if xinput.startswith("XINPUT") else part
-                return parts[0] if parts else mapping_str.strip()
-
-            tree = ET.parse(StringIO(cfg_content), ET.XMLParser(encoding='utf-8'))
-            root = tree.getroot()
-            input_elem = root.find('.//input')
-
-            if input_elem is not None:
-                for port in input_elem.findall('port'):
-                    ctype = port.get('type')
-                    if not ctype:
-                        continue
-
-                    std = port.find('./newseq[@type="standard"]')
-                    inc = port.find('./newseq[@type="increment"]')
-                    dec = port.find('./newseq[@type="decrement"]')
-
-                    # Store original mapping for KEYCODE mode
-                    original_mapping = None
-
-                    if inc is not None and dec is not None and inc.text and dec.text:
-                        original_mapping = f"{inc.text.strip()} ||| {dec.text.strip()}"
-                        inc_map = get_preferred_mapping(inc.text.strip())
-                        dec_map = get_preferred_mapping(dec.text.strip())
-                        controls[ctype] = f"{inc_map} ||| {dec_map}"
-                    elif inc is not None and inc.text:
-                        original_mapping = inc.text.strip()
-                        controls[ctype] = get_preferred_mapping(inc.text.strip())
-                    elif dec is not None and dec.text:
-                        original_mapping = dec.text.strip()
-                        controls[ctype] = get_preferred_mapping(dec.text.strip())
-                    elif std is not None and std.text:
-                        original_mapping = std.text.strip()
-                        controls[ctype] = get_preferred_mapping(std.text.strip())
-
-                    # Store the original mapping for KEYCODE mode
-                    if original_mapping:
-                        original_controls[ctype] = original_mapping
-
-        except Exception as e:
-            print(f"Error parsing default.cfg: {e}")
-        
-        # Store both processed and original mappings
-        self.original_default_controls = original_controls
-        return controls
 
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen state"""
