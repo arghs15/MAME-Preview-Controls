@@ -192,6 +192,7 @@ class MAMEControlConfig(ctk.CTk):
         self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
         self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
         self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
+        self.SHOW_HIDE_BUTTONS_TOGGLE = False  # NEW: Set to False to hide the toggle
         
         # Add ROM source mode tracking
         self.rom_source_mode = "physical"  # "physical" or "database"
@@ -293,7 +294,7 @@ class MAMEControlConfig(ctk.CTk):
         self.after(100, self._load_essential_data)
 
     def _load_essential_data(self):
-        """Load essential data synchronously"""
+        """Load essential data synchronously - FIXED"""
         try:
             # Update message
             self.update_splash_message("Scanning ROMs directory...")
@@ -304,18 +305,19 @@ class MAMEControlConfig(ctk.CTk):
             # Update message
             self.update_splash_message("Updating game list...")
             
-            # Update the game list
+            # Update the game list (this will auto-select first ROM)
             if hasattr(self, 'game_listbox'):
-                self.update_game_list_by_category()
+                self.update_game_list_by_category()  # ← This already calls select_first_rom!
             
             # Update stats
             self.update_stats_label()
             
-            # Select first ROM
-            self.select_first_rom()
+            # REMOVE THIS LINE - it's causing the double call:
+            # self.select_first_rom()  # ← DELETE THIS LINE
             
             # Schedule secondary data loading
             self.after(100, self._load_secondary_data)
+            
         except Exception as e:
             traceback.print_exc()
             self.update_splash_message(f"Error: {str(e)}")
@@ -324,7 +326,7 @@ class MAMEControlConfig(ctk.CTk):
             self.after(1000, self._load_secondary_data)
 
     def _load_secondary_data(self):
-        """Load secondary data synchronously to avoid async issues - UPDATED to load ROM set"""
+        """Load secondary data synchronously to avoid async issues - FIXED to not reload ROMs"""
         try:
             self.update_splash_message("Loading default controls...")
             
@@ -345,9 +347,9 @@ class MAMEControlConfig(ctk.CTk):
                 self.update_splash_message("Building database...")
                 build_gamedata_db(self.gamedata_json, self.db_path)
             
-            # NEW: Load the appropriate ROM set based on saved setting
-            self.update_splash_message("Loading ROM collection...")
-            self.load_rom_set_for_current_mode()
+            # REMOVED: Don't reload ROM set here - it's already loaded in _load_essential_data
+            # self.update_splash_message("Loading ROM collection...")
+            # self.load_rom_set_for_current_mode()  # ← REMOVE THIS LINE
             
             # Move directly to finish loading
             self.after(100, self._finish_loading)
@@ -2094,6 +2096,17 @@ class MAMEControlConfig(ctk.CTk):
         toggle_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
         toggle_frame.pack(side="right", padx=20, pady=10)
         
+        # Preview button 
+        self.preview_button = ctk.CTkButton(
+            toggle_frame,
+            text="Preview Controls",
+            command=self.show_preview,
+            fg_color=self.theme_colors["success"],
+            hover_color="#218838",
+            height=32
+        )
+        self.preview_button.pack(side="right", padx=10)
+        
         # NEW: ROM Source Toggle (rightmost)
         self.rom_source_toggle = ctk.CTkSwitch(
             toggle_frame,
@@ -2110,81 +2123,108 @@ class MAMEControlConfig(ctk.CTk):
         
         self.rom_source_toggle.pack(side="right", padx=10)
         
-        # Preview button 
-        self.preview_button = ctk.CTkButton(
-            toggle_frame,
-            text="Preview Controls",
-            command=self.show_preview,
-            fg_color=self.theme_colors["success"],
-            hover_color="#218838",
-            height=32
-        )
-        self.preview_button.pack(side="right", padx=10)
-        
-        # Hide buttons toggle
-        self.hide_buttons_toggle = ctk.CTkSwitch(
-            toggle_frame,
-            text="Hide Preview Buttons",
-            command=self.toggle_hide_preview_buttons,
-            button_color=self.theme_colors["primary"],
-            button_hover_color=self.theme_colors["secondary"]
-        )
-        # Set initial state based on settings
-        if hasattr(self, 'hide_preview_buttons') and self.hide_preview_buttons:
-            self.hide_buttons_toggle.select()
-        else:
-            self.hide_buttons_toggle.deselect()
-        
-        self.hide_buttons_toggle.pack(side="right", padx=10)
+        # Only show hide buttons toggle if feature is enabled
+        if getattr(self, 'SHOW_HIDE_BUTTONS_TOGGLE', True):  # Default to True for backwards compatibility
+            # Hide buttons toggle
+            self.hide_buttons_toggle = ctk.CTkSwitch(
+                toggle_frame,
+                text="Hide Preview Buttons",
+                command=self.toggle_hide_preview_buttons,
+                button_color=self.theme_colors["primary"],
+                button_hover_color=self.theme_colors["secondary"]
+            )
+            # Set initial state based on settings
+            if hasattr(self, 'hide_preview_buttons') and self.hide_preview_buttons:
+                self.hide_buttons_toggle.select()
+            else:
+                self.hide_buttons_toggle.deselect()
+            
+            self.hide_buttons_toggle.pack(side="right", padx=10)
     
     def toggle_rom_source(self):
-        """Toggle between physical ROMs and database ROMs"""
+        """Toggle between physical ROMs and database ROMs - FIXED VERSION"""
         try:
-            # Update the mode based on toggle state
+            # Cancel any pending display updates
+            if hasattr(self, '_display_timer') and self._display_timer:
+                self.after_cancel(self._display_timer)
+                self._display_timer = None
+            
+            old_mode = self.rom_source_mode
             if self.rom_source_toggle.get():
                 self.rom_source_mode = "database"
-                print("Switched to database ROM mode")
             else:
                 self.rom_source_mode = "physical"
-                print("Switched to physical ROM mode")
             
-            # Clear current selection FIRST to avoid flash
+            if old_mode == self.rom_source_mode:
+                return
+            
+            # NEW: Clear current selection to prevent selection events
             self.current_game = None
-            self.game_title.configure(text="Loading...")
             
-            # Clear the control frame immediately
-            for widget in self.control_frame.winfo_children():
-                widget.destroy()
+            # NEW: Temporarily disable selection events
+            if hasattr(self, 'game_listbox'):
+                # Clear listbox selection to prevent events
+                self.game_listbox.selection_clear(0, tk.END)
+                
+                # Temporarily unbind selection events
+                self.game_listbox.unbind("<ButtonRelease-1>")
+                self.game_listbox.unbind("<Button-3>")
+                self.game_listbox.unbind("<Double-Button-1>")
             
-            # Force UI update to show cleared state
-            self.update_idletasks()
-            
-            # Load the appropriate ROM set
+            # Load ROM set
             self.load_rom_set_for_current_mode()
             
-            # Update the game list display and auto-select first ROM in one go
-            self.update_game_list_by_category()
+            # Update game list WITHOUT auto-selecting first ROM
+            self.update_game_list_by_category(auto_select_first=False)
             
-            # Select first ROM immediately after list update (no delay needed)
+            # Re-bind selection events
+            if hasattr(self, 'game_listbox'):
+                self.game_listbox.bind("<ButtonRelease-1>", self.on_rom_click_release)
+                self.game_listbox.bind("<Button-3>", self.show_game_context_menu_listbox)
+                self.game_listbox.bind("<Double-Button-1>", self.on_game_double_click)
+            
+            # Schedule single display update
             if hasattr(self, 'available_roms') and self.available_roms:
-                self.select_first_rom()
+                self._display_timer = self.after(150, self._delayed_first_rom_select)
             else:
+                self.current_game = None
                 self.game_title.configure(text="No ROMs available")
+                for widget in self.control_frame.winfo_children():
+                    widget.destroy()
             
-            # Update stats
             self.update_stats_label()
-            
-            # Save the setting
             self.save_settings()
             
-            # Update status message
             mode_text = "all games in database" if self.rom_source_mode == "database" else "physical ROMs"
             self.update_status_message(f"Now showing {mode_text}")
             
         except Exception as e:
             print(f"Error toggling ROM source: {e}")
-            import traceback
-            traceback.print_exc()
+    
+    def _delayed_first_rom_select(self):
+        """Select first ROM with single display update - NO FLASH VERSION"""
+        try:
+            if hasattr(self, 'game_list_data') and self.game_list_data:
+                first_rom, _ = self.game_list_data[0]
+                
+                # Check if this is the same ROM already selected
+                if hasattr(self, 'current_game') and self.current_game == first_rom:
+                    print(f"ROM {first_rom} already selected, skipping display update")
+                    return
+                
+                self.current_game = first_rom
+                
+                # Update listbox selection
+                self.game_listbox.selection_clear(0, tk.END)
+                self.game_listbox.selection_set(0)
+                self.game_listbox.activate(0)
+                self.game_listbox.see(0)
+                
+                # GENTLE: Only update if we actually need to
+                self.display_game_info(first_rom)
+                print(f"SINGLE display_game_info call for {first_rom}")
+        except Exception as e:
+            print(f"Error in delayed ROM select: {e}")
     
     def load_rom_set_for_current_mode(self):
         """Load the appropriate ROM set based on current mode"""
@@ -2651,8 +2691,6 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self, auto_select_first=True):
-        """Update game list based on current sidebar category selection with optional auto-selection"""
-        # Remember currently selected ROM if any (but only if we're not auto-selecting)
         previously_selected_rom = None
         if not auto_select_first and hasattr(self, 'current_game'):
             previously_selected_rom = self.current_game
@@ -2996,8 +3034,8 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Warning: Could not save cache for {rom_name}: {e}")
     
     def display_game_info(self, rom_name, processed_data=None):
-        """Display game information and controls - optimized to avoid duplicate processing"""
-        try:
+        """Display game information and controls - WITH STARTUP GUARD"""
+        try:     
             print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}")
             
             # Update toolbar status when a new ROM is selected
@@ -6100,6 +6138,7 @@ class MAMEControlConfig(ctk.CTk):
         """Select the first available ROM in the listbox"""
         # Check if we have any ROMs
         if not self.available_roms:
+            print("No available ROMs, exiting select_first_rom")
             return
         
         # Make sure the game_list_data is populated
@@ -7967,19 +8006,38 @@ class MAMEControlConfig(ctk.CTk):
             return False
     
     def update_status_message(self, message, timeout=5000):
-        """Update the status bar message with optional timeout"""
+        """Update the status bar message with optional timeout - FIXED"""
         try:
+            # Check if status_message widget exists
+            if not hasattr(self, 'status_message'):
+                print(f"Status message widget not found, message was: {message}")
+                return False
+                
+            # Check if the widget still exists (not destroyed)
+            if not hasattr(self.status_message, 'configure'):
+                print(f"Status message widget destroyed, message was: {message}")
+                return False
+            
             # Update message text
             self.status_message.configure(text=message)
             
             # Clear after timeout (if specified)
             if timeout > 0:
-                self.after(timeout, lambda: self.status_message.configure(text="Ready"))
+                self.after(timeout, lambda: self._clear_status_message_safe())
             
             return True
         except Exception as e:
             print(f"Error updating status message: {e}")
+            print(f"Message was: {message}")
             return False
+    
+    def _clear_status_message_safe(self):
+        """Safely clear status message"""
+        try:
+            if hasattr(self, 'status_message') and hasattr(self.status_message, 'configure'):
+                self.status_message.configure(text="Ready")
+        except:
+            pass  # Ignore errors when clearing
 
 if __name__ == "__main__":
     try:
