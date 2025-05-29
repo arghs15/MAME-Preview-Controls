@@ -2097,16 +2097,17 @@ class MAMEControlConfig(ctk.CTk):
         self.status_frame = ctk.CTkFrame(self.sidebar, fg_color=self.theme_colors["card_bg"], corner_radius=6, height=80)
         self.status_frame.pack(fill="x", padx=15, pady=(20, 20), side="bottom")
         
-        # Stats label in the status frame
+        # CHANGE TO - add fixed width:
         self.stats_label = ctk.CTkLabel(
             self.status_frame, 
             text="Loading...",
             font=("Arial", 12), 
             text_color=self.theme_colors["text"],
             justify="left",
-            anchor="w"
+            anchor="w",
+            width=200  # Fixed width prevents text length from affecting layout
         )
-        self.stats_label.pack(padx=10, pady=10, fill="both", expand=True)
+        self.stats_label.pack(padx=10, pady=10, fill="y")  # Remove fill="both", expand=True
         
         # Set initial active tab - but don't call update_game_list_by_category yet
         # (this will happen during load_all_data)
@@ -2216,22 +2217,31 @@ class MAMEControlConfig(ctk.CTk):
                 self.rom_source_mode = "physical"
                 print("Switched to physical ROM mode")
             
+            # Clear current selection FIRST to avoid flash
+            self.current_game = None
+            self.game_title.configure(text="Loading...")
+            
+            # Clear the control frame immediately
+            for widget in self.control_frame.winfo_children():
+                widget.destroy()
+            
+            # Force UI update to show cleared state
+            self.update_idletasks()
+            
             # Load the appropriate ROM set
             self.load_rom_set_for_current_mode()
             
-            # Update the game list display
+            # Update the game list display and auto-select first ROM in one go
             self.update_game_list_by_category()
+            
+            # Select first ROM immediately after list update (no delay needed)
+            if hasattr(self, 'available_roms') and self.available_roms:
+                self.select_first_rom()
+            else:
+                self.game_title.configure(text="No ROMs available")
             
             # Update stats
             self.update_stats_label()
-            
-            # Clear current selection since ROM list changed
-            self.current_game = None
-            self.game_title.configure(text="Select a game")
-            
-            # Clear the control frame
-            for widget in self.control_frame.winfo_children():
-                widget.destroy()
             
             # Save the setting
             self.save_settings()
@@ -2324,7 +2334,6 @@ class MAMEControlConfig(ctk.CTk):
         
         # Register resize event handler
         self.bind("<Configure>", self.on_window_resize)
-
 
     # 4. Update on_window_resize method:
     def on_window_resize(self, event=None):
@@ -2710,10 +2719,12 @@ class MAMEControlConfig(ctk.CTk):
             hover_color=self.theme_colors["button_hover"]
         ).pack(pady=(10, 0))
 
-    def update_game_list_by_category(self):
-        """Update game list based on current sidebar category selection with FIXED categorization"""
-        # Remember currently selected ROM if any
-        previously_selected_rom = self.current_game if hasattr(self, 'current_game') else None
+    def update_game_list_by_category(self, auto_select_first=True):
+        """Update game list based on current sidebar category selection with optional auto-selection"""
+        # Remember currently selected ROM if any (but only if we're not auto-selecting)
+        previously_selected_rom = None
+        if not auto_select_first and hasattr(self, 'current_game'):
+            previously_selected_rom = self.current_game
         
         # Get all ROMs
         available_roms = sorted(self.available_roms)
@@ -2723,7 +2734,7 @@ class MAMEControlConfig(ctk.CTk):
         missing_controls = []
         with_custom_config = []
         generic_controls = []
-        custom_actions_roms = []  # FIXED: This will now properly identify custom controls
+        custom_actions_roms = []
         clone_roms = []
         
         # NEW CATEGORIES
@@ -2769,7 +2780,7 @@ class MAMEControlConfig(ctk.CTk):
                 if categories['has_generic_controls']:
                     generic_controls.append(rom)
                 elif categories['has_custom_controls']:
-                    custom_actions_roms.append(rom)  # This will now properly capture analog/directional controls
+                    custom_actions_roms.append(rom)
                 
                 # Get game data for additional categorization
                 from mame_data_utils import get_game_data
@@ -2824,7 +2835,7 @@ class MAMEControlConfig(ctk.CTk):
             else:
                 missing_controls.append(rom)
         
-        # Filter list based on current view (rest of the method remains the same)
+        # Filter list based on current view
         display_roms = []
         if self.current_view == "all":
             display_roms = available_roms
@@ -2835,11 +2846,11 @@ class MAMEControlConfig(ctk.CTk):
         elif self.current_view == "custom_config":
             display_roms = with_custom_config
         elif self.current_view == "generic":
-            display_roms = generic_controls  # Now properly filtered
+            display_roms = generic_controls
         elif self.current_view == "clones":
             display_roms = sorted(clone_roms)
         elif self.current_view == "custom_actions":
-            display_roms = custom_actions_roms  # Now properly includes analog/directional
+            display_roms = custom_actions_roms
         elif self.current_view == "no_buttons":
             display_roms = no_buttons_roms
         elif self.current_view == "specialized":
@@ -2913,14 +2924,29 @@ class MAMEControlConfig(ctk.CTk):
         for item in list_display_items:
             self.game_listbox.insert(tk.END, item)
         
-        # Try to select the previously selected ROM if it's still in the list
-        if previously_selected_rom:
+        # Handle ROM selection
+        if auto_select_first and display_roms:
+            # Auto-select first ROM when switching categories
+            first_rom, _ = self.game_list_data[0]
+            self.current_game = first_rom
+            self.selected_line = 1
+            
+            # Select in listbox
+            self.game_listbox.selection_clear(0, tk.END)
+            self.game_listbox.selection_set(0)
+            self.game_listbox.see(0)
+            
+            # Display ROM info after a brief delay to ensure UI is ready
+            self.after(50, lambda: self.display_game_info(first_rom))
+            
+        elif previously_selected_rom:
+            # Try to select the previously selected ROM if it's still in the list
             for i, (rom_name, _) in enumerate(self.game_list_data):
                 if rom_name == previously_selected_rom:
                     # We found the previously selected ROM, select it again
                     self.game_listbox.selection_clear(0, tk.END)
                     self.game_listbox.selection_set(i)
-                    self.game_listbox.see(i)  # Ensure it's visible
+                    self.game_listbox.see(i)
                     self.current_game = rom_name
                     self.selected_line = i + 1
                     
@@ -2935,9 +2961,8 @@ class MAMEControlConfig(ctk.CTk):
             "missing": "ROMs Missing Controls",
             "custom_config": "ROMs with Custom Config",
             "generic": "ROMs with Generic Controls",
-            "custom_actions": "ROMs with Custom Actions",  # NEW
+            "custom_actions": "ROMs with Custom Actions",
             "clones": "Clone ROMs",
-            # NEW CATEGORIES
             "no_buttons": "ROMs with No Buttons",
             "specialized": "Specialized Input",
             "analog": "Analog Controls",
