@@ -325,8 +325,66 @@ class MAMEControlConfig(ctk.CTk):
             # Still try to continue
             self.after(1000, self._load_secondary_data)
 
+    def debug_database_contents(self):
+        """Debug what's actually in the database vs JSON"""
+        import sqlite3
+        
+        print(f"\n=== DATABASE DEBUG ===")
+        print(f"Database path: {self.db_path}")
+        print(f"Database exists: {os.path.exists(self.db_path)}")
+        
+        if not os.path.exists(self.db_path):
+            print("❌ Database file doesn't exist!")
+            return
+        
+        file_size = os.path.getsize(self.db_path)
+        print(f"Database size: {file_size:,} bytes")
+        
+        if file_size < 1000:
+            print("⚠️ Database file is very small - likely empty!")
+        
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check tables exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            print(f"Tables in database: {tables}")
+            
+            if 'games' not in tables:
+                print("❌ 'games' table missing!")
+                conn.close()
+                return
+            
+            # Count total games in database
+            cursor.execute("SELECT COUNT(*) FROM games")
+            db_game_count = cursor.fetchone()[0]
+            print(f"Games in database: {db_game_count}")
+            
+            # Count games in JSON
+            json_game_count = len(self.gamedata_json) if hasattr(self, 'gamedata_json') else 0
+            print(f"Games in JSON: {json_game_count}")
+            
+            if db_game_count == 0:
+                print("❌ Database has no games - building failed!")
+                conn.close()
+                return
+            
+            if json_game_count > 0 and db_game_count < json_game_count / 2:
+                print("⚠️ Database has significantly fewer games than JSON!")
+            
+            conn.close()
+            
+        except Exception as e:
+            print(f"❌ Error checking database: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Replace your _load_secondary_data method with this corrected version:
+
     def _load_secondary_data(self):
-        """Load secondary data synchronously to avoid async issues - FIXED to not reload ROMs"""
+        """Load secondary data with proper database checking - NO FORCED REBUILD"""
         try:
             self.update_splash_message("Loading default controls...")
             
@@ -342,24 +400,67 @@ class MAMEControlConfig(ctk.CTk):
             
             self.update_splash_message("Checking database...")
             
-            # Check and build database if needed
-            if check_db_update_needed(self.gamedata_path, self.db_path):
+            # Ensure gamedata.json is loaded
+            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                print("Loading gamedata.json for database operations...")
+                self.load_gamedata_json()
+            
+            # PROPER CHECK: Only rebuild if actually needed
+            needs_rebuild = False
+            
+            # Check if database file exists
+            if not os.path.exists(self.db_path):
+                print("Database file doesn't exist, will create new one")
+                needs_rebuild = True
+            else:
+                # Check if database has valid schema
+                try:
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM games")
+                    game_count = cursor.fetchone()[0]
+                    conn.close()
+                    
+                    if game_count == 0:
+                        print("Database exists but is empty, rebuilding...")
+                        needs_rebuild = True
+                    else:
+                        print(f"Database found with {game_count} games")
+                        # Check timestamps
+                        if check_db_update_needed(self.gamedata_path, self.db_path):
+                            print("gamedata.json is newer than database, rebuilding...")
+                            needs_rebuild = True
+                        else:
+                            print("Database is up to date, no rebuild needed")
+                            
+                except sqlite3.Error as e:
+                    print(f"Database appears corrupted ({e}), rebuilding...")
+                    needs_rebuild = True
+            
+            # Only rebuild if actually needed
+            if needs_rebuild:
                 self.update_splash_message("Building database...")
-                build_gamedata_db(self.gamedata_json, self.db_path)
+                print(f"Building database with {len(self.gamedata_json)} game entries...")
+                
+                if self.gamedata_json:
+                    from mame_data_utils import build_gamedata_db
+                    success = build_gamedata_db(self.gamedata_json, self.db_path)
+                    if success:
+                        print("✅ Database build completed successfully")
+                    else:
+                        print("❌ Database build failed")
+                else:
+                    print("❌ ERROR: No gamedata available for database building!")
             
-            # REMOVED: Don't reload ROM set here - it's already loaded in _load_essential_data
-            # self.update_splash_message("Loading ROM collection...")
-            # self.load_rom_set_for_current_mode()  # ← REMOVE THIS LINE
-            
-            # Move directly to finish loading
+            # Move to finish loading
             self.after(100, self._finish_loading)
             
         except Exception as e:
             print(f"Error in secondary data loading: {e}")
             import traceback
             traceback.print_exc()
-            # Still try to continue
             self.after(500, self._finish_loading)
+
 
     def _load_default_config_wrapper(self):
         """Wrapper for loading default config"""
@@ -5053,7 +5154,12 @@ class MAMEControlConfig(ctk.CTk):
                 if hasattr(self, 'rom_data_cache'):
                     self.rom_data_cache = {}
                     print("Cleared ROM data cache to force refresh")
-                
+
+                # ADD THIS LINE - Clear processed cache too:
+                if hasattr(self, 'processed_cache'):
+                    self.processed_cache = {}
+                    print("Cleared processed cache to force refresh")
+
                 # Rebuild SQLite database if it's being used
                 if hasattr(self, 'db_path') and self.db_path:
                     print("Rebuilding SQLite database to reflect changes...")
@@ -5062,7 +5168,19 @@ class MAMEControlConfig(ctk.CTk):
                     
                 # Update sidebar categories
                 if hasattr(self, 'update_game_list_by_category'):
-                    self.update_game_list_by_category()
+                    # CHANGE THIS LINE - pass auto_select_first=False to prevent auto-selection
+                    self.update_game_list_by_category(auto_select_first=False)
+
+                # ADD: Preserve the current selection on the edited ROM
+                # Store the ROM we just edited
+                edited_rom = current_rom_name
+
+                # Schedule re-selection of the edited ROM after the list updates
+                self.after(100, lambda: self.reselect_rom_after_edit(edited_rom))
+
+                # Force refresh current game display (keep this existing line)
+                if hasattr(self, 'current_game') and self.current_game:
+                    self.after(200, lambda: self.display_game_info(self.current_game))
                 
                 # Close the editor
                 editor.destroy()
@@ -5116,6 +5234,37 @@ class MAMEControlConfig(ctk.CTk):
         y = (editor.winfo_screenheight() // 2) - (height // 2)
         editor.geometry(f'{width}x{height}+{x}+{y}')
 
+    def reselect_rom_after_edit(self, rom_name):
+        """Reselect the specified ROM after editing to maintain selection"""
+        try:
+            if not hasattr(self, 'game_list_data') or not self.game_list_data:
+                return
+            
+            # Find the ROM in the current game list
+            for i, (current_rom, display_text) in enumerate(self.game_list_data):
+                if current_rom == rom_name:
+                    # Found it! Select this item in the listbox
+                    self.game_listbox.selection_clear(0, tk.END)
+                    self.game_listbox.selection_set(i)
+                    self.game_listbox.activate(i)
+                    self.game_listbox.see(i)  # Scroll to make it visible
+                    
+                    # Update current_game
+                    self.current_game = rom_name
+                    self.selected_line = i + 1
+                    
+                    print(f"Reselected edited ROM: {rom_name} at index {i}")
+                    return
+            
+            # If ROM not found in current list, it might be in a different category
+            print(f"ROM {rom_name} not found in current list - may be in different category")
+            
+        except Exception as e:
+            print(f"Error reselecting ROM after edit: {e}")
+            # Fallback - just ensure the ROM is still the current game
+            if hasattr(self, 'current_game'):
+                self.current_game = rom_name
+    
     def show_control_editor(self, rom_name, game_name=None):
         """Show enhanced editor for a game's controls by using the unified editor"""
         # Strip any prefixes (*, +, -) that might have been included in the ROM name

@@ -84,6 +84,8 @@ def check_db_update_needed(gamedata_path: str, db_path: str) -> bool:
     # Compare timestamps - only rebuild if gamedata is newer than database
     return gamedata_mtime > db_mtime
 
+# Replace build_gamedata_db in mame_data_utils.py with this clean version:
+
 def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
     """Build SQLite database from gamedata.json for faster lookups"""
     print("Building SQLite database...")
@@ -94,11 +96,14 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         return False
     
     try:
+        # Clear any cached connections to the old database
+        clear_database_cache()
+        
         # Create database connection
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Drop existing tables if they exist
+        # Drop existing tables if they exist (clean slate)
         cursor.execute("DROP TABLE IF EXISTS games")
         cursor.execute("DROP TABLE IF EXISTS game_controls")
         cursor.execute("DROP TABLE IF EXISTS clone_relationships")
@@ -147,62 +152,90 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         controls_inserted = 0
         clones_inserted = 0
         
+        # Track processed ROM names to avoid duplicates
+        processed_roms = set()
+        
         # Process main games first
         for rom_name, game_data in gamedata_json.items():
             # Skip entries that are clones (handled separately below)
             if 'parent' in game_data:
                 continue
+            
+            # Skip if we've already processed this ROM name
+            if rom_name in processed_roms:
+                continue
+            
+            try:
+                # Extract basic game properties
+                game_name = game_data.get('description', rom_name)
+                player_count = int(game_data.get('playercount', 1))
+                buttons = int(game_data.get('buttons', 0))
+                sticks = int(game_data.get('sticks', 0))
+                alternating = 1 if game_data.get('alternating', False) else 0
+                is_clone = 0  # Main entries aren't clones
+                parent_rom = None
                 
-            # Extract basic game properties
-            game_name = game_data.get('description', rom_name)
-            player_count = int(game_data.get('playercount', 1))
-            buttons = int(game_data.get('buttons', 0))
-            sticks = int(game_data.get('sticks', 0))
-            alternating = 1 if game_data.get('alternating', False) else 0
-            is_clone = 0  # Main entries aren't clones
-            parent_rom = None
-            
-            # Insert game data
-            cursor.execute(
-                "INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom)
-            )
-            games_inserted += 1
-            
-            # Extract and insert controls
-            if 'controls' in game_data:
-                _insert_controls(cursor, rom_name, game_data['controls'])
-                controls_inserted += len(game_data['controls'])
-            
-            # Process clones
-            if 'clones' in game_data and isinstance(game_data['clones'], dict):
-                for clone_name, clone_data in game_data['clones'].items():
-                    # Extract clone properties
-                    clone_game_name = clone_data.get('description', clone_name)
-                    clone_player_count = int(clone_data.get('playercount', player_count))  # Inherit from parent if not specified
-                    clone_buttons = int(clone_data.get('buttons', buttons))
-                    clone_sticks = int(clone_data.get('sticks', sticks))
-                    clone_alternating = 1 if clone_data.get('alternating', alternating) else 0
-                    
-                    # Insert clone as a game
-                    cursor.execute(
-                        "INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
-                        clone_alternating, 1, rom_name)  # is_clone=1, parent=rom_name
-                    )
+                # Insert game data with IGNORE to handle any remaining duplicates
+                cursor.execute(
+                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom)
+                )
+                
+                # Check if the insert actually happened
+                if cursor.rowcount > 0:
                     games_inserted += 1
-                    
-                    # Add clone relationship
-                    cursor.execute(
-                        "INSERT INTO clone_relationships VALUES (?, ?)",
-                        (rom_name, clone_name)
-                    )
-                    clones_inserted += 1
-                    
-                    # Extract and insert clone controls
-                    if 'controls' in clone_data:
-                        _insert_controls(cursor, clone_name, clone_data['controls'])
-                        controls_inserted += len(clone_data['controls'])
+                    processed_roms.add(rom_name)
+                
+                # Extract and insert controls
+                if 'controls' in game_data:
+                    _insert_controls(cursor, rom_name, game_data['controls'])
+                    controls_inserted += len(game_data['controls'])
+                
+                # Process clones
+                if 'clones' in game_data and isinstance(game_data['clones'], dict):
+                    for clone_name, clone_data in game_data['clones'].items():
+                        # Skip if clone name already processed
+                        if clone_name in processed_roms:
+                            continue
+                        
+                        try:
+                            # Extract clone properties
+                            clone_game_name = clone_data.get('description', clone_name)
+                            clone_player_count = int(clone_data.get('playercount', player_count))
+                            clone_buttons = int(clone_data.get('buttons', buttons))
+                            clone_sticks = int(clone_data.get('sticks', sticks))
+                            clone_alternating = 1 if clone_data.get('alternating', alternating) else 0
+                            
+                            # Insert clone as a game with IGNORE
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
+                                clone_alternating, 1, rom_name)  # is_clone=1, parent=rom_name
+                            )
+                            
+                            if cursor.rowcount > 0:
+                                games_inserted += 1
+                                processed_roms.add(clone_name)
+                                
+                                # Add clone relationship
+                                cursor.execute(
+                                    "INSERT OR IGNORE INTO clone_relationships VALUES (?, ?)",
+                                    (rom_name, clone_name)
+                                )
+                                clones_inserted += 1
+                                
+                                # Extract and insert clone controls
+                                if 'controls' in clone_data:
+                                    _insert_controls(cursor, clone_name, clone_data['controls'])
+                                    controls_inserted += len(clone_data['controls'])
+                                    
+                        except Exception as e:
+                            # Silently skip problematic clones
+                            continue
+                            
+            except Exception as e:
+                # Silently skip problematic games
+                continue
         
         # Commit changes and close connection
         conn.commit()
@@ -210,19 +243,25 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         
         elapsed_time = time.time() - start_time
         print(f"Database built in {elapsed_time:.2f}s with {games_inserted} games, {controls_inserted} controls")
-        return True
+        
+        # Clear cache again after building
+        clear_database_cache()
+        
+        return games_inserted > 0
         
     except sqlite3.Error as e:
         print(f"SQLite error: {e}")
         if 'conn' in locals():
             conn.close()
+        clear_database_cache()
         return False
     except Exception as e:
         print(f"ERROR building database: {e}")
         if 'conn' in locals():
             conn.close()
+        clear_database_cache()
         return False
-
+    
 def _insert_controls(cursor, rom_name: str, controls_dict: Dict):
     """Helper method to insert controls into the database"""
     for control_name, control_data in controls_dict.items():
@@ -251,27 +290,19 @@ def rom_exists_in_db(romname: str, db_path: str) -> bool:
 # Global connection cache to avoid repeated database connections
 _db_connection_cache = {}
 
+# In mame_data_utils.py - REPLACE the existing get_game_data_from_db function
 def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
-    """Get control data from SQLite database with optimized connection handling"""
+    """Get control data from SQLite database with proper connection handling"""
     
     if not os.path.exists(db_path):
         return None
     
-    # Use connection cache to avoid repeated connections
-    global _db_connection_cache
-    
-    if db_path not in _db_connection_cache:
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row  # Enable column access by name
-            _db_connection_cache[db_path] = conn
-        except Exception as e:
-            print(f"Database connection error: {e}")
-            return None
-    
-    conn = _db_connection_cache[db_path]
-    
+    # DON'T use connection caching - create fresh connection each time
+    # This prevents issues with stale connections to rebuilt databases
+    conn = None
     try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row  # Enable column access by name
         cursor = conn.cursor()
         
         # Single optimized query with JOIN to get all data at once
@@ -296,8 +327,10 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
             
             if parent_result:
                 # Recursively get parent data
+                conn.close()
                 return get_game_data_from_db(parent_result['parent_rom'], db_path)
             
+            conn.close()
             return None
         
         # Process all rows at once (more efficient than multiple queries)
@@ -368,16 +401,49 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
                 'labels': p2_controls
             })
         
+        conn.close()
         return game_data
         
     except sqlite3.Error as e:
         print(f"Database error: {e}")
+        if conn:
+            conn.close()
         return None
+
+# Also UPDATE the cleanup_database_connections function:
+
+def cleanup_database_connections():
+    """Clean up cached database connections - UPDATED"""
+    global _db_connection_cache
     
+    for conn in _db_connection_cache.values():
+        try:
+            conn.close()
+        except:
+            pass
+    _db_connection_cache.clear()
+    print("Cleaned up database connections")
+
+# ADD this new function to force cache clearing when database is rebuilt:
+
+def clear_database_cache():
+    """Force clear database connection cache - call this after rebuilding database"""
+    global _db_connection_cache
+    
+    for conn in _db_connection_cache.values():
+        try:
+            conn.close()
+        except:
+            pass
+    _db_connection_cache.clear()
+    print("Forced database connection cache clear")
+    
+# Replace the get_game_data function in mame_data_utils.py with this clean version:
+
 def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict, 
                   db_path: str = None, rom_data_cache: Dict = None) -> Optional[Dict]:
     """
-    Get game data with optimized caching and single database hit
+    Get game data with optimized caching and single database hit - NO DEBUG
     """
     # Always check cache first (fastest path)
     if rom_data_cache and romname in rom_data_cache:
@@ -394,7 +460,7 @@ def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict,
                 rom_data_cache[romname] = result
             return result
     
-    # Fallback to JSON lookup
+    # Fallback to JSON lookup (silently, no debug messages)
     if romname in gamedata_json:
         result = _convert_gamedata_json_to_standard_format(
             romname, gamedata_json[romname], gamedata_json, parent_lookup
@@ -418,6 +484,7 @@ def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict,
         
     return result
 
+# Also update the data loading function in mame_data_utils.py
 def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
                                             gamedata_json: Dict, parent_lookup: Dict) -> Dict:
     """Convert gamedata.json format to standard game data format - optimized"""
@@ -431,7 +498,9 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         'mirrored': False,
         'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
         'players': [],
-        'source': 'gamedata.json'
+        'source': 'gamedata.json',
+        # NEW: Add mappings information
+        'mappings': game_data.get('mappings', [])
     }
     
     # Find controls efficiently
@@ -479,7 +548,7 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
             p1_controls.sort(key=lambda x: x['name'])
             converted_data['players'].append({
                 'number': 1,
-                'numButtons': int(game_data.get('buttons', 1)),
+                'numButtons': int(game_data.get('buttons', 1)),  
                 'labels': p1_controls
             })
     
