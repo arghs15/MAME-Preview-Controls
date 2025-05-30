@@ -1310,8 +1310,8 @@ class MAMEControlConfig(ctk.CTk):
             # Restart app button
             self.restart_button = ctk.CTkButton(
                 right_section,
-                text="Restart App",
-                command=self.restart_application,
+                text="Refresh Data",  # Changed from "Restart App"
+                command=self.restart_application,  # Keep the same command
                 width=100,
                 height=34,
                 font=("Arial", 12),
@@ -1509,34 +1509,108 @@ class MAMEControlConfig(ctk.CTk):
             raise Exception("No suitable editor found on the system")
         except Exception as e:
             raise Exception(f"Unexpected error opening file: {e}")
-
+    
     def restart_application(self):
-        """Restart the application"""
+        """Refresh the application data without restarting"""
         try:
+            # Create splash window using existing method
+            self.splash_window = self.create_splash_window()
+            self.update_splash_message("Refreshing application data...")
             
-            # Save current settings before restart
-            self.save_settings()
+            # Clear all caches
+            if hasattr(self, 'rom_data_cache'):
+                self.rom_data_cache.clear()
+            if hasattr(self, 'processed_cache'):
+                self.processed_cache.clear()
             
-            # Clean shutdown
-            self.cleanup_before_exit()
+            # Update splash message
+            self.update_splash_message("Reloading configurations...")
             
-            # Restart the application
-            import subprocess
-            import sys
+            # Reload default controls
+            self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
+            print(f"Reloaded {len(self.default_controls)} default controls")
             
-            if getattr(sys, 'frozen', False):
-                # Running as compiled executable
-                subprocess.Popen([sys.executable] + sys.argv[1:])
-            else:
-                # Running as script
-                subprocess.Popen([sys.executable] + sys.argv)
+            # Reload custom configs
+            self.custom_configs = load_custom_configs(self.mame_dir)
+            print(f"Reloaded {len(self.custom_configs)} custom configs")
             
-            # Exit current instance
-            self.destroy()
-            sys.exit(0)
-                
+            # Update splash message
+            self.update_splash_message("Reloading game database...")
+            
+            # Reload gamedata.json
+            self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
+            print(f"Reloaded gamedata.json with {len(self.gamedata_json)} entries")
+            
+            # Update splash message
+            self.update_splash_message("Rebuilding database...")
+            
+            # Check if database needs rebuilding
+            if check_db_update_needed(self.gamedata_path, self.db_path):
+                print("Rebuilding database...")
+                build_gamedata_db(self.gamedata_json, self.db_path)
+            
+            # Update splash message
+            self.update_splash_message("Scanning ROMs...")
+            
+            # Rescan available ROMs
+            self.available_roms = scan_roms_directory(self.mame_dir)
+            print(f"Found {len(self.available_roms)} ROMs")
+            
+            # Update splash message
+            self.update_splash_message("Updating display...")
+            
+            # Store current selection
+            current_selection = self.current_game if hasattr(self, 'current_game') else None
+            current_view = self.current_view if hasattr(self, 'current_view') else 'all'
+            
+            # Update the game list
+            self.update_game_list_by_category(auto_select_first=False)
+            
+            # Try to restore previous selection
+            if current_selection and current_selection in self.available_roms:
+                # Find and select the ROM in the list
+                for i, (rom_name, _) in enumerate(self.game_list_data):
+                    if rom_name == current_selection:
+                        self.game_listbox.selection_clear(0, tk.END)
+                        self.game_listbox.selection_set(i)
+                        self.game_listbox.activate(i)
+                        self.game_listbox.see(i)
+                        self.current_game = rom_name
+                        self.selected_line = i + 1
+                        # Refresh the display
+                        self.after(50, lambda: self.display_game_info(rom_name))
+                        break
+            
+            # Update stats
+            self.update_stats_label()
+            
+            # Close splash window
+            if hasattr(self, 'splash_window') and self.splash_window:
+                self.splash_window.destroy()
+                self.splash_window = None
+            
+            # Show success message
+            self.update_status_message("Application data refreshed successfully")
+            
+            # Show a brief notification
+            messagebox.showinfo(
+                "Refresh Complete",
+                "All configuration files and game data have been reloaded.",
+                parent=self
+            )
+            
         except Exception as e:
-            messagebox.showerror("Restart Error", f"Failed to restart application:\n{str(e)}")
+            # Make sure splash is closed on error
+            if hasattr(self, 'splash_window') and self.splash_window:
+                try:
+                    self.splash_window.destroy()
+                except:
+                    pass
+                self.splash_window = None
+                
+            messagebox.showerror("Refresh Error", f"Failed to refresh application:\n{str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def close_application(self):
         """Close the application"""
