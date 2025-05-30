@@ -2781,21 +2781,22 @@ class PreviewWindow(QMainWindow):
         self.showing_specialized_controls = self.current_view_state in ['specialized_1', 'specialized_2']'''
 
     def toggle_controls_view(self):
-        """Toggle between control views: Normal → All Buttons → Specialized Group 1 → Specialized Group 2 → Normal"""
+        """Toggle between control views: All Controls → XInput → Specialized 1 → Specialized 2 → Normal"""
 
-        # Initialize state tracking if not exists
         if not hasattr(self, 'current_view_state'):
             self.current_view_state = 'normal'
 
-        # Determine current state and next state
         if self.current_view_state == 'normal':
-            # Switch to all buttons
+            self.current_view_state = 'all_controls'
+            self.show_all_controls_combined()
+            next_state_text = "XInput Controls"
+
+        elif self.current_view_state == 'all_controls':
             self.current_view_state = 'all_buttons'
             self.show_all_xinput_controls()
             next_state_text = "Specialized Group 1"
 
         elif self.current_view_state == 'all_buttons':
-            # Skipping directionals — go straight to specialized group 1
             self.current_view_state = 'specialized_1'
             self.show_specialized_controls_group_1()
             next_state_text = "Specialized Group 2"
@@ -2803,48 +2804,99 @@ class PreviewWindow(QMainWindow):
         elif self.current_view_state == 'specialized_1':
             self.current_view_state = 'specialized_2'
             self.show_specialized_controls_group_2()
-
-            # ✅ Next: back to ROM view, so button says ROM name
             rom_name = getattr(self, 'rom_name', 'Normal')
             next_state_text = f"{rom_name} Controls"
 
         elif self.current_view_state == 'specialized_2':
-            # Switch back to normal ROM-specific controls
             self.current_view_state = 'normal'
 
-            # Clear all existing controls
+            # 🔁 Clear all existing control labels
             for control_name in list(self.control_labels.keys()):
-                if control_name in self.control_labels:
-                    if 'label' in self.control_labels[control_name]:
-                        self.control_labels[control_name]['label'].deleteLater()
-                    del self.control_labels[control_name]
+                if 'label' in self.control_labels[control_name]:
+                    self.control_labels[control_name]['label'].deleteLater()
+                del self.control_labels[control_name]
             self.control_labels = {}
 
-            # Reload the current game controls from scratch
-            self.create_control_labels()
+            # 🧩 Recreate default ROM-specific layout
+            self.create_control_labels(clean_mode=False)
 
-            # Force apply the font after recreating controls
+            # 🎨 Restore appearance and layout
             QTimer.singleShot(100, self.apply_text_settings)
             QTimer.singleShot(200, self.force_resize_all_labels)
 
-            # ✅ Next: show all XInput controls
-            next_state_text = "All XInput Controls"
+            # ✅ CRITICAL: Reapply directional visibility setting
+            self.apply_joystick_visibility()
+
+            next_state_text = "All Controls"
 
         else:
-            # Fallback to normal
             self.current_view_state = 'normal'
-            next_state_text = "All XInput Controls"
+            next_state_text = "All Controls"
 
-        # Prepend "Show " to all button texts for consistency
-        next_state_text = f"Show {next_state_text}"
+        # 🔄 Update button label for next toggle
+        self.controls_mode_button.setText(f"Show {next_state_text}")
 
-        if hasattr(self, 'controls_mode_button'):
-            self.controls_mode_button.setText(next_state_text)
 
-        # Update internal flags
-        self.showing_all_xinput_controls = (self.current_view_state == 'all_buttons')
-        self.showing_all_directionals = False  # Skipped in this flow
-        self.showing_specialized_controls = self.current_view_state in ['specialized_1', 'specialized_2']
+    def show_all_controls_combined(self):
+        """Show all possible control types in one view"""
+
+        print("\n--- Showing all combined controls ---")
+
+        # Combine all groups manually
+        combined_controls = {}
+
+        # Add standard directional controls
+        combined_controls.update({
+            "P1_JOYSTICK_UP": "LS Up",
+            "P1_JOYSTICK_DOWN": "LS Down",
+            "P1_JOYSTICK_LEFT": "LS Left",
+            "P1_JOYSTICK_RIGHT": "LS Right",
+            "P1_JOYSTICKRIGHT_UP": "RS Up",
+            "P1_JOYSTICKRIGHT_DOWN": "RS Down",
+            "P1_JOYSTICKRIGHT_LEFT": "RS Left",
+            "P1_JOYSTICKRIGHT_RIGHT": "RS Right",
+        })
+
+        # Add XInput buttons
+        for i in range(1, 11):
+            combined_controls[f"P1_BUTTON{i}"] = f"Button {i}"
+        combined_controls["P1_START"] = "Start"
+        combined_controls["P1_SELECT"] = "Select"
+
+        # Add specialized group 1
+        combined_controls.update({
+            "P1_DIAL": "Rotary Dial",
+            "P1_DIAL_V": "Vertical Dial",
+            "P1_PADDLE": "Paddle",
+            "P1_TRACKBALL_X": "Trackball X",
+            "P1_TRACKBALL_Y": "Trackball Y",
+            "P1_MOUSE_X": "Mouse X",
+            "P1_MOUSE_Y": "Mouse Y",
+            "P1_AD_STICK_X": "Analog X",
+            "P1_AD_STICK_Y": "Analog Y",
+            "P1_AD_STICK_Z": "Analog Z",
+        })
+
+        # Add specialized group 2
+        combined_controls.update({
+            "P1_LIGHTGUN_X": "Light Gun X",
+            "P1_LIGHTGUN_Y": "Light Gun Y",
+            "P1_PEDAL": "Pedal 1",
+            "P1_PEDAL2": "Pedal 2",
+            "P1_POSITIONAL": "Positional",
+            "P1_GAMBLE_HIGH": "Gamble High",
+            "P1_GAMBLE_LOW": "Gamble Low",
+        })
+
+        # Clear existing controls
+        for control_name in list(self.control_labels.keys()):
+            if 'label' in self.control_labels[control_name]:
+                self.control_labels[control_name]['label'].deleteLater()
+            del self.control_labels[control_name]
+        self.control_labels = {}
+
+        # Now create the combined label layout
+        self._show_specialized_group(combined_controls, group_name="All Combined Controls")
 
 
     def truncate_display_text(self, text, max_length=15):
