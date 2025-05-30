@@ -263,14 +263,36 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         return False
     
 def _insert_controls(cursor, rom_name: str, controls_dict: Dict):
-    """Helper method to insert controls into the database"""
+    """Helper method to insert controls into the database - FIXED to include all controls"""
+    
+    # Get default actions for fallback
+    default_actions = get_default_control_actions()
+    
     for control_name, control_data in controls_dict.items():
+        # Get display name from control data
         display_name = control_data.get('name', '')
-        if display_name:
-            cursor.execute(
-                "INSERT INTO game_controls (rom_name, control_name, display_name) VALUES (?, ?, ?)",
-                (rom_name, control_name, display_name)
-            )
+        
+        # If no display name, use default action as fallback
+        if not display_name and control_name in default_actions:
+            display_name = default_actions[control_name]
+        
+        # If still no display name, generate from control name
+        if not display_name:
+            parts = control_name.split('_')
+            if len(parts) > 1:
+                display_name = parts[-1].replace('_', ' ').title()
+            else:
+                display_name = control_name
+        
+        # ALWAYS insert the control (never skip based on empty name)
+        cursor.execute(
+            "INSERT INTO game_controls (rom_name, control_name, display_name) VALUES (?, ?, ?)",
+            (rom_name, control_name, display_name)
+        )
+        
+        # Debug output for first few controls
+        #if len(control_name) > 0:  # Just to avoid too much spam
+            #print(f"  Inserted control: {control_name} -> {display_name}")
 
 def rom_exists_in_db(romname: str, db_path: str) -> bool:
     """Quick check if ROM exists in database without loading full data"""
