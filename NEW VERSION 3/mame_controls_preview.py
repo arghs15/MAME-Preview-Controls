@@ -2713,7 +2713,7 @@ class PreviewWindow(QMainWindow):
             return False
 
     # Update the toggle_controls_view method to cycle through 5 states
-    def toggle_controls_view(self):
+    '''def toggle_controls_view(self):
         """Toggle between control views: Normal → All Buttons → Directionals → Specialized Group 1 → Specialized Group 2 → Normal"""
         
         # Initialize state tracking if not exists
@@ -2778,7 +2778,74 @@ class PreviewWindow(QMainWindow):
         # Clear any old state flags
         self.showing_all_xinput_controls = (self.current_view_state == 'all_buttons')
         self.showing_all_directionals = (self.current_view_state == 'directionals') 
+        self.showing_specialized_controls = self.current_view_state in ['specialized_1', 'specialized_2']'''
+
+    def toggle_controls_view(self):
+        """Toggle between control views: Normal → All Buttons → Specialized Group 1 → Specialized Group 2 → Normal"""
+
+        # Initialize state tracking if not exists
+        if not hasattr(self, 'current_view_state'):
+            self.current_view_state = 'normal'
+
+        # Determine current state and next state
+        if self.current_view_state == 'normal':
+            # Switch to all buttons
+            self.current_view_state = 'all_buttons'
+            self.show_all_xinput_controls()
+            next_state_text = "Specialized Group 1"
+
+        elif self.current_view_state == 'all_buttons':
+            # Skipping directionals — go straight to specialized group 1
+            self.current_view_state = 'specialized_1'
+            self.show_specialized_controls_group_1()
+            next_state_text = "Specialized Group 2"
+
+        elif self.current_view_state == 'specialized_1':
+            self.current_view_state = 'specialized_2'
+            self.show_specialized_controls_group_2()
+
+            # ✅ Next: back to ROM view, so button says ROM name
+            rom_name = getattr(self, 'rom_name', 'Normal')
+            next_state_text = f"{rom_name} Controls"
+
+        elif self.current_view_state == 'specialized_2':
+            # Switch back to normal ROM-specific controls
+            self.current_view_state = 'normal'
+
+            # Clear all existing controls
+            for control_name in list(self.control_labels.keys()):
+                if control_name in self.control_labels:
+                    if 'label' in self.control_labels[control_name]:
+                        self.control_labels[control_name]['label'].deleteLater()
+                    del self.control_labels[control_name]
+            self.control_labels = {}
+
+            # Reload the current game controls from scratch
+            self.create_control_labels()
+
+            # Force apply the font after recreating controls
+            QTimer.singleShot(100, self.apply_text_settings)
+            QTimer.singleShot(200, self.force_resize_all_labels)
+
+            # ✅ Next: show all XInput controls
+            next_state_text = "All XInput Controls"
+
+        else:
+            # Fallback to normal
+            self.current_view_state = 'normal'
+            next_state_text = "All XInput Controls"
+
+        # Prepend "Show " to all button texts for consistency
+        next_state_text = f"Show {next_state_text}"
+
+        if hasattr(self, 'controls_mode_button'):
+            self.controls_mode_button.setText(next_state_text)
+
+        # Update internal flags
+        self.showing_all_xinput_controls = (self.current_view_state == 'all_buttons')
+        self.showing_all_directionals = False  # Skipped in this flow
         self.showing_specialized_controls = self.current_view_state in ['specialized_1', 'specialized_2']
+
 
     def truncate_display_text(self, text, max_length=15):
         """Truncate display text with minimal space loss"""
@@ -3326,9 +3393,9 @@ class PreviewWindow(QMainWindow):
                 
                 label.setVisible(is_visible)
             
-            # Update button text
+            # Update button text to include current ROM name
             if hasattr(self, 'xinput_controls_button'):
-                self.xinput_controls_button.setText("Normal Controls")
+                self.xinput_controls_button.setText("Specialized Group 1")
             
             # Set XInput mode flag
             self.showing_all_xinput_controls = True
