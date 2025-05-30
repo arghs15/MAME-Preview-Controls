@@ -6354,6 +6354,92 @@ class MAMEControlConfig(ctk.CTk):
                 # Ensure the selected item is visible
                 self.game_list.see(f"{line_index}.0")
 
+    def create_hover_label(self, parent, text, font, color, bg_color, x_pos, width, tooltip_text=None):
+        """Create a label with hover functionality and tooltip for long text"""
+        
+        # Check if text is longer than available width
+        import tkinter.font as tkFont
+        font_obj = tkFont.Font(font=font)
+        text_width = font_obj.measure(text)
+        
+        is_truncated = text_width > width - 10  # 10px padding
+        
+        # Use different colors based on whether text is truncated
+        if is_truncated:
+            # Use a lighter blue for truncated text to indicate it's hoverable
+            display_color = self.theme_colors["highlight"]  # Lighter blue for truncated
+            hover_color = self.theme_colors["secondary"]    # Brighter blue on hover
+        else:
+            # Use original color for normal text
+            display_color = color
+            hover_color = color  # No color change for non-truncated text
+        
+        label = tk.Label(
+            parent,
+            text=text,
+            font=font,
+            anchor="w",
+            justify="left",
+            background=bg_color,
+            foreground=display_color
+        )
+        label.place(x=x_pos, y=10, width=width)
+        
+        # If text is too long, add hover functionality
+        if is_truncated:
+            
+            # Store colors
+            original_color = display_color
+            
+            # Tooltip window reference
+            tooltip = None
+            
+            def on_enter(event):
+                nonlocal tooltip
+                # Change to brighter blue
+                label.configure(foreground=hover_color)
+                
+                # Create tooltip
+                tooltip = tk.Toplevel()
+                tooltip.wm_overrideredirect(True)
+                tooltip.configure(bg="#2d2d2d", relief="solid", borderwidth=1)
+                
+                tooltip_label = tk.Label(
+                    tooltip,
+                    text=tooltip_text or text,
+                    background="#2d2d2d",
+                    foreground="white",
+                    font=font,
+                    padx=8,
+                    pady=4
+                )
+                tooltip_label.pack()
+                
+                # Position tooltip near mouse
+                x = event.x_root + 10
+                y = event.y_root + 10
+                tooltip.geometry(f"+{x}+{y}")
+            
+            def on_leave(event):
+                nonlocal tooltip
+                # Restore lighter blue color (not original color)
+                label.configure(foreground=original_color)
+                
+                # Destroy tooltip
+                if tooltip:
+                    tooltip.destroy()
+                    tooltip = None
+            
+            # Bind hover events
+            label.bind("<Enter>", on_enter)
+            label.bind("<Leave>", on_leave)
+            
+            # Add cursor change to indicate it's interactive
+            label.configure(cursor="hand2")
+        
+        return label
+    
+    
     # Complete updated display_controls_table method with proper mappings support and fixed alignment
     def display_controls_table(self, start_row, game_data, cfg_controls):
         """
@@ -6697,17 +6783,25 @@ class MAMEControlConfig(ctk.CTk):
                     (control['display_source'], ("Arial", 12), control['source_color'])
                 ]
                 
+                # With this:
                 for j, (text, font, color) in enumerate(labels_data):
-                    label = tk.Label(
+                    # Create tooltip text for long entries
+                    tooltip_text = None
+                    if j == 2 and len(text) > 20:  # Game Action column with long text
+                        tooltip_text = f"Full Action: {text}"
+                    elif j == 1 and len(text) > 25:  # Controller Input column with long text
+                        tooltip_text = f"Full Input: {text}"
+                    
+                    label = self.create_hover_label(
                         row_frame,
                         text=text,
                         font=font,
-                        anchor="w",
-                        justify="left",
-                        background=alt_colors[i % 2],
-                        foreground=color
+                        color=color,
+                        bg_color=alt_colors[i % 2],
+                        x_pos=x_positions[j],
+                        width=col_widths[j],
+                        tooltip_text=tooltip_text
                     )
-                    label.place(x=x_positions[j], y=10, width=col_widths[j])
             
             # Canvas update functions
             def update_canvas_width(event=None):
