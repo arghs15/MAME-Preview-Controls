@@ -3033,20 +3033,31 @@ class MAMEControlConfig(ctk.CTk):
             has_data = self.get_game_data(rom) is not None
             is_clone = rom in self.parent_lookup if hasattr(self, 'parent_lookup') else False
             
-            # Create display text without prefixes
+            # Create display text with consistent clone formatting
             if is_clone and (self.current_view == "clones" or self.current_view == "all"):
                 parent_rom = self.parent_lookup.get(rom, "")
                 
-                # Get game name if available
+                # Get the CLONE's description, not the parent's
                 if has_data:
                     from mame_data_utils import get_game_data
                     game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                             self.db_path, getattr(self, 'rom_data_cache', {}))
-                    display_text = f"{rom} - {game_data['gamename']} [Clone of {parent_rom}]"
+                    
+                    # Use clone's own description if available, otherwise fall back to ROM name
+                    clone_description = game_data.get('gamename', rom)
+                    
+                    # Check if this is the clone's own description or inherited from parent
+                    if rom in self.gamedata_json:
+                        clone_description = self.gamedata_json[rom].get('description', rom)
+                    elif parent_rom in self.gamedata_json and 'clones' in self.gamedata_json[parent_rom]:
+                        clone_data = self.gamedata_json[parent_rom]['clones'].get(rom, {})
+                        clone_description = clone_data.get('description', rom)
+                    
+                    display_text = f"{rom} - {clone_description} [Clone of {parent_rom}]"
                 else:
                     display_text = f"{rom} [Clone of {parent_rom}]"
             else:
-                # Regular display for non-clones or when not in clone view
+                # Regular display for non-clones
                 if has_data:
                     if hasattr(self, 'name_cache') and rom in self.name_cache:
                         game_name = self.name_cache[rom].capitalize()
@@ -3055,7 +3066,13 @@ class MAMEControlConfig(ctk.CTk):
                         from mame_data_utils import get_game_data
                         game_data = get_game_data(rom, self.gamedata_json, self.parent_lookup, 
                                                 self.db_path, getattr(self, 'rom_data_cache', {}))
-                        display_text = f"{rom} - {game_data['gamename']}"
+                        
+                        # For clones not in clone view, use their own description
+                        if is_clone and rom in self.gamedata_json:
+                            clone_desc = self.gamedata_json[rom].get('description', game_data['gamename'])
+                            display_text = f"{rom} - {clone_desc}"
+                        else:
+                            display_text = f"{rom} - {game_data['gamename']}"
                 else:
                     display_text = f"{rom}"
             
@@ -5105,8 +5122,11 @@ class MAMEControlConfig(ctk.CTk):
             )
             remove_button.pack(side="left", padx=5)
         
-        # Save function to handle both new and existing games
+        # Fix 2: Modified save_game function to preserve existing data and only update what changed
+        # Replace your entire save_game function with this complete version:
+
         def save_game():
+            """Save game data while preserving existing properties - COMPLETE FIXED VERSION"""
             try:
                 # Validate ROM name
                 current_rom_name = rom_name_var.get().strip()
@@ -5120,10 +5140,8 @@ class MAMEControlConfig(ctk.CTk):
                     with open(gamedata_path, 'r', encoding='utf-8') as f:
                         gamedata = json.load(f)
                 except FileNotFoundError:
-                    # Create new file if it doesn't exist
                     gamedata = {}
                 except json.JSONDecodeError:
-                    # Handle corrupted JSON
                     messagebox.showerror("Error", "The gamedata.json file is corrupted", parent=editor)
                     return
                     
@@ -5134,146 +5152,181 @@ class MAMEControlConfig(ctk.CTk):
                                         parent=editor):
                         return
                 
-                # Build the game entry
-                game_entry = {
-                    "description": description_var.get().strip() or current_rom_name,
-                    "playercount": playercount_var.get(),
-                    "buttons": buttons_var.get(),
-                    "sticks": sticks_var.get(),
-                    "alternating": bool(alternating_var.get()),
-                    "clones": {},
-                    "controls": {}
-                }
+                # Preserve existing data or create new entry
+                if current_rom_name in gamedata:
+                    game_entry = gamedata[current_rom_name].copy()
+                else:
+                    game_entry = {}
                 
-                # Add clones
-                for clone_data in clone_entries:
-                    clone_rom = clone_data["rom_var"].get().strip()
-                    clone_desc = clone_data["desc_var"].get().strip()
-                    
-                    if clone_rom:
-                        game_entry["clones"][clone_rom] = {
-                            "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
-                        }
+                # Update basic properties
+                game_entry["description"] = description_var.get().strip() or current_rom_name
+                game_entry["playercount"] = playercount_var.get()
+                game_entry["buttons"] = buttons_var.get()
+                game_entry["sticks"] = sticks_var.get()
+                game_entry["alternating"] = bool(alternating_var.get())
                 
-                # Track defined button numbers from ALL controls
-                defined_buttons = set()
-                controls_added = 0
-                
-                # Add ALL controls from control_entries (both standard and any custom ones we added)
-                for control_name, entry in control_entries.items():
-                    if isinstance(entry, ctk.CTkEntry):  # Check if it's an entry widget
-                        control_label = entry.get().strip()
-                        if control_label:
-                            game_entry["controls"][control_name] = {
-                                "name": control_label,
-                                "tag": "",
-                                "mask": "0"
+                # Handle clones
+                if not clone_entries:
+                    if "clones" not in game_entry:
+                        game_entry["clones"] = {}
+                else:
+                    new_clones = {}
+                    for clone_data in clone_entries:
+                        clone_rom = clone_data["rom_var"].get().strip()
+                        clone_desc = clone_data["desc_var"].get().strip()
+                        
+                        if clone_rom:
+                            new_clones[clone_rom] = {
+                                "description": clone_desc or f"{clone_rom} (Clone of {current_rom_name})"
                             }
-                            controls_added += 1
-                            
-                            # Track button numbers
-                            if control_name.startswith("P1_BUTTON"):
-                                try:
-                                    button_num = int(control_name.replace("P1_BUTTON", ""))
-                                    defined_buttons.add(button_num)
-                                except ValueError:
-                                    pass
+                    
+                    game_entry["clones"] = new_clones
                 
-                # Get the current button setting
+                # Handle controls
+                if not control_entries:
+                    if "controls" not in game_entry:
+                        game_entry["controls"] = {}
+                else:
+                    if "controls" not in game_entry:
+                        game_entry["controls"] = {}
+                    
+                    existing_controls = game_entry["controls"].copy()
+                    displayed_controls = set()
+                    controls_added = 0
+                    
+                    # Update displayed controls
+                    for control_name, entry in control_entries.items():
+                        if isinstance(entry, ctk.CTkEntry):
+                            control_label = entry.get().strip()
+                            displayed_controls.add(control_name)
+                            
+                            if control_label:
+                                if control_name not in existing_controls:
+                                    existing_controls[control_name] = {
+                                        "name": control_label,
+                                        "tag": "",
+                                        "mask": "0"
+                                    }
+                                    controls_added += 1
+                                else:
+                                    existing_controls[control_name]["name"] = control_label
+                                    if "tag" not in existing_controls[control_name]:
+                                        existing_controls[control_name]["tag"] = ""
+                                    if "mask" not in existing_controls[control_name]:
+                                        existing_controls[control_name]["mask"] = "0"
+                            else:
+                                if control_name in existing_controls:
+                                    del existing_controls[control_name]
+                    
+                    # Preserve non-displayed controls
+                    for control_name, control_data in game_entry.get("controls", {}).items():
+                        if control_name not in displayed_controls:
+                            existing_controls[control_name] = control_data
+                    
+                    game_entry["controls"] = existing_controls
+                
+                # Update button count if needed
+                defined_buttons = set()
+                for control_name in game_entry.get("controls", {}):
+                    if control_name.startswith("P1_BUTTON"):
+                        try:
+                            button_num = int(control_name.replace("P1_BUTTON", ""))
+                            defined_buttons.add(button_num)
+                        except ValueError:
+                            pass
+                
                 current_buttons = int(buttons_var.get())
                 
-                # If we have defined buttons, check if we need to update the count
                 if defined_buttons:
-                    max_defined_button = max(defined_buttons) if defined_buttons else 0
+                    max_defined_button = max(defined_buttons)
                     
-                    # Case 1: More buttons defined than current setting
                     if max_defined_button > current_buttons:
                         if messagebox.askyesno("Update Button Count", 
                                     f"You've defined buttons up to P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to update the button count to {max_defined_button}?", 
                                     parent=editor):
-                            # Update the button count
                             buttons_var.set(str(max_defined_button))
                             game_entry["buttons"] = str(max_defined_button)
-                            print(f"Updated button count to {max_defined_button}")
                     
-                    # Case 2: Fewer buttons defined than current setting
                     elif max_defined_button < current_buttons:
                         if messagebox.askyesno("Reduce Button Count", 
                                     f"The highest button you've defined is P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to reduce the button count to {max_defined_button}?", 
                                     parent=editor):
-                            # Update the button count
                             buttons_var.set(str(max_defined_button))
                             game_entry["buttons"] = str(max_defined_button)
-                            print(f"Reduced button count to {max_defined_button}")
                 
-                # Update or add entry to gamedata
+                # Save to JSON
                 gamedata[current_rom_name] = game_entry
                 
-                # Save the updated gamedata.json
                 with open(gamedata_path, 'w', encoding='utf-8') as f:
                     json.dump(gamedata, f, indent=2)
                 
-                # Show success message
+                # Success message
                 action_text = 'added to' if is_new_game else 'updated in'
                 messagebox.showinfo("Success", 
                             f"Game '{current_rom_name}' {action_text} gamedata.json with {controls_added} control mappings", 
                             parent=editor)
                 
-                # Force reload of gamedata.json
+                # Refresh data using startup logic
                 if hasattr(self, 'gamedata_json'):
                     del self.gamedata_json
-                    self.load_gamedata_json()
+                self.load_gamedata_json()
                 
-                # Clear the in-memory cache to force reloading data
-                if hasattr(self, 'rom_data_cache'):
-                    self.rom_data_cache = {}
-                    print("Cleared ROM data cache to force refresh")
-
-                # ADD THIS LINE - Clear processed cache too:
-                if hasattr(self, 'processed_cache'):
-                    self.processed_cache = {}
-                    print("Cleared processed cache to force refresh")
-
-                # Rebuild SQLite database if it's being used
+                # FIXED: Rebuild database if needed OR if editing a clone
                 if hasattr(self, 'db_path') and self.db_path:
-                    print("Rebuilding SQLite database to reflect changes...")
-                    self.build_gamedata_db()
-                    print("Database rebuild complete")
+                    # Check if we're editing a clone
+                    is_editing_clone = (not is_new_game and 
+                                    hasattr(self, 'parent_lookup') and 
+                                    current_rom_name in self.parent_lookup)
                     
-                # Update sidebar categories
+                    if check_db_update_needed(self.gamedata_path, self.db_path) or is_editing_clone:
+                        from mame_data_utils import build_gamedata_db
+                        build_gamedata_db(self.gamedata_json, self.db_path)
+                
+                # FIXED: Clear cache for edited ROM and related ROMs
+                roms_to_clear = [current_rom_name]
+                
+                # If editing a clone, also clear parent cache
+                if hasattr(self, 'parent_lookup') and current_rom_name in self.parent_lookup:
+                    parent_rom = self.parent_lookup[current_rom_name]
+                    roms_to_clear.append(parent_rom)
+                
+                # If editing a parent, clear all its clones' cache
+                if hasattr(self, 'clone_parents') and current_rom_name in self.clone_parents:
+                    clone_list = self.clone_parents[current_rom_name]
+                    roms_to_clear.extend(clone_list)
+                
+                # Clear ROM data cache
+                if hasattr(self, 'rom_data_cache'):
+                    for rom_name in roms_to_clear:
+                        if rom_name in self.rom_data_cache:
+                            del self.rom_data_cache[rom_name]
+                
+                # Clear processed cache
+                if hasattr(self, 'processed_cache'):
+                    keys_to_remove = []
+                    for rom_name in roms_to_clear:
+                        keys_to_remove.extend([key for key in self.processed_cache.keys() if key.startswith(f"{rom_name}_")])
+                    for key in keys_to_remove:
+                        del self.processed_cache[key]
+                
+                # Update UI
                 if hasattr(self, 'update_game_list_by_category'):
-                    # CHANGE THIS LINE - pass auto_select_first=False to prevent auto-selection
                     self.update_game_list_by_category(auto_select_first=False)
-
-                # ADD: Preserve the current selection on the edited ROM
-                # Store the ROM we just edited
+                
+                if hasattr(self, 'current_game') and self.current_game == current_rom_name:
+                    self.after(100, lambda: self.display_game_info(current_rom_name))
+                
+                # Reselect edited ROM
                 edited_rom = current_rom_name
-
-                # Schedule re-selection of the edited ROM after the list updates
-                self.after(100, lambda: self.reselect_rom_after_edit(edited_rom))
-
-                # Force refresh current game display (keep this existing line)
-                if hasattr(self, 'current_game') and self.current_game:
-                    self.after(200, lambda: self.display_game_info(self.current_game))
+                self.after(150, lambda: self.reselect_rom_after_edit(edited_rom))
                 
-                # Close the editor
+                # Close editor
                 editor.destroy()
-                
-                # Force refresh of the current display if needed
-                if hasattr(self, 'on_game_select') and hasattr(self, 'game_list') and hasattr(self, 'selected_line'):
-                    # Create a mock event to trigger refresh if needed
-                    class MockEvent:
-                        def __init__(self):
-                            self.x = 10
-                            self.y = 10
-                    self.after(100, lambda: self.on_game_select(MockEvent()))
                         
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save game data: {str(e)}", parent=editor)
-                print(f"Error saving game data: {e}")
                 import traceback
                 traceback.print_exc()
-        
         # Save button
         save_button = ctk.CTkButton(
             button_container,
@@ -5308,6 +5361,75 @@ class MAMEControlConfig(ctk.CTk):
         y = (editor.winfo_screenheight() // 2) - (height // 2)
         editor.geometry(f'{width}x{height}+{x}+{y}')
 
+    def verify_data_consistency_after_save(self, rom_name):
+        """Verify that ROM data is consistent between JSON and database after save"""
+        try:
+            print(f"\n=== VERIFYING DATA CONSISTENCY FOR {rom_name} ===")
+            
+            # Check JSON data
+            json_controls = 0
+            if rom_name in self.gamedata_json:
+                json_controls = len(self.gamedata_json[rom_name].get('controls', {}))
+                print(f"JSON: {json_controls} controls")
+                
+                # Show first few controls from JSON
+                for i, (control_name, control_data) in enumerate(self.gamedata_json[rom_name].get('controls', {}).items()):
+                    if i < 3:  # Show first 3
+                        name_value = control_data.get('name', '') if isinstance(control_data, dict) else str(control_data)
+                        print(f"  JSON: {control_name} -> '{name_value}'")
+            else:
+                print(f"JSON: ROM {rom_name} not found!")
+            
+            # Check database data
+            db_controls = 0
+            if hasattr(self, 'db_path') and os.path.exists(self.db_path):
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM game_controls WHERE rom_name = ?", (rom_name,))
+                    db_controls = cursor.fetchone()[0]
+                    print(f"Database: {db_controls} controls")
+                    
+                    # Show first few controls from database
+                    cursor.execute("SELECT control_name, display_name FROM game_controls WHERE rom_name = ? LIMIT 3", (rom_name,))
+                    db_sample = cursor.fetchall()
+                    for control_name, display_name in db_sample:
+                        print(f"  DB: {control_name} -> '{display_name}'")
+                    
+                    conn.close()
+                except Exception as e:
+                    print(f"Database check failed: {e}")
+            
+            # Check what get_game_data returns
+            game_data = self.get_game_data(rom_name)
+            if game_data:
+                ui_controls = sum(len(p.get('labels', [])) for p in game_data.get('players', []))
+                print(f"get_game_data(): {ui_controls} controls, source: {game_data.get('source', 'unknown')}")
+                
+                # Show first few controls from game_data
+                for player in game_data.get('players', []):
+                    for i, label in enumerate(player.get('labels', [])):
+                        if i < 3:  # Show first 3
+                            print(f"  UI: {label['name']} -> '{label['value']}'")
+                    break  # Just first player
+            else:
+                print(f"get_game_data(): No data returned!")
+            
+            # Summary
+            if json_controls > 0 and db_controls > 0 and game_data:
+                if json_controls == db_controls:
+                    print(f"✅ CONSISTENT: All sources have matching control counts")
+                else:
+                    print(f"❌ INCONSISTENT: JSON({json_controls}) != DB({db_controls})")
+            else:
+                print(f"❌ MISSING DATA: JSON({json_controls}), DB({db_controls}), UI({bool(game_data)})")
+                
+        except Exception as e:
+            print(f"Error in consistency check: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def reselect_rom_after_edit(self, rom_name):
         """Reselect the specified ROM after editing to maintain selection"""
         try:
