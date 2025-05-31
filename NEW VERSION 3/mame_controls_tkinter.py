@@ -193,7 +193,7 @@ class MAMEControlConfig(ctk.CTk):
         self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
         self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
         self.SHOW_HIDE_BUTTONS_TOGGLE = False  # NEW: Set to False to hide the toggle
-        
+        self.CONTROLS_ONLY_EDIT = True     # NEW: Set to True to disable game property editing
         # Add ROM source mode tracking
         self.rom_source_mode = "physical"  # "physical" or "database"
         self.database_roms = set()  # Will hold all parent ROMs from gamedata
@@ -4214,12 +4214,13 @@ class MAMEControlConfig(ctk.CTk):
         ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         
         rom_name_var = tk.StringVar(value=rom_name or "")
+        # ROM Name field - ADD state parameter based on toggle
         rom_name_entry = ctk.CTkEntry(
             properties_grid, 
             width=300, 
             textvariable=rom_name_var,
             fg_color=self.theme_colors["background"],
-            state="normal" if is_new_game else "disabled"
+            state="disabled" if (self.CONTROLS_ONLY_EDIT or not is_new_game) else "normal"  # MODIFIED
         )
         rom_name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         
@@ -4236,7 +4237,8 @@ class MAMEControlConfig(ctk.CTk):
             properties_grid, 
             width=300, 
             textvariable=description_var,
-            fg_color=self.theme_colors["background"]
+            fg_color=self.theme_colors["background"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         description_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
         
@@ -4257,7 +4259,8 @@ class MAMEControlConfig(ctk.CTk):
             fg_color=self.theme_colors["background"],
             button_color=self.theme_colors["primary"],
             button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
+            dropdown_fg_color=self.theme_colors["card_bg"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         playercount_combo.grid(row=2, column=1, padx=5, pady=5, sticky="w")
         
@@ -4271,7 +4274,8 @@ class MAMEControlConfig(ctk.CTk):
             checkbox_height=20,
             corner_radius=3,
             fg_color=self.theme_colors["primary"],
-            hover_color=self.theme_colors["secondary"]
+            hover_color=self.theme_colors["secondary"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         alternating_check.grid(row=2, column=2, padx=5, pady=5, sticky="w")
         
@@ -4292,7 +4296,8 @@ class MAMEControlConfig(ctk.CTk):
             fg_color=self.theme_colors["background"],
             button_color=self.theme_colors["primary"],
             button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
+            dropdown_fg_color=self.theme_colors["card_bg"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         buttons_combo.grid(row=3, column=1, padx=5, pady=5, sticky="w")
         
@@ -4312,7 +4317,8 @@ class MAMEControlConfig(ctk.CTk):
             fg_color=self.theme_colors["background"],
             button_color=self.theme_colors["primary"],
             button_hover_color=self.theme_colors["secondary"],
-            dropdown_fg_color=self.theme_colors["card_bg"]
+            dropdown_fg_color=self.theme_colors["card_bg"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         sticks_combo.grid(row=3, column=3, padx=5, pady=5, sticky="w")
         
