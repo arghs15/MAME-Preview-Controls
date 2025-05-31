@@ -281,6 +281,20 @@ class MAMEControlConfig(ctk.CTk):
                 self.splash_window.destroy()
             messagebox.showerror("Initialization Error", f"Failed to initialize: {e}")
 
+    def load_gamedata_json(self):
+        """Load gamedata.json using the utility function"""
+        try:
+            from mame_data_utils import load_gamedata_json  # Add this import
+            self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
+            return self.gamedata_json
+        except Exception as e:
+            # Handle GUI-specific error display
+            if hasattr(self, 'splash_window') and self.splash_window:
+                self.splash_window.destroy()
+            messagebox.showerror("Error Loading gamedata.json", str(e))
+            self.after(1, self.force_close_with_json_error)
+            return {}
+    
     def _start_loading_process(self):
         """Begin the sequential loading process with separate splash window"""
         
@@ -403,7 +417,8 @@ class MAMEControlConfig(ctk.CTk):
             # Ensure gamedata.json is loaded
             if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
                 print("Loading gamedata.json for database operations...")
-                self.load_gamedata_json()
+                from mame_data_utils import load_gamedata_json
+                self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
             
             # PROPER CHECK: Only rebuild if actually needed
             needs_rebuild = False
@@ -716,7 +731,7 @@ class MAMEControlConfig(ctk.CTk):
         """Check and build the database only if needed"""
         if check_db_update_needed(self.gamedata_path, self.db_path):
             print("Database needs updating, rebuilding...")
-            self.load_gamedata_json()  # ← Already updated above
+            from mame_data_utils import build_gamedata_db
             return build_gamedata_db(self.gamedata_json, self.db_path)
         else:
             print("Database is up to date, skipping rebuild")
@@ -1538,8 +1553,8 @@ class MAMEControlConfig(ctk.CTk):
             self.update_splash_message("Reloading game database...")
             
             # Reload gamedata.json
+            from mame_data_utils import load_gamedata_json
             self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
-            print(f"Reloaded gamedata.json with {len(self.gamedata_json)} entries")
             
             # Update splash message
             self.update_splash_message("Rebuilding database...")
@@ -1547,6 +1562,7 @@ class MAMEControlConfig(ctk.CTk):
             # Check if database needs rebuilding
             if check_db_update_needed(self.gamedata_path, self.db_path):
                 print("Rebuilding database...")
+                from mame_data_utils import build_gamedata_db
                 build_gamedata_db(self.gamedata_json, self.db_path)
             
             # Update splash message
@@ -5269,7 +5285,8 @@ class MAMEControlConfig(ctk.CTk):
                 # Refresh data using startup logic
                 if hasattr(self, 'gamedata_json'):
                     del self.gamedata_json
-                self.load_gamedata_json()
+                from mame_data_utils import load_gamedata_json
+                self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
                 
                 # FIXED: Rebuild database if needed OR if editing a clone
                 if hasattr(self, 'db_path') and self.db_path:
@@ -5279,7 +5296,7 @@ class MAMEControlConfig(ctk.CTk):
                                     current_rom_name in self.parent_lookup)
                     
                     if check_db_update_needed(self.gamedata_path, self.db_path) or is_editing_clone:
-                        from mame_data_utils import build_gamedata_db
+                        from mame_data_utils import build_gamedata_db  # ← Add this import
                         build_gamedata_db(self.gamedata_json, self.db_path)
                 
                 # FIXED: Clear cache for edited ROM and related ROMs
@@ -5497,152 +5514,6 @@ class MAMEControlConfig(ctk.CTk):
         
         # Use the unified editor instead of duplicating code
         self.show_unified_game_editor(rom_name, is_new_game, self)
-
-    def build_gamedata_db(self):
-        """Build SQLite database from gamedata.json for faster lookups"""
-        print("Building SQLite database...")
-        start_time = time.time()
-        
-        # Load gamedata.json if needed
-        if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
-            self.load_gamedata_json()
-        
-        # Verify gamedata is loaded
-        if not self.gamedata_json:
-            print("ERROR: No gamedata available to build database")
-            return False
-        
-        try:
-            # Create database connection
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Drop existing tables if they exist
-            cursor.execute("DROP TABLE IF EXISTS games")
-            cursor.execute("DROP TABLE IF EXISTS game_controls")
-            cursor.execute("DROP TABLE IF EXISTS clone_relationships")
-            
-            # Create tables
-            cursor.execute('''
-            CREATE TABLE games (
-                rom_name TEXT PRIMARY KEY,
-                game_name TEXT,
-                player_count INTEGER,
-                buttons INTEGER,
-                sticks INTEGER,
-                alternating BOOLEAN,
-                is_clone BOOLEAN,
-                parent_rom TEXT
-            )
-            ''')
-            
-            cursor.execute('''
-            CREATE TABLE game_controls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rom_name TEXT,
-                control_name TEXT,
-                display_name TEXT,
-                FOREIGN KEY (rom_name) REFERENCES games (rom_name)
-            )
-            ''')
-            
-            cursor.execute('''
-            CREATE TABLE clone_relationships (
-                parent_rom TEXT,
-                clone_rom TEXT,
-                PRIMARY KEY (parent_rom, clone_rom),
-                FOREIGN KEY (parent_rom) REFERENCES games (rom_name),
-                FOREIGN KEY (clone_rom) REFERENCES games (rom_name)
-            )
-            ''')
-            
-            # Create indices for faster lookups
-            cursor.execute("CREATE INDEX idx_game_controls_rom ON game_controls (rom_name)")
-            cursor.execute("CREATE INDEX idx_clone_parent ON clone_relationships (parent_rom)")
-            cursor.execute("CREATE INDEX idx_clone_child ON clone_relationships (clone_rom)")
-            
-            # Process the data
-            games_inserted = 0
-            controls_inserted = 0
-            clones_inserted = 0
-            
-            # Process main games first
-            for rom_name, game_data in self.gamedata_json.items():
-                # Skip entries that are clones (handled separately below)
-                if 'parent' in game_data:
-                    continue
-                    
-                # Extract basic game properties
-                game_name = game_data.get('description', rom_name)
-                player_count = int(game_data.get('playercount', 1))
-                buttons = int(game_data.get('buttons', 0))
-                sticks = int(game_data.get('sticks', 0))
-                alternating = 1 if game_data.get('alternating', False) else 0
-                is_clone = 0  # Main entries aren't clones
-                parent_rom = None
-                
-                # Insert game data
-                cursor.execute(
-                    "INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom)
-                )
-                games_inserted += 1
-                
-                # Extract and insert controls
-                if 'controls' in game_data:
-                    self._insert_controls(cursor, rom_name, game_data['controls'])
-                    controls_inserted += len(game_data['controls'])
-                
-                # Process clones
-                if 'clones' in game_data and isinstance(game_data['clones'], dict):
-                    for clone_name, clone_data in game_data['clones'].items():
-                        # Extract clone properties
-                        clone_game_name = clone_data.get('description', clone_name)
-                        clone_player_count = int(clone_data.get('playercount', player_count))  # Inherit from parent if not specified
-                        clone_buttons = int(clone_data.get('buttons', buttons))
-                        clone_sticks = int(clone_data.get('sticks', sticks))
-                        clone_alternating = 1 if clone_data.get('alternating', alternating) else 0
-                        
-                        # Insert clone as a game
-                        cursor.execute(
-                            "INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                            (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
-                            clone_alternating, 1, rom_name)  # is_clone=1, parent=rom_name
-                        )
-                        games_inserted += 1
-                        
-                        # Add clone relationship
-                        cursor.execute(
-                            "INSERT INTO clone_relationships VALUES (?, ?)",
-                            (rom_name, clone_name)
-                        )
-                        clones_inserted += 1
-                        
-                        # Extract and insert clone controls
-                        if 'controls' in clone_data:
-                            self._insert_controls(cursor, clone_name, clone_data['controls'])
-                            controls_inserted += len(clone_data['controls'])
-            
-            # Commit changes and close connection
-            conn.commit()
-            conn.close()
-            
-            elapsed_time = time.time() - start_time
-            print(f"Database built in {elapsed_time:.2f}s with {games_inserted} games, {controls_inserted} controls")
-            return True
-            
-        except sqlite3.Error as e:
-            print(f"SQLite error: {e}")
-            if 'conn' in locals():
-                conn.close()
-            return False
-        except Exception as e:
-            print(f"ERROR building database: {e}")
-            import traceback
-            traceback.print_exc()
-            if 'conn' in locals():
-                conn.close()
-            return False
 
     def remove_game(self, rom_name, dialog):
         """Remove a game entirely from the database"""
@@ -7369,19 +7240,6 @@ class MAMEControlConfig(ctk.CTk):
         
         return settings
     
-    def load_gamedata_json(self):
-        """Load gamedata.json using the utility function"""
-        try:
-            self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
-            return self.gamedata_json
-        except Exception as e:
-            # Handle GUI-specific error display
-            if hasattr(self, 'splash_window') and self.splash_window:
-                self.splash_window.destroy()
-            messagebox.showerror("Error Loading gamedata.json", str(e))
-            self.after(1, self.force_close_with_json_error)
-            return {}
-
     def force_close_with_json_error(self):
         """Force close the application after a JSON error"""
         try:

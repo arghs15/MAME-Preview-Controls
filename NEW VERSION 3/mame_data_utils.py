@@ -19,7 +19,7 @@ from typing import Dict, Set, Tuple, Optional, List, Any
 
 def load_gamedata_json(gamedata_path: str) -> Tuple[Dict, Dict, Dict]:
     """
-    Load gamedata.json from the specified path with improved error handling
+    Load gamedata.json from the specified path with improved clone handling
     
     Returns:
         Tuple of (gamedata_json, parent_lookup, clone_parents)
@@ -46,9 +46,24 @@ def load_gamedata_json(gamedata_path: str) -> Tuple[Dict, Dict, Dict]:
                 clone_parents[rom_name] = list(game_data['clones'].keys())
                 
                 for clone_name, clone_data in game_data['clones'].items():
-                    # Store parent reference
+                    # Store parent reference in the clone data
                     clone_data['parent'] = rom_name
                     parent_lookup[clone_name] = rom_name
+                    
+                    # IMPORTANT: Add clone to main gamedata for direct lookup
+                    if clone_name not in gamedata_json:
+                        # Create clone entry that preserves clone's own description
+                        clone_entry = {
+                            'description': clone_data.get('description', f"{clone_name} (Clone)"),
+                            'parent': rom_name,
+                            'playercount': clone_data.get('playercount', game_data.get('playercount', '1')),
+                            'buttons': clone_data.get('buttons', game_data.get('buttons', '0')),
+                            'sticks': clone_data.get('sticks', game_data.get('sticks', '0')),
+                            'alternating': clone_data.get('alternating', game_data.get('alternating', False)),
+                            # Clone inherits parent's controls unless it has its own
+                            'controls': clone_data.get('controls', game_data.get('controls', {}))
+                        }
+                        gamedata_json[clone_name] = clone_entry
         
         return gamedata_json, parent_lookup, clone_parents
     
@@ -84,11 +99,8 @@ def check_db_update_needed(gamedata_path: str, db_path: str) -> bool:
     # Compare timestamps - only rebuild if gamedata is newer than database
     return gamedata_mtime > db_mtime
 
-# Replace build_gamedata_db in mame_data_utils.py with this clean version:
-
 def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
-    """Build SQLite database from gamedata.json for faster lookups"""
-    print("Building SQLite database...")
+    """Build SQLite database from gamedata.json with proper clone handling"""
     start_time = time.time()
     
     if not gamedata_json:
@@ -155,94 +167,142 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         # Track processed ROM names to avoid duplicates
         processed_roms = set()
         
-        # Process main games first
+        # PASS 1: Process all parent games first
         for rom_name, game_data in gamedata_json.items():
-            # Skip entries that are clones (handled separately below)
+            # Skip if this entry has a 'parent' field (it's a clone)
             if 'parent' in game_data:
                 continue
             
-            # Skip if we've already processed this ROM name
+            # Skip if already processed
             if rom_name in processed_roms:
                 continue
             
             try:
-                # Extract basic game properties
+                # Extract basic game properties for parent
                 game_name = game_data.get('description', rom_name)
                 player_count = int(game_data.get('playercount', 1))
                 buttons = int(game_data.get('buttons', 0))
                 sticks = int(game_data.get('sticks', 0))
                 alternating = 1 if game_data.get('alternating', False) else 0
-                is_clone = 0  # Main entries aren't clones
+                is_clone = 0  # Parent entries aren't clones
                 parent_rom = None
                 
-                # Insert game data with IGNORE to handle any remaining duplicates
+                # Insert parent game
                 cursor.execute(
                     "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom)
                 )
                 
-                # Check if the insert actually happened
                 if cursor.rowcount > 0:
                     games_inserted += 1
                     processed_roms.add(rom_name)
                 
-                # Extract and insert controls
+                # Insert parent controls
                 if 'controls' in game_data:
                     _insert_controls(cursor, rom_name, game_data['controls'])
                     controls_inserted += len(game_data['controls'])
-                
-                # Process clones
-                if 'clones' in game_data and isinstance(game_data['clones'], dict):
-                    for clone_name, clone_data in game_data['clones'].items():
-                        # Skip if clone name already processed
-                        if clone_name in processed_roms:
-                            continue
-                        
-                        try:
-                            # Extract clone properties
-                            clone_game_name = clone_data.get('description', clone_name)
-                            clone_player_count = int(clone_data.get('playercount', player_count))
-                            clone_buttons = int(clone_data.get('buttons', buttons))
-                            clone_sticks = int(clone_data.get('sticks', sticks))
-                            clone_alternating = 1 if clone_data.get('alternating', alternating) else 0
-                            
-                            # Insert clone as a game with IGNORE
-                            cursor.execute(
-                                "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
-                                clone_alternating, 1, rom_name)  # is_clone=1, parent=rom_name
-                            )
-                            
-                            if cursor.rowcount > 0:
-                                games_inserted += 1
-                                processed_roms.add(clone_name)
-                                
-                                # Add clone relationship
-                                cursor.execute(
-                                    "INSERT OR IGNORE INTO clone_relationships VALUES (?, ?)",
-                                    (rom_name, clone_name)
-                                )
-                                clones_inserted += 1
-                                
-                                # Extract and insert clone controls
-                                if 'controls' in clone_data:
-                                    _insert_controls(cursor, clone_name, clone_data['controls'])
-                                    controls_inserted += len(clone_data['controls'])
-                                    
-                        except Exception as e:
-                            # Silently skip problematic clones
-                            continue
-                            
+                    
             except Exception as e:
-                # Silently skip problematic games
                 continue
+        
+        # PASS 2: Process all clone games
+        for rom_name, game_data in gamedata_json.items():
+            # Only process entries that have a 'parent' field (clones)
+            if 'parent' not in game_data:
+                continue
+            
+            # Skip if already processed
+            if rom_name in processed_roms:
+                continue
+            
+            try:
+                parent_rom = game_data['parent']
+                
+                # Extract clone properties (inherit from parent if not specified)
+                clone_game_name = game_data.get('description', rom_name)
+                clone_player_count = int(game_data.get('playercount', 1))
+                clone_buttons = int(game_data.get('buttons', 0))
+                clone_sticks = int(game_data.get('sticks', 0))
+                clone_alternating = 1 if game_data.get('alternating', False) else 0
+                
+                # Insert clone as a game
+                cursor.execute(
+                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (rom_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
+                    clone_alternating, 1, parent_rom)  # is_clone=1, parent=parent_rom
+                )
+                
+                if cursor.rowcount > 0:
+                    games_inserted += 1
+                    processed_roms.add(rom_name)
+                    
+                    # Add clone relationship
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO clone_relationships VALUES (?, ?)",
+                        (parent_rom, rom_name)
+                    )
+                    clones_inserted += 1
+                    
+                    # Insert clone controls (these should inherit from parent if not specified)
+                    if 'controls' in game_data:
+                        _insert_controls(cursor, rom_name, game_data['controls'])
+                        controls_inserted += len(game_data['controls'])
+                        
+            except Exception as e:
+                continue
+        
+        # PASS 3: Handle old-style clones (nested under parent's 'clones' key)
+        for parent_rom, parent_data in gamedata_json.items():
+            if 'parent' in parent_data:  # Skip clones processed above
+                continue
+                
+            if 'clones' in parent_data and isinstance(parent_data['clones'], dict):
+                for clone_name, clone_data in parent_data['clones'].items():
+                    # Skip if already processed in pass 2
+                    if clone_name in processed_roms:
+                        continue
+                    
+                    try:
+                        # Extract clone properties (inherit from parent)
+                        clone_game_name = clone_data.get('description', clone_name)
+                        clone_player_count = int(parent_data.get('playercount', 1))
+                        clone_buttons = int(parent_data.get('buttons', 0))
+                        clone_sticks = int(parent_data.get('sticks', 0))
+                        clone_alternating = 1 if parent_data.get('alternating', False) else 0
+                        
+                        # Insert clone as a game
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
+                            clone_alternating, 1, parent_rom)  # is_clone=1, parent=parent_rom
+                        )
+                        
+                        if cursor.rowcount > 0:
+                            games_inserted += 1
+                            processed_roms.add(clone_name)
+                            
+                            # Add clone relationship
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO clone_relationships VALUES (?, ?)",
+                                (parent_rom, clone_name)
+                            )
+                            clones_inserted += 1
+                            
+                            # Clone inherits parent's controls unless it has its own
+                            clone_controls = clone_data.get('controls', parent_data.get('controls', {}))
+                            if clone_controls:
+                                _insert_controls(cursor, clone_name, clone_controls)
+                                controls_inserted += len(clone_controls)
+                                
+                    except Exception as e:
+                        continue
         
         # Commit changes and close connection
         conn.commit()
         conn.close()
         
         elapsed_time = time.time() - start_time
-        print(f"Database built in {elapsed_time:.2f}s with {games_inserted} games, {controls_inserted} controls")
+        print(f"Database built in {elapsed_time:.2f}s with {games_inserted} games, {controls_inserted} controls, {clones_inserted} clones")
         
         # Clear cache again after building
         clear_database_cache()
@@ -262,21 +322,175 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         clear_database_cache()
         return False
     
-def _insert_controls(cursor, rom_name: str, controls_dict: Dict):
-    """Helper method to insert controls into the database - FIXED to include all controls"""
+def get_game_data_from_db_debug(romname: str, db_path: str) -> Optional[Dict]:
+    """Debug version of get_game_data_from_db to see what's happening"""
     
-    # Get default actions for fallback
+    if not os.path.exists(db_path):
+        print(f"Database doesn't exist: {db_path}")
+        return None
+    
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row  # Enable column access by name
+        cursor = conn.cursor()
+        
+        # Check if game exists in database
+        cursor.execute("SELECT COUNT(*) FROM games WHERE rom_name = ?", (romname,))
+        game_count = cursor.fetchone()[0]
+        print(f"DEBUG: {romname} - Games table entries: {game_count}")
+        
+        # Check controls
+        cursor.execute("SELECT COUNT(*) FROM game_controls WHERE rom_name = ?", (romname,))
+        control_count = cursor.fetchone()[0]
+        print(f"DEBUG: {romname} - Control entries: {control_count}")
+        
+        if control_count > 0:
+            cursor.execute("SELECT control_name, display_name FROM game_controls WHERE rom_name = ? LIMIT 5", (romname,))
+            sample_controls = cursor.fetchall()
+            print(f"DEBUG: {romname} - Sample controls:")
+            for control in sample_controls:
+                print(f"  {control['control_name']} -> '{control['display_name']}'")
+        
+        # Single optimized query with JOIN to get all data at once
+        cursor.execute("""
+            SELECT g.rom_name, g.game_name, g.player_count, g.buttons, g.sticks, 
+                   g.alternating, g.is_clone, g.parent_rom,
+                   c.control_name, c.display_name
+            FROM games g
+            LEFT JOIN game_controls c ON g.rom_name = c.rom_name
+            WHERE g.rom_name = ?
+            ORDER BY c.control_name
+        """, (romname,))
+        
+        rows = cursor.fetchall()
+        print(f"DEBUG: {romname} - Query returned {len(rows)} rows")
+        
+        if not rows:
+            # Try parent lookup if this is a clone
+            cursor.execute("""
+                SELECT parent_rom FROM games WHERE rom_name = ? AND is_clone = 1
+            """, (romname,))
+            parent_result = cursor.fetchone()
+            
+            if parent_result:
+                print(f"DEBUG: {romname} is a clone of {parent_result['parent_rom']}")
+                # Recursively get parent data
+                conn.close()
+                return get_game_data_from_db_debug(parent_result['parent_rom'], db_path)
+            
+            print(f"DEBUG: {romname} - No data found in database")
+            conn.close()
+            return None
+        
+        # Process all rows at once
+        first_row = rows[0]
+        game_data = {
+            'romname': romname,
+            'gamename': first_row['game_name'],
+            'numPlayers': first_row['player_count'],
+            'alternating': bool(first_row['alternating']),
+            'mirrored': False,
+            'miscDetails': f"Buttons: {first_row['buttons']}, Sticks: {first_row['sticks']}",
+            'players': [],
+            'source': 'gamedata.db'
+        }
+        
+        # Process controls efficiently in single pass
+        p1_controls = []
+        p2_controls = []
+        
+        default_actions = get_default_control_actions()
+        
+        controls_processed = 0
+        for row in rows:
+            if not row['control_name']:  # Skip rows without controls
+                continue
+                
+            control_name = row['control_name']
+            display_name = row['display_name']
+            
+            # Use default if no display name
+            if not display_name and control_name in default_actions:
+                display_name = default_actions[control_name]
+                print(f"DEBUG: Using default for {control_name}: {display_name}")
+            
+            # Generate fallback display name
+            if not display_name:
+                parts = control_name.split('_')
+                if len(parts) > 1:
+                    display_name = parts[-1].replace('_', ' ').title()
+                else:
+                    display_name = control_name
+                print(f"DEBUG: Generated fallback for {control_name}: {display_name}")
+            
+            control_entry = {
+                'name': control_name,
+                'value': display_name
+            }
+            
+            # Add to appropriate player list
+            if control_name.startswith('P1_'):
+                p1_controls.append(control_entry)
+                controls_processed += 1
+            elif control_name.startswith('P2_'):
+                p2_controls.append(control_entry)
+                controls_processed += 1
+        
+        print(f"DEBUG: {romname} - Processed {controls_processed} controls")
+        
+        # Sort controls once at the end for consistent order
+        p1_controls.sort(key=lambda x: x['name'])
+        p2_controls.sort(key=lambda x: x['name'])
+        
+        # Add players if they have controls
+        if p1_controls:
+            game_data['players'].append({
+                'number': 1,
+                'numButtons': first_row['buttons'],
+                'labels': p1_controls
+            })
+            print(f"DEBUG: {romname} - Added P1 with {len(p1_controls)} controls")
+        
+        if p2_controls:
+            game_data['players'].append({
+                'number': 2,
+                'numButtons': first_row['buttons'],
+                'labels': p2_controls
+            })
+            print(f"DEBUG: {romname} - Added P2 with {len(p2_controls)} controls")
+        
+        if not p1_controls and not p2_controls:
+            print(f"DEBUG: {romname} - WARNING: No controls added to players!")
+        
+        conn.close()
+        return game_data
+        
+    except sqlite3.Error as e:
+        print(f"Database error for {romname}: {e}")
+        if conn:
+            conn.close()
+        return None
+
+def _insert_controls(cursor, rom_name: str, controls_dict: Dict):
+    """Helper method to insert controls into the database"""
+    
     default_actions = get_default_control_actions()
     
     for control_name, control_data in controls_dict.items():
-        # Get display name from control data
-        display_name = control_data.get('name', '')
+        display_name = ""
         
-        # If no display name, use default action as fallback
+        # Handle different control_data formats
+        if isinstance(control_data, dict):
+            display_name = control_data.get('name', '').strip()
+        elif isinstance(control_data, str):
+            display_name = control_data.strip()
+        
+        # Use default action if no display name
         if not display_name and control_name in default_actions:
             display_name = default_actions[control_name]
         
-        # If still no display name, generate from control name
+        # Generate from control name if still no display name
         if not display_name:
             parts = control_name.split('_')
             if len(parts) > 1:
@@ -284,15 +498,14 @@ def _insert_controls(cursor, rom_name: str, controls_dict: Dict):
             else:
                 display_name = control_name
         
-        # ALWAYS insert the control (never skip based on empty name)
-        cursor.execute(
-            "INSERT INTO game_controls (rom_name, control_name, display_name) VALUES (?, ?, ?)",
-            (rom_name, control_name, display_name)
-        )
-        
-        # Debug output for first few controls
-        #if len(control_name) > 0:  # Just to avoid too much spam
-            #print(f"  Inserted control: {control_name} -> {display_name}")
+        # Always insert the control
+        try:
+            cursor.execute(
+                "INSERT INTO game_controls (rom_name, control_name, display_name) VALUES (?, ?, ?)",
+                (rom_name, control_name, display_name)
+            )
+        except Exception:
+            pass  # Skip errors silently
 
 def rom_exists_in_db(romname: str, db_path: str) -> bool:
     """Quick check if ROM exists in database without loading full data"""
@@ -506,10 +719,10 @@ def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict,
         
     return result
 
-# Also update the data loading function in mame_data_utils.py
+# Fix 3: Enhanced _convert_gamedata_json_to_standard_format to handle controls without names
 def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
                                             gamedata_json: Dict, parent_lookup: Dict) -> Dict:
-    """Convert gamedata.json format to standard game data format - optimized with mappings support"""
+    """Convert gamedata.json format to standard game data format - FIXED to handle controls without names"""
     
     # Pre-allocate result structure
     converted_data = {
@@ -544,7 +757,7 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         # Control types we care about (pre-defined for efficiency)
         valid_control_types = [
             'JOYSTICK', 'BUTTON', 'PEDAL', 'AD_STICK', 'DIAL', 'PADDLE', 
-            'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE'
+            'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE', 'STEER'
         ]
         
         # Single pass through controls
@@ -556,12 +769,22 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
             if not any(control_type in control_name for control_type in valid_control_types):
                 continue
             
-            # Get friendly name efficiently (single lookup chain)
-            friendly_name = (
-                control_data.get('name') or 
-                default_actions.get(control_name) or 
-                control_name.split('_')[-1].replace('_', ' ').title()
-            )
+            # FIXED: Get friendly name efficiently with better fallback handling
+            friendly_name = None
+            
+            # First try to get from control data
+            if isinstance(control_data, dict) and 'name' in control_data:
+                name_value = control_data.get('name', '').strip()
+                if name_value:  # Has custom name
+                    friendly_name = name_value
+            
+            # If no custom name, use default action
+            if not friendly_name:
+                friendly_name = default_actions.get(control_name)
+            
+            # If still no name, generate from control name
+            if not friendly_name:
+                friendly_name = control_name.split('_')[-1].replace('_', ' ').title()
             
             p1_controls.append({
                 'name': control_name,
@@ -579,9 +802,11 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
     
     return converted_data
 
+# Fix 1: Enhanced get_default_control_actions to include all specialized controls
 def get_default_control_actions() -> Dict[str, str]:
-    """Get default control action mappings"""
+    """Get default control action mappings - ENHANCED with all specialized controls"""
     return {
+        # Standard joystick directions
         'P1_JOYSTICK_UP': 'Up',
         'P1_JOYSTICK_DOWN': 'Down',
         'P1_JOYSTICK_LEFT': 'Left',
@@ -590,11 +815,8 @@ def get_default_control_actions() -> Dict[str, str]:
         'P2_JOYSTICK_DOWN': 'Down',
         'P2_JOYSTICK_LEFT': 'Left',
         'P2_JOYSTICK_RIGHT': 'Right',
-        'P1_PEDAL': 'Accelerator Pedal',
-        'P1_PEDAL2': 'Brake Pedal',  
-        'P1_AD_STICK_X': 'Steering Left/Right',
-        'P1_AD_STICK_Y': 'Lean Forward/Back',
-        'P1_AD_STICK_Z': 'Throttle Control',
+        
+        # Standard buttons - extended to 12 buttons
         'P1_BUTTON1': 'A Button',
         'P1_BUTTON2': 'B Button',
         'P1_BUTTON3': 'X Button',
@@ -605,6 +827,9 @@ def get_default_control_actions() -> Dict[str, str]:
         'P1_BUTTON8': 'RT Button',
         'P1_BUTTON9': 'Left Stick Button',
         'P1_BUTTON10': 'Right Stick Button',
+        'P1_BUTTON11': 'Button 11',
+        'P1_BUTTON12': 'Button 12',
+        
         # Mirror P1 button names for P2
         'P2_BUTTON1': 'A Button',
         'P2_BUTTON2': 'B Button',
@@ -616,6 +841,68 @@ def get_default_control_actions() -> Dict[str, str]:
         'P2_BUTTON8': 'RT Button',
         'P2_BUTTON9': 'Left Stick Button',
         'P2_BUTTON10': 'Right Stick Button',
+        'P2_BUTTON11': 'Button 11',
+        'P2_BUTTON12': 'Button 12',
+        
+        # Specialized controls - EXPANDED to include all the ones in your example
+        'P1_PEDAL': 'Accelerator Pedal',
+        'P1_PEDAL2': 'Brake Pedal',  
+        'P1_AD_STICK_X': 'Steering Left/Right',
+        'P1_AD_STICK_Y': 'Lean Forward/Back',
+        'P1_AD_STICK_Z': 'Throttle Control',
+        'P1_DIAL': 'Rotary Dial',
+        'P1_DIAL_V': 'Vertical Dial',
+        'P1_PADDLE': 'Paddle Controller',  # This was missing!
+        'P1_TRACKBALL_X': 'Trackball X-Axis',
+        'P1_TRACKBALL_Y': 'Trackball Y-Axis',
+        'P1_MOUSE_X': 'Mouse X-Axis',
+        'P1_MOUSE_Y': 'Mouse Y-Axis',
+        'P1_LIGHTGUN_X': 'Light Gun X-Axis',
+        'P1_LIGHTGUN_Y': 'Light Gun Y-Axis',
+        'P1_POSITIONAL': 'Positional Control',
+        'P1_GAMBLE_HIGH': 'Gamble High',
+        'P1_GAMBLE_LOW': 'Gamble Low',
+        
+        # Player 2 specialized controls
+        'P2_PEDAL': 'Accelerator Pedal',
+        'P2_PEDAL2': 'Brake Pedal',
+        'P2_AD_STICK_X': 'Steering Left/Right',
+        'P2_AD_STICK_Y': 'Lean Forward/Back',
+        'P2_AD_STICK_Z': 'Throttle Control',
+        'P2_DIAL': 'Rotary Dial',
+        'P2_DIAL_V': 'Vertical Dial',
+        'P2_PADDLE': 'Paddle Controller',
+        'P2_TRACKBALL_X': 'Trackball X-Axis',
+        'P2_TRACKBALL_Y': 'Trackball Y-Axis',
+        
+        # System controls
+        'P1_START': 'Start Button',
+        'P1_SELECT': 'Select/Coin Button',
+        'P2_START': 'Start Button',
+        'P2_SELECT': 'Select/Coin Button',
+        
+        # Additional specialized controls
+        'P1_STEER': 'Steering Wheel',
+        'P2_STEER': 'Steering Wheel',
+        
+        # Right stick controls
+        'P1_JOYSTICKRIGHT_UP': 'Right Stick Up',
+        'P1_JOYSTICKRIGHT_DOWN': 'Right Stick Down',
+        'P1_JOYSTICKRIGHT_LEFT': 'Right Stick Left',
+        'P1_JOYSTICKRIGHT_RIGHT': 'Right Stick Right',
+        
+        # D-pad controls
+        'P1_DPAD_UP': 'D-Pad Up',
+        'P1_DPAD_DOWN': 'D-Pad Down',
+        'P1_DPAD_LEFT': 'D-Pad Left',
+        'P1_DPAD_RIGHT': 'D-Pad Right',
+        
+        # Additional arcade-specific controls
+        'P1_COIN': 'Coin',
+        'P1_SERVICE': 'Service Button',
+        'SERVICE1': 'Service Button',
+        'TEST': 'Test Button',
+        'TILT': 'Tilt',
     }
 
 # ============================================================================
