@@ -5138,11 +5138,8 @@ class MAMEControlConfig(ctk.CTk):
             )
             remove_button.pack(side="left", padx=5)
         
-        # Fix 2: Modified save_game function to preserve existing data and only update what changed
-        # Replace your entire save_game function with this complete version:
-
         def save_game():
-            """Save game data while preserving existing properties - COMPLETE FIXED VERSION"""
+            """Save game data while preserving existing properties - FIXED VERSION FOR CLONES"""
             try:
                 # Validate ROM name
                 current_rom_name = rom_name_var.get().strip()
@@ -5150,6 +5147,15 @@ class MAMEControlConfig(ctk.CTk):
                     messagebox.showerror("Error", "ROM Name is required", parent=editor)
                     return
                     
+                # IMPORTANT: Track if we're editing a clone BEFORE any changes
+                original_rom_being_edited = getattr(self, 'current_game', None)
+                is_editing_clone = (original_rom_being_edited and 
+                                hasattr(self, 'parent_lookup') and 
+                                original_rom_being_edited in self.parent_lookup and
+                                self.parent_lookup[original_rom_being_edited] == current_rom_name)
+                
+                print(f"Save operation: current_rom_name={current_rom_name}, original_rom={original_rom_being_edited}, is_editing_clone={is_editing_clone}")
+                
                 # Get existing gamedata.json
                 gamedata_path = self.gamedata_path
                 try:
@@ -5282,60 +5288,56 @@ class MAMEControlConfig(ctk.CTk):
                             f"Game '{current_rom_name}' {action_text} gamedata.json with {controls_added} control mappings", 
                             parent=editor)
                 
+                # SIMPLE FIX: Clear the LRU cache on get_game_data
+                if hasattr(self.get_game_data, 'cache_clear'):
+                    self.get_game_data.cache_clear()
+                    print("Cleared LRU cache on get_game_data method")
+
+                # Also clear the manual caches
+                if hasattr(self, 'rom_data_cache'):
+                    self.rom_data_cache.clear()
+                    print("Cleared rom_data_cache")
+
+                if hasattr(self, 'processed_cache'):
+                    self.processed_cache.clear() 
+                    print("Cleared processed_cache")
+
                 # Refresh data using startup logic
                 if hasattr(self, 'gamedata_json'):
                     del self.gamedata_json
                 from mame_data_utils import load_gamedata_json
                 self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
-                
-                # FIXED: Rebuild database if needed OR if editing a clone
-                if hasattr(self, 'db_path') and self.db_path:
-                    # Check if we're editing a clone
-                    is_editing_clone = (not is_new_game and 
-                                    hasattr(self, 'parent_lookup') and 
-                                    current_rom_name in self.parent_lookup)
-                    
-                    if check_db_update_needed(self.gamedata_path, self.db_path) or is_editing_clone:
-                        from mame_data_utils import build_gamedata_db  # ← Add this import
-                        build_gamedata_db(self.gamedata_json, self.db_path)
-                
-                # FIXED: Clear cache for edited ROM and related ROMs
-                roms_to_clear = [current_rom_name]
-                
-                # If editing a clone, also clear parent cache
-                if hasattr(self, 'parent_lookup') and current_rom_name in self.parent_lookup:
-                    parent_rom = self.parent_lookup[current_rom_name]
-                    roms_to_clear.append(parent_rom)
-                
-                # If editing a parent, clear all its clones' cache
-                if hasattr(self, 'clone_parents') and current_rom_name in self.clone_parents:
-                    clone_list = self.clone_parents[current_rom_name]
-                    roms_to_clear.extend(clone_list)
-                
-                # Clear ROM data cache
-                if hasattr(self, 'rom_data_cache'):
-                    for rom_name in roms_to_clear:
-                        if rom_name in self.rom_data_cache:
-                            del self.rom_data_cache[rom_name]
-                
-                # Clear processed cache
-                if hasattr(self, 'processed_cache'):
-                    keys_to_remove = []
-                    for rom_name in roms_to_clear:
-                        keys_to_remove.extend([key for key in self.processed_cache.keys() if key.startswith(f"{rom_name}_")])
-                    for key in keys_to_remove:
-                        del self.processed_cache[key]
-                
+
+                # Database rebuild (same as before)
+                needs_rebuild = False
+                if is_editing_clone:
+                    print(f"Rebuilding database because we edited parent {current_rom_name} through clone {original_rom_being_edited}")
+                    needs_rebuild = True
+                elif hasattr(self, 'clone_parents') and current_rom_name in self.clone_parents:
+                    print(f"Rebuilding database because {current_rom_name} has clone ROMs")
+                    needs_rebuild = True
+                elif hasattr(self, 'db_path') and self.db_path:
+                    from mame_data_utils import check_db_update_needed
+                    if check_db_update_needed(self.gamedata_path, self.db_path):
+                        needs_rebuild = True
+
+                if needs_rebuild and hasattr(self, 'db_path') and self.db_path:
+                    from mame_data_utils import build_gamedata_db
+                    build_gamedata_db(self.gamedata_json, self.db_path)
+
                 # Update UI
                 if hasattr(self, 'update_game_list_by_category'):
                     self.update_game_list_by_category(auto_select_first=False)
-                
-                if hasattr(self, 'current_game') and self.current_game == current_rom_name:
-                    self.after(100, lambda: self.display_game_info(current_rom_name))
-                
-                # Reselect edited ROM
-                edited_rom = current_rom_name
-                self.after(150, lambda: self.reselect_rom_after_edit(edited_rom))
+
+                # Reselect the original ROM 
+                rom_to_reselect = original_rom_being_edited if is_editing_clone else current_rom_name
+                if hasattr(self, 'current_game'):
+                    self.current_game = rom_to_reselect
+
+                # Simple refresh after database is rebuilt
+                if rom_to_reselect:
+                    # Just reselect - this will trigger display_game_info automatically
+                    self.after(150, lambda: self.reselect_rom_after_edit(rom_to_reselect))
                 
                 # Close editor
                 editor.destroy()
@@ -5344,6 +5346,7 @@ class MAMEControlConfig(ctk.CTk):
                 messagebox.showerror("Error", f"Failed to save game data: {str(e)}", parent=editor)
                 import traceback
                 traceback.print_exc()
+
         # Save button
         save_button = ctk.CTkButton(
             button_container,
