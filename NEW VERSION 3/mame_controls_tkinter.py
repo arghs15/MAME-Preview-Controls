@@ -5264,7 +5264,7 @@ class MAMEControlConfig(ctk.CTk):
                     
                     game_entry["controls"] = existing_controls
                 
-                # Update button count if needed
+                # Update button count if needed - FIXED VERSION
                 defined_buttons = set()
                 for control_name in game_entry.get("controls", {}):
                     if control_name.startswith("P1_BUTTON"):
@@ -5273,25 +5273,44 @@ class MAMEControlConfig(ctk.CTk):
                             defined_buttons.add(button_num)
                         except ValueError:
                             pass
-                
+
                 current_buttons = int(buttons_var.get())
-                
+
                 if defined_buttons:
+                    # Use the COUNT of defined buttons, not the highest number
+                    actual_button_count = len(defined_buttons)
                     max_defined_button = max(defined_buttons)
                     
-                    if max_defined_button > current_buttons:
+                    # Only suggest changes if there's a significant discrepancy
+                    if actual_button_count != current_buttons:
+                        # Show detailed information about the buttons
+                        button_list = sorted(defined_buttons)
+                        button_list_str = ", ".join([f"P1_BUTTON{b}" for b in button_list])
+                        
                         if messagebox.askyesno("Update Button Count", 
-                                    f"You've defined buttons up to P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to update the button count to {max_defined_button}?", 
+                                    f"You've defined {actual_button_count} buttons: {button_list_str}\n\n"
+                                    f"The game is currently set to use {current_buttons} buttons.\n\n"
+                                    f"Would you like to update the button count to {actual_button_count}?", 
                                     parent=editor):
-                            buttons_var.set(str(max_defined_button))
-                            game_entry["buttons"] = str(max_defined_button)
+                            buttons_var.set(str(actual_button_count))
+                            game_entry["buttons"] = str(actual_button_count)
                     
-                    elif max_defined_button < current_buttons:
-                        if messagebox.askyesno("Reduce Button Count", 
-                                    f"The highest button you've defined is P1_BUTTON{max_defined_button}, but the game is set to use {current_buttons} buttons.\n\nWould you like to reduce the button count to {max_defined_button}?", 
-                                    parent=editor):
-                            buttons_var.set(str(max_defined_button))
-                            game_entry["buttons"] = str(max_defined_button)
+                    # Separately warn about gaps in button numbering if they exist
+                    if len(defined_buttons) > 0:
+                        min_button = min(defined_buttons)
+                        max_button = max(defined_buttons)
+                        expected_buttons = set(range(min_button, max_button + 1))
+                        missing_buttons = expected_buttons - defined_buttons
+                        
+                        if missing_buttons and len(missing_buttons) > 0:
+                            missing_list = sorted(missing_buttons)
+                            missing_str = ", ".join([f"P1_BUTTON{b}" for b in missing_list])
+                            messagebox.showwarning("Button Numbering Gap", 
+                                        f"Warning: You have gaps in your button numbering.\n\n"
+                                        f"Defined buttons: {button_list_str}\n"
+                                        f"Missing buttons: {missing_str}\n\n"
+                                        f"This is unusual but not necessarily wrong. Most games use consecutive button numbers starting from 1.",
+                                        parent=editor)
                 
                 # Save to JSON
                 gamedata[current_rom_name] = game_entry
