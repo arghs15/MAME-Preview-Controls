@@ -1620,7 +1620,8 @@ class PreviewWindow(QMainWindow):
             self.settings_button.clicked.connect(self.show_settings_dialog)
             self.settings_button.setStyleSheet(button_style)
             self.bottom_row.addWidget(self.settings_button)
-        
+            self.settings_button.setVisible(False)  # ADD THIS LINE TO HIDE IT
+            
         # Add button prefix toggle button
         prefix_text = "Hide Prefixes" if self.text_settings.get("show_button_prefix", True) else "Show Prefixes"
         self.prefix_button = QPushButton(prefix_text)
