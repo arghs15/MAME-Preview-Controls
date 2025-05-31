@@ -3862,8 +3862,19 @@ class MAMEControlConfig(ctk.CTk):
     def analyze_controls(self):
         """Comprehensive analysis of ROM controls with improved visual styling and clone count"""
         try:
-            # Get data from both methods
-            generic_games, missing_games = self.identify_generic_controls()
+            # FIXED: Import and call the utility function correctly
+            from mame_data_utils import identify_generic_controls, find_unmatched_roms
+            
+            # Get data using the utility functions with proper parameters
+            generic_games, missing_games = identify_generic_controls(
+                self.available_roms, 
+                self.gamedata_json, 
+                self.parent_lookup, 
+                self.db_path, 
+                getattr(self, 'rom_data_cache', {})
+            )
+            
+            # Get matched ROMs
             matched_roms = set()
             for rom in self.available_roms:
                 if self.get_game_data(rom):
