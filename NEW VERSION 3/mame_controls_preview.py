@@ -1621,7 +1621,7 @@ class PreviewWindow(QMainWindow):
             self.settings_button.setStyleSheet(button_style)
             self.bottom_row.addWidget(self.settings_button)
             self.settings_button.setVisible(False)  # ADD THIS LINE TO HIDE IT
-            
+
         # Add button prefix toggle button
         prefix_text = "Hide Prefixes" if self.text_settings.get("show_button_prefix", True) else "Show Prefixes"
         self.prefix_button = QPushButton(prefix_text)
@@ -6106,7 +6106,7 @@ class PreviewWindow(QMainWindow):
                 
                 # Get button prefix based on control type
                 button_prefix = ""
-                if 'mapping' in control and control['mapping']:
+                if 'mapping' in control and control['mapping'] and control['mapping'] != "NONE":  # ADD != "NONE" CHECK
                     # Try to get prefix from ANY mapping (custom OR default)
                     button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
                     print(f"Got prefix '{button_prefix}' for {control_name} with mapping '{control['mapping']}'")
@@ -6117,7 +6117,7 @@ class PreviewWindow(QMainWindow):
                         if button_num.isdigit():
                             button_prefix = f"B{button_num}"
                 else:
-                    # Only use fallback if no mapping exists
+                    # Use fallback if no mapping exists OR mapping is "NONE"
                     if hasattr(self, 'get_button_prefix'):
                         button_prefix = self.get_button_prefix(control_name)
                 
