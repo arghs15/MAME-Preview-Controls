@@ -99,8 +99,224 @@ def check_db_update_needed(gamedata_path: str, db_path: str) -> bool:
     # Compare timestamps - only rebuild if gamedata is newer than database
     return gamedata_mtime > db_mtime
 
+# Updated sections of mame_data_utils.py to preserve mappings in cache
+
+# 1. Update _convert_gamedata_json_to_standard_format function
+def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
+                                            gamedata_json: Dict, parent_lookup: Dict) -> Dict:
+    """Convert gamedata.json format to standard game data format - UPDATED to preserve mappings"""
+    
+    # Pre-allocate result structure
+    converted_data = {
+        'romname': romname,
+        'gamename': game_data.get('description', romname),
+        'numPlayers': int(game_data.get('playercount', 1)),
+        'alternating': game_data.get('alternating', False),
+        'mirrored': False,
+        'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
+        'players': [],
+        'source': 'gamedata.json'
+    }
+    
+    # PRESERVE MAPPINGS if they exist
+    if 'mappings' in game_data and game_data['mappings']:
+        converted_data['mappings'] = game_data['mappings']
+    
+    # Find controls efficiently
+    controls = game_data.get('controls')
+    if not controls:
+        # Try parent controls
+        parent_rom = game_data.get('parent') or parent_lookup.get(romname)
+        if parent_rom and parent_rom in gamedata_json:
+            parent_data = gamedata_json[parent_rom]
+            controls = parent_data.get('controls')
+            # ALSO GET PARENT MAPPINGS IF CURRENT GAME DOESN'T HAVE THEM
+            if not converted_data.get('mappings') and 'mappings' in parent_data:
+                converted_data['mappings'] = parent_data.get('mappings', [])
+    
+    if controls:
+        # Pre-allocate lists and get default actions once
+        p1_controls = []
+        default_actions = get_default_control_actions()
+        
+        # Control types we care about (pre-defined for efficiency)
+        valid_control_types = [
+            'JOYSTICK', 'BUTTON', 'PEDAL', 'AD_STICK', 'DIAL', 'PADDLE', 
+            'TRACKBALL', 'LIGHTGUN', 'MOUSE', 'POSITIONAL', 'GAMBLE', 'STEER'
+        ]
+        
+        # Single pass through controls
+        for control_name, control_data in controls.items():
+            # Only process P1 controls and valid types
+            if not control_name.startswith('P1_'):
+                continue
+                
+            if not any(control_type in control_name for control_type in valid_control_types):
+                continue
+            
+            # FIXED: Get friendly name efficiently with better fallback handling
+            friendly_name = None
+            
+            # First try to get from control data
+            if isinstance(control_data, dict) and 'name' in control_data:
+                name_value = control_data.get('name', '').strip()
+                if name_value:  # Has custom name
+                    friendly_name = name_value
+            
+            # If no custom name, use default action
+            if not friendly_name:
+                friendly_name = default_actions.get(control_name)
+            
+            # If still no name, generate from control name
+            if not friendly_name:
+                friendly_name = control_name.split('_')[-1].replace('_', ' ').title()
+            
+            p1_controls.append({
+                'name': control_name,
+                'value': friendly_name
+            })
+        
+        # Sort once and add to result
+        if p1_controls:
+            p1_controls.sort(key=lambda x: x['name'])
+            converted_data['players'].append({
+                'number': 1,
+                'numButtons': int(game_data.get('buttons', 1)),  
+                'labels': p1_controls
+            })
+    
+    return converted_data
+
+# 2. Update get_game_data_from_db function to include mappings
+def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
+    """Get control data from SQLite database with mappings support - UPDATED"""
+    
+    if not os.path.exists(db_path):
+        return None
+    
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Updated query to include mappings column
+        cursor.execute("""
+            SELECT g.rom_name, g.game_name, g.player_count, g.buttons, g.sticks, 
+                   g.alternating, g.is_clone, g.parent_rom, g.mappings,
+                   c.control_name, c.display_name
+            FROM games g
+            LEFT JOIN game_controls c ON g.rom_name = c.rom_name
+            WHERE g.rom_name = ?
+            ORDER BY c.control_name
+        """, (romname,))
+        
+        rows = cursor.fetchall()
+        
+        if not rows:
+            # Try parent lookup if this is a clone
+            cursor.execute("""
+                SELECT parent_rom FROM games WHERE rom_name = ? AND is_clone = 1
+            """, (romname,))
+            parent_result = cursor.fetchone()
+            
+            if parent_result:
+                conn.close()
+                return get_game_data_from_db(parent_result['parent_rom'], db_path)
+            
+            conn.close()
+            return None
+        
+        # Process all rows at once
+        first_row = rows[0]
+        game_data = {
+            'romname': romname,
+            'gamename': first_row['game_name'],
+            'numPlayers': first_row['player_count'],
+            'alternating': bool(first_row['alternating']),
+            'mirrored': False,
+            'miscDetails': f"Buttons: {first_row['buttons']}, Sticks: {first_row['sticks']}",
+            'players': [],
+            'source': 'gamedata.db'
+        }
+        
+        # ADD MAPPINGS if they exist
+        if first_row['mappings']:
+            try:
+                # Mappings are stored as JSON string in database
+                import json
+                game_data['mappings'] = json.loads(first_row['mappings'])
+            except (json.JSONDecodeError, TypeError):
+                # If it's already a list or parsing fails, use as-is
+                game_data['mappings'] = first_row['mappings']
+        
+        # Process controls efficiently in single pass
+        p1_controls = []
+        p2_controls = []
+        
+        default_actions = get_default_control_actions()
+        
+        for row in rows:
+            if not row['control_name']:
+                continue
+                
+            control_name = row['control_name']
+            display_name = row['display_name']
+            
+            # Use default if no display name
+            if not display_name and control_name in default_actions:
+                display_name = default_actions[control_name]
+            
+            # Generate fallback display name
+            if not display_name:
+                parts = control_name.split('_')
+                if len(parts) > 1:
+                    display_name = parts[-1].replace('_', ' ').title()
+                else:
+                    display_name = control_name
+            
+            control_entry = {
+                'name': control_name,
+                'value': display_name
+            }
+            
+            # Add to appropriate player list
+            if control_name.startswith('P1_'):
+                p1_controls.append(control_entry)
+            elif control_name.startswith('P2_'):
+                p2_controls.append(control_entry)
+        
+        # Sort controls once at the end for consistent order
+        p1_controls.sort(key=lambda x: x['name'])
+        p2_controls.sort(key=lambda x: x['name'])
+        
+        # Add players if they have controls
+        if p1_controls:
+            game_data['players'].append({
+                'number': 1,
+                'numButtons': first_row['buttons'],
+                'labels': p1_controls
+            })
+        
+        if p2_controls:
+            game_data['players'].append({
+                'number': 2,
+                'numButtons': first_row['buttons'],
+                'labels': p2_controls
+            })
+        
+        conn.close()
+        return game_data
+        
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        if conn:
+            conn.close()
+        return None
+
+# 3. Update build_gamedata_db function to store mappings
 def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
-    """Build SQLite database from gamedata.json with proper clone handling"""
+    """Build SQLite database from gamedata.json with mappings support - UPDATED"""
     start_time = time.time()
     
     if not gamedata_json:
@@ -120,7 +336,7 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         cursor.execute("DROP TABLE IF EXISTS game_controls")
         cursor.execute("DROP TABLE IF EXISTS clone_relationships")
         
-        # Create tables
+        # Create tables - UPDATED to include mappings column
         cursor.execute('''
         CREATE TABLE games (
             rom_name TEXT PRIMARY KEY,
@@ -130,7 +346,8 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
             sticks INTEGER,
             alternating BOOLEAN,
             is_clone BOOLEAN,
-            parent_rom TEXT
+            parent_rom TEXT,
+            mappings TEXT
         )
         ''')
         
@@ -187,10 +404,16 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                 is_clone = 0  # Parent entries aren't clones
                 parent_rom = None
                 
-                # Insert parent game
+                # HANDLE MAPPINGS - store as JSON string
+                mappings_json = None
+                if 'mappings' in game_data and game_data['mappings']:
+                    import json
+                    mappings_json = json.dumps(game_data['mappings'])
+                
+                # Insert parent game - UPDATED query with mappings
                 cursor.execute(
-                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom)
+                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom, mappings_json)
                 )
                 
                 if cursor.rowcount > 0:
@@ -225,11 +448,20 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                 clone_sticks = int(game_data.get('sticks', 0))
                 clone_alternating = 1 if game_data.get('alternating', False) else 0
                 
-                # Insert clone as a game
+                # HANDLE CLONE MAPPINGS - inherit from parent or use own
+                mappings_json = None
+                if 'mappings' in game_data and game_data['mappings']:
+                    import json
+                    mappings_json = json.dumps(game_data['mappings'])
+                elif parent_rom in gamedata_json and 'mappings' in gamedata_json[parent_rom]:
+                    import json
+                    mappings_json = json.dumps(gamedata_json[parent_rom]['mappings'])
+                
+                # Insert clone as a game - UPDATED query with mappings
                 cursor.execute(
-                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (rom_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
-                    clone_alternating, 1, parent_rom)  # is_clone=1, parent=parent_rom
+                    clone_alternating, 1, parent_rom, mappings_json)
                 )
                 
                 if cursor.rowcount > 0:
@@ -243,7 +475,7 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                     )
                     clones_inserted += 1
                     
-                    # Insert clone controls (these should inherit from parent if not specified)
+                    # Insert clone controls
                     if 'controls' in game_data:
                         _insert_controls(cursor, rom_name, game_data['controls'])
                         controls_inserted += len(game_data['controls'])
@@ -270,11 +502,20 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                         clone_sticks = int(parent_data.get('sticks', 0))
                         clone_alternating = 1 if parent_data.get('alternating', False) else 0
                         
-                        # Insert clone as a game
+                        # HANDLE MAPPINGS for old-style clones
+                        mappings_json = None
+                        if 'mappings' in clone_data and clone_data['mappings']:
+                            import json
+                            mappings_json = json.dumps(clone_data['mappings'])
+                        elif 'mappings' in parent_data and parent_data['mappings']:
+                            import json
+                            mappings_json = json.dumps(parent_data['mappings'])
+                        
+                        # Insert clone as a game - UPDATED query with mappings
                         cursor.execute(
-                            "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (clone_name, clone_game_name, clone_player_count, clone_buttons, clone_sticks, 
-                            clone_alternating, 1, parent_rom)  # is_clone=1, parent=parent_rom
+                            clone_alternating, 1, parent_rom, mappings_json)
                         )
                         
                         if cursor.rowcount > 0:
@@ -525,25 +766,23 @@ def rom_exists_in_db(romname: str, db_path: str) -> bool:
 # Global connection cache to avoid repeated database connections
 _db_connection_cache = {}
 
-# In mame_data_utils.py - REPLACE the existing get_game_data_from_db function
+# 2. Update get_game_data_from_db function to include mappings
 def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
-    """Get control data from SQLite database with proper connection handling"""
+    """Get control data from SQLite database with mappings support - UPDATED"""
     
     if not os.path.exists(db_path):
         return None
     
-    # DON'T use connection caching - create fresh connection each time
-    # This prevents issues with stale connections to rebuilt databases
     conn = None
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Enable column access by name
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Single optimized query with JOIN to get all data at once
+        # Updated query to include mappings column
         cursor.execute("""
             SELECT g.rom_name, g.game_name, g.player_count, g.buttons, g.sticks, 
-                   g.alternating, g.is_clone, g.parent_rom,
+                   g.alternating, g.is_clone, g.parent_rom, g.mappings,
                    c.control_name, c.display_name
             FROM games g
             LEFT JOIN game_controls c ON g.rom_name = c.rom_name
@@ -561,14 +800,13 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
             parent_result = cursor.fetchone()
             
             if parent_result:
-                # Recursively get parent data
                 conn.close()
                 return get_game_data_from_db(parent_result['parent_rom'], db_path)
             
             conn.close()
             return None
         
-        # Process all rows at once (more efficient than multiple queries)
+        # Process all rows at once
         first_row = rows[0]
         game_data = {
             'romname': romname,
@@ -581,6 +819,16 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
             'source': 'gamedata.db'
         }
         
+        # ADD MAPPINGS if they exist
+        if first_row['mappings']:
+            try:
+                # Mappings are stored as JSON string in database
+                import json
+                game_data['mappings'] = json.loads(first_row['mappings'])
+            except (json.JSONDecodeError, TypeError):
+                # If it's already a list or parsing fails, use as-is
+                game_data['mappings'] = first_row['mappings']
+        
         # Process controls efficiently in single pass
         p1_controls = []
         p2_controls = []
@@ -588,7 +836,7 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
         default_actions = get_default_control_actions()
         
         for row in rows:
-            if not row['control_name']:  # Skip rows without controls
+            if not row['control_name']:
                 continue
                 
             control_name = row['control_name']
@@ -719,10 +967,10 @@ def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict,
         
     return result
 
-# Fix 3: Enhanced _convert_gamedata_json_to_standard_format to handle controls without names
+# 1. Update _convert_gamedata_json_to_standard_format function
 def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict, 
                                             gamedata_json: Dict, parent_lookup: Dict) -> Dict:
-    """Convert gamedata.json format to standard game data format - FIXED to handle controls without names"""
+    """Convert gamedata.json format to standard game data format - UPDATED to preserve mappings"""
     
     # Pre-allocate result structure
     converted_data = {
@@ -733,9 +981,12 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         'mirrored': False,
         'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
         'players': [],
-        'source': 'gamedata.json',
-        'mappings': game_data.get('mappings', [])  # ENSURE MAPPINGS ARE PRESERVED
+        'source': 'gamedata.json'
     }
+    
+    # PRESERVE MAPPINGS if they exist
+    if 'mappings' in game_data and game_data['mappings']:
+        converted_data['mappings'] = game_data['mappings']
     
     # Find controls efficiently
     controls = game_data.get('controls')
@@ -746,7 +997,7 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
             parent_data = gamedata_json[parent_rom]
             controls = parent_data.get('controls')
             # ALSO GET PARENT MAPPINGS IF CURRENT GAME DOESN'T HAVE THEM
-            if not converted_data['mappings'] and 'mappings' in parent_data:
+            if not converted_data.get('mappings') and 'mappings' in parent_data:
                 converted_data['mappings'] = parent_data.get('mappings', [])
     
     if controls:
@@ -1796,11 +2047,12 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput') -> str:
 # DATA PROCESSING METHODS
 # ============================================================================
 
+# 4. Update update_game_data_with_custom_mappings to preserve mappings
 def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict, 
                                         default_controls: Dict, original_default_controls: Dict,
                                         input_mode: str = 'xinput') -> Dict:
     """
-    Update game_data with custom mappings - optimized for single-pass processing
+    Update game_data with custom mappings - UPDATED to preserve mappings
     """
     if not cfg_controls and not default_controls:
         return game_data
@@ -1865,13 +2117,16 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
             # Set display name
             _set_display_name_for_label(label, input_mode)
     
-    # Add metadata
+    # PRESERVE MAPPINGS metadata in processed game data
     game_data['input_mode'] = input_mode
     if cfg_controls:
         game_data['has_rom_cfg'] = True
         game_data['rom_cfg_file'] = f"{romname}.cfg"
     if default_controls:
         game_data['has_default_cfg'] = True
+    
+    # IMPORTANT: Keep mappings key if it exists
+    # (This should already be preserved from the original game_data)
     
     return game_data
 

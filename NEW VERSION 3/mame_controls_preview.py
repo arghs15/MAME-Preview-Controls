@@ -4927,9 +4927,8 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             return None
     
-    # You'll also need to modify the load_background_image_fullscreen method to accept a forced default:
     def load_background_image_fullscreen(self, force_default=None):
-        """Load the background image for the game with improved path handling"""
+        """Load the background image for the game with mapping support and improved path handling"""
         try:
             image_path = None
             
@@ -4938,22 +4937,38 @@ class PreviewWindow(QMainWindow):
                 image_path = force_default
                 print(f"Using forced default background: {image_path}")
             else:
-                # First check for game-specific image in preview directory
-                possible_paths = [
-                    # First look in preview/images directory
+                # Build priority list for background images
+                possible_paths = []
+                
+                # Priority 1: ROM-specific images in preview/images directory
+                possible_paths.extend([
                     os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
                     os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
-                    
-                    # Then check in preview root
+                ])
+                
+                # Priority 2: Mapping-based images (if mappings exist)
+                mappings = self.get_game_mappings()
+                if mappings:
+                    print(f"Found mappings for {self.rom_name}: {mappings}")
+                    for mapping in mappings:
+                        possible_paths.extend([
+                            os.path.join(self.preview_dir, "images", f"{mapping}.png"),
+                            os.path.join(self.preview_dir, "images", f"{mapping}.jpg"),
+                        ])
+                
+                # Priority 3: ROM-specific images in preview root
+                possible_paths.extend([
                     os.path.join(self.preview_dir, f"{self.rom_name}.png"),
                     os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
-                    
-                    # Default images
+                ])
+                
+                # Priority 4: Default images
+                possible_paths.extend([
                     os.path.join(self.preview_dir, "images", "default.png"),
                     os.path.join(self.preview_dir, "images", "default.jpg"),
                     os.path.join(self.preview_dir, "default.png"),
                     os.path.join(self.preview_dir, "default.jpg"),
-                ]
+                ])
                 
                 # Find the first existing image path
                 for path in possible_paths:
@@ -4962,7 +4977,7 @@ class PreviewWindow(QMainWindow):
                         print(f"Found background image: {image_path}")
                         break
                 
-                # If no image found, use initialize_transparent_background to create one
+                # If no image found, create transparent default
                 if not image_path:
                     image_path = self.initialize_transparent_background()
                     
@@ -5040,6 +5055,189 @@ class PreviewWindow(QMainWindow):
                 self.bg_label.setAlignment(Qt.AlignCenter)
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
 
+    def load_background_image_fullscreen(self, force_default=None):
+        """Load the background image for the game with mapping support and improved path handling"""
+        try:
+            image_path = None
+            
+            # If force_default is provided, use it directly
+            if force_default and os.path.exists(force_default):
+                image_path = force_default
+                print(f"Using forced default background: {image_path}")
+            else:
+                # Build priority list for background images
+                possible_paths = []
+                
+                # Priority 1: ROM-specific images in preview/images directory
+                possible_paths.extend([
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
+                ])
+                
+                # Priority 2: Mapping-based images (if mappings exist)
+                mappings = self.get_game_mappings()
+                if mappings:
+                    print(f"Found mappings for {self.rom_name}: {mappings}")
+                    for mapping in mappings:
+                        possible_paths.extend([
+                            os.path.join(self.preview_dir, "images", f"{mapping}.png"),
+                            os.path.join(self.preview_dir, "images", f"{mapping}.jpg"),
+                        ])
+                
+                # Priority 3: ROM-specific images in preview root
+                possible_paths.extend([
+                    os.path.join(self.preview_dir, f"{self.rom_name}.png"),
+                    os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
+                ])
+                
+                # Priority 4: Default images
+                possible_paths.extend([
+                    os.path.join(self.preview_dir, "images", "default.png"),
+                    os.path.join(self.preview_dir, "images", "default.jpg"),
+                    os.path.join(self.preview_dir, "default.png"),
+                    os.path.join(self.preview_dir, "default.jpg"),
+                ])
+                
+                # Find the first existing image path
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        image_path = path
+                        print(f"Found background image: {image_path}")
+                        break
+                
+                # If no image found, create transparent default
+                if not image_path:
+                    image_path = self.initialize_transparent_background()
+                    
+            # Set background image if found or created
+            if image_path:
+                # Create background label with image
+                self.bg_label = QLabel(self.canvas)
+                
+                # Load the original pixmap without scaling yet
+                original_pixmap = QPixmap(image_path)
+                
+                if original_pixmap.isNull():
+                    print(f"Error: Could not load image from {image_path}")
+                    self.bg_label.setText("Error loading background image")
+                    self.bg_label.setStyleSheet("color: red; font-size: 18px;")
+                    self.bg_label.setAlignment(Qt.AlignCenter)
+                    return
+                
+                # Store the original pixmap for high-quality saving later
+                self.original_background_pixmap = original_pixmap
+                
+                # Create a high-quality scaled version to display
+                # Calculate aspect ratio preserving fit
+                canvas_w = self.canvas.width()
+                canvas_h = self.canvas.height()
+                
+                # Calculate the scaled size that fills the canvas while preserving aspect ratio
+                scaled_pixmap = original_pixmap.scaled(
+                    canvas_w, 
+                    canvas_h, 
+                    Qt.KeepAspectRatio,  # Preserve aspect ratio
+                    Qt.SmoothTransformation  # High quality scaling
+                )
+                
+                # Store the properly scaled pixmap
+                self.background_pixmap = scaled_pixmap
+                
+                # Set it on the label
+                self.bg_label.setPixmap(scaled_pixmap)
+                
+                # Position the background image in the center
+                x = (canvas_w - scaled_pixmap.width()) // 2
+                y = (canvas_h - scaled_pixmap.height()) // 2
+                self.bg_label.setGeometry(x, y, scaled_pixmap.width(), scaled_pixmap.height())
+                
+                # Store the background position for control positioning
+                self.bg_pos = (x, y)
+                self.bg_size = (scaled_pixmap.width(), scaled_pixmap.height())
+                
+                # Make sure the background is below everything
+                self.bg_label.lower()
+                
+                print(f"Background loaded: {scaled_pixmap.width()}x{scaled_pixmap.height()}, positioned at ({x},{y})")
+                
+                # Update when window resizes
+                self.canvas.resizeEvent = self.on_canvas_resize_with_background
+            else:
+                # Fallback to a transparent background
+                print("Could not create or find a background image, using transparent background")
+                self.bg_label = QLabel(self.canvas)
+                self.bg_label.setStyleSheet("background-color: transparent;")
+                self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
+        except Exception as e:
+            print(f"Error loading background image: {e}")
+            import traceback
+            traceback.print_exc()
+            # Handle error by showing message on canvas
+            if hasattr(self, 'bg_label') and self.bg_label:
+                self.bg_label.setText(f"Error loading image: {str(e)}")
+                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
+                self.bg_label.setAlignment(Qt.AlignCenter)
+            else:
+                self.bg_label = QLabel(f"Error: {str(e)}", self.canvas)
+                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
+                self.bg_label.setAlignment(Qt.AlignCenter)
+                self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
+
+    def get_game_mappings(self):
+        """Extract mappings from game data, supporting both gamedata.json and cache formats"""
+        mappings = []
+        
+        try:
+            print(f"\n=== MAPPING EXTRACTION DEBUG for {self.rom_name} ===")
+            print(f"game_data type: {type(self.game_data)}")
+            
+            if hasattr(self, 'game_data') and self.game_data:
+                # Print the keys available in game_data
+                if isinstance(self.game_data, dict):
+                    print(f"Available keys in game_data: {list(self.game_data.keys())}")
+                
+                # Method 1: Check for mappings directly at root level (cache format)
+                if 'mappings' in self.game_data:
+                    mappings = self.game_data['mappings']
+                    print(f"Found mappings at root level: {mappings}")
+                
+                # Method 2: Check if game_data is nested with ROM name key (gamedata.json format)
+                elif self.rom_name in self.game_data:
+                    rom_data = self.game_data[self.rom_name]
+                    print(f"Found ROM data for {self.rom_name}: {type(rom_data)}")
+                    if isinstance(rom_data, dict) and 'mappings' in rom_data:
+                        mappings = rom_data['mappings']
+                        print(f"Found mappings in ROM data: {mappings}")
+                
+                # Method 3: Search through all values for mappings key
+                else:
+                    print("Searching through all game_data values for mappings...")
+                    for key, value in self.game_data.items():
+                        if isinstance(value, dict) and 'mappings' in value:
+                            mappings = value['mappings']
+                            print(f"Found mappings in {key}: {mappings}")
+                            break
+            
+            # Ensure mappings is a list
+            if isinstance(mappings, str):
+                mappings = [mappings]
+            elif not isinstance(mappings, list):
+                if mappings:  # If mappings exists but isn't a list, try to convert
+                    mappings = [str(mappings)]
+                else:
+                    mappings = []
+            
+            print(f"Final mappings result: {mappings}")
+            print("=== END MAPPING EXTRACTION DEBUG ===\n")
+                
+        except Exception as e:
+            print(f"Error extracting mappings: {e}")
+            import traceback
+            traceback.print_exc()
+            mappings = []
+        
+        return mappings
+    
     def update_logo_display(self):
         """Update the logo display based on current settings with improved centering"""
         if not hasattr(self, 'logo_label') or not self.logo_label:
