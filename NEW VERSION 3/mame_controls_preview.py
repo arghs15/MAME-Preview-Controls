@@ -312,7 +312,7 @@ class PreviewWindow(QMainWindow):
         return settings
 
     def load_directional_mode_settings(self):
-        """Load directional mode settings from bezel_settings.json"""
+        """Load directional mode settings from bezel_settings.json (updated for 4 modes)"""
         try:
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
             
@@ -6679,12 +6679,13 @@ class PreviewWindow(QMainWindow):
         print(f"INIT: Directional mode = {self.directional_mode}")
 
     def cycle_directional_mode(self):
-        """Cycle through the three directional visibility modes with immediate response"""
-        # Define the cycle: show_all -> hide_standard -> hide_all -> show_all
+        """Cycle through FOUR directional visibility modes with immediate response"""
+        # Define the 4-mode cycle: show_all -> hide_standard -> hide_specialized -> hide_all -> show_all
         mode_cycle = {
-            "show_all": "hide_standard",      # Show All -> Hide Directional
-            "hide_standard": "hide_all",      # Hide Directional -> Hide All Directional  
-            "hide_all": "show_all"            # Hide All Directional -> Show All
+            "show_all": "hide_standard",           # Show All -> Hide Standard Directional
+            "hide_standard": "hide_specialized",   # Hide Standard -> Hide Specialized Only  
+            "hide_specialized": "hide_all",        # Hide Specialized -> Hide All Directional
+            "hide_all": "show_all"                 # Hide All -> Show All
         }
         
         # Get current mode or default
@@ -6708,12 +6709,13 @@ class PreviewWindow(QMainWindow):
         mode_names = {
             "show_all": "All directional controls visible",
             "hide_standard": "Standard directional controls hidden",
+            "hide_specialized": "Specialized directional controls hidden", 
             "hide_all": "All directional controls hidden"
         }
         self.show_toast_notification(mode_names[self.directional_mode])
 
     def apply_directional_mode(self):
-        """Apply the current directional mode to all controls"""
+        """Apply the current directional mode to all controls (now with 4 modes)"""
         # Set internal flags based on mode
         if self.directional_mode == "show_all":
             self.joystick_visible = True
@@ -6721,6 +6723,9 @@ class PreviewWindow(QMainWindow):
         elif self.directional_mode == "hide_standard":
             self.joystick_visible = False
             self.hide_specialized_with_directional = False
+        elif self.directional_mode == "hide_specialized":
+            self.joystick_visible = True  # Keep standard visible
+            self.hide_specialized_with_directional = True  # Hide specialized
         elif self.directional_mode == "hide_all":
             self.joystick_visible = False
             self.hide_specialized_with_directional = True
@@ -6755,18 +6760,18 @@ class PreviewWindow(QMainWindow):
             is_visible = self.texts_visible  # Default for non-directional controls
             
             if is_standard_directional:
-                # Standard directional: affected by mode
-                if self.directional_mode == "show_all":
-                    is_visible = self.texts_visible
-                else:  # hide_standard or hide_all
+                # Standard directional: affected by hide_standard and hide_all modes
+                if self.directional_mode in ["hide_standard", "hide_all"]:
                     if is_directional_only and auto_show_directionals:
                         is_visible = self.texts_visible  # Auto-show override
                     else:
                         is_visible = False
+                else:  # show_all or hide_specialized
+                    is_visible = self.texts_visible
             
             elif is_specialized_directional:
-                # Specialized directional: only affected in hide_all mode
-                if self.directional_mode == "hide_all":
+                # Specialized directional: affected by hide_specialized and hide_all modes
+                if self.directional_mode in ["hide_specialized", "hide_all"]:
                     if is_directional_only and auto_show_directionals:
                         is_visible = self.texts_visible  # Auto-show override
                     else:
@@ -6795,7 +6800,7 @@ class PreviewWindow(QMainWindow):
         print(f"Applied mode '{self.directional_mode}' to {controls_updated} controls")
 
     def update_directional_mode_button_text(self):
-        """Update button text to show what will happen NEXT"""
+        """Update button text to show what will happen NEXT (now with 4 modes)"""
         if not hasattr(self, 'directional_mode_button'):
             return
         
@@ -6803,16 +6808,22 @@ class PreviewWindow(QMainWindow):
         mode = getattr(self, 'directional_mode', 'show_all')
         
         if mode == "show_all":
-            self.directional_mode_button.setText("Hide Directional")
+            self.directional_mode_button.setText("Hide Standard")
             self.directional_mode_button.setToolTip(
                 "Currently: All directional controls visible\n"
                 "Click to hide standard directional controls (joystick, d-pad)"
             )
         elif mode == "hide_standard":
-            self.directional_mode_button.setText("Hide All Directional")
+            self.directional_mode_button.setText("Hide Specialized")
             self.directional_mode_button.setToolTip(
                 "Currently: Standard directional controls hidden\n"
-                "Click to hide ALL directional controls (including specialized)"
+                "Click to hide specialized controls (trackball, dial, etc.)"
+            )
+        elif mode == "hide_specialized":
+            self.directional_mode_button.setText("Hide All Directional")
+            self.directional_mode_button.setToolTip(
+                "Currently: Specialized directional controls hidden\n"
+                "Click to hide ALL directional controls"
             )
         elif mode == "hide_all":
             self.directional_mode_button.setText("Show All")
@@ -6820,9 +6831,11 @@ class PreviewWindow(QMainWindow):
                 "Currently: All directional controls hidden\n"
                 "Click to show all directional controls"
             )
+        
+        print(f"BUTTON: Updated button text for mode '{mode}' -> '{self.directional_mode_button.text()}'")
 
     def save_directional_mode_settings(self):
-        """Save directional mode settings to bezel_settings.json"""
+        """Save directional mode settings to bezel_settings.json (updated for 4 modes)"""
         try:
             # Load existing settings
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
@@ -6834,7 +6847,7 @@ class PreviewWindow(QMainWindow):
             
             # Update with current mode settings
             settings['joystick_visible'] = self.joystick_visible
-            settings['hide_specialized_with_directional'] = self.hide_specialized_with_directional
+            settings['hide_specialized_with_directional'] = getattr(self, 'hide_specialized_with_directional', False)
             settings['directional_mode'] = getattr(self, 'directional_mode', 'show_all')  # Save mode for reference
             
             # Save back to file
@@ -6843,6 +6856,7 @@ class PreviewWindow(QMainWindow):
                 json.dump(settings, f)
             
             print(f"SAVE: Saved directional mode '{self.directional_mode}' settings")
+            print(f"SAVE: joystick_visible={self.joystick_visible}, hide_specialized={getattr(self, 'hide_specialized_with_directional', False)}")
             
         except Exception as e:
             print(f"Error saving directional mode settings: {e}")
