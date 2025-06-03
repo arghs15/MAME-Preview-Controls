@@ -98,7 +98,10 @@ class PreviewWindow(QMainWindow):
             # Load settings
             self.text_settings = self.load_text_settings()
             self.logo_settings = self.load_logo_settings()
-            bezel_settings = self.load_bezel_settings()
+            
+            # Load bezel and directional settings
+            bezel_settings = self.load_bezel_settings_with_directional()
+            self.bezel_visible = bezel_settings.get("bezel_visible", False)
 
             # NEW: Pre-analyze the game for directional-only status
             directional_count = 0
@@ -229,7 +232,9 @@ class PreviewWindow(QMainWindow):
             
             print("PreviewWindow initialization complete")
             
-            QTimer.singleShot(600, self.apply_joystick_visibility)
+            # Initialize directional mode from saved settings AFTER creating button frame
+            self.init_directional_mode_on_startup()
+            
             QTimer.singleShot(300, self.force_resize_all_labels)
             QTimer.singleShot(1000, self.detect_screen_after_startup)
             # Add this line at the end of __init__, just before self.setVisible(True)
@@ -243,7 +248,12 @@ class PreviewWindow(QMainWindow):
             
             self.initialize_controller_close()
             
+            # CRITICAL: Enforce layer order AFTER everything is created but BEFORE showing
             self.enforce_layer_order()
+            
+            # ADDITIONAL: Force proper layering with a small delay to ensure bezel is properly layered
+            QTimer.singleShot(100, self.enforce_layer_order)
+            QTimer.singleShot(200, self.enforce_layer_order)
             
             self.setVisible(True)  # Now show the window
 
@@ -256,6 +266,84 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
+
+    def init_directional_mode_on_startup(self):
+        """Initialize directional mode from saved settings on startup"""
+        
+        # First load the directional mode settings
+        self.load_directional_mode_settings()
+        
+        # Apply the loaded mode to all controls
+        self.apply_directional_mode()
+        
+        # Update the button text to match the current mode
+        self.update_directional_mode_button_text()
+        
+        print(f"STARTUP: Initialized with directional mode '{self.directional_mode}'")
+
+    def load_bezel_settings_with_directional(self):
+        """Load bezel and directional mode settings from file in settings directory"""
+        settings = {
+            "bezel_visible": False,
+            "joystick_visible": True,  # Default to visible 
+            "auto_show_directionals_for_directional_only": True,
+            "directional_mode": "show_all",  # Add this
+            "hide_specialized_with_directional": False  # Add this
+        }
+        
+        try:
+            # Check new location first
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    loaded_settings = json.load(f)
+                    settings.update(loaded_settings)
+                    print(f"Loaded bezel/directional settings from {settings_file}: {settings}")
+        except Exception as e:
+            print(f"Error loading bezel/directional settings: {e}")
+        
+        # Set the directional mode variables
+        self.directional_mode = settings.get("directional_mode", "show_all")
+        self.joystick_visible = settings.get("joystick_visible", True)
+        self.hide_specialized_with_directional = settings.get("hide_specialized_with_directional", False)
+        self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
+
+        return settings
+
+    def load_directional_mode_settings(self):
+        """Load directional mode settings from bezel_settings.json"""
+        try:
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    settings = json.load(f)
+                
+                # Load the saved directional mode
+                self.directional_mode = settings.get('directional_mode', 'show_all')
+                self.joystick_visible = settings.get('joystick_visible', True)
+                self.hide_specialized_with_directional = settings.get('hide_specialized_with_directional', False)
+                
+                print(f"LOAD: Loaded directional mode '{self.directional_mode}'")
+                print(f"LOAD: joystick_visible={self.joystick_visible}, hide_specialized={self.hide_specialized_with_directional}")
+                
+                return True
+            else:
+                # Set defaults if no settings file
+                self.directional_mode = 'show_all'
+                self.joystick_visible = True
+                self.hide_specialized_with_directional = False
+                print("LOAD: No settings file found, using defaults")
+                return False
+                
+        except Exception as e:
+            print(f"Error loading directional mode settings: {e}")
+            # Set defaults on error
+            self.directional_mode = 'show_all'
+            self.joystick_visible = True
+            self.hide_specialized_with_directional = False
+            return False
 
     def distribute_controls_vertically(self):
         """Distribute visible controls evenly in columns with improved boundary detection"""
@@ -1648,7 +1736,8 @@ class PreviewWindow(QMainWindow):
         self.bottom_row.addWidget(self.directional_mode_button)
         
         # Initialize directional mode and update button text
-        self.init_directional_mode()
+        # Initialize directional mode from saved settings
+
         self.update_directional_mode_button_text()
         
         # Add a settings button if it doesn't exist
@@ -1754,7 +1843,7 @@ class PreviewWindow(QMainWindow):
         
         # Update logo button text after a short delay to ensure settings are loaded
         QTimer.singleShot(100, self.update_center_logo_button_text)
-        
+        self.init_directional_mode_on_startup()
         # Show button frame
         self.button_frame.show()
 
@@ -3614,11 +3703,14 @@ class PreviewWindow(QMainWindow):
             # SPECIALIZED controls are left alone - they keep their current visibility
             # This includes: DIAL, PADDLE, TRACKBALL, MOUSE, LIGHTGUN, AD_STICK, PEDAL, POSITIONAL
         
+        # Force immediate canvas update to remove delay
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+            self.canvas.repaint()
+        
         print(f"Applied standard directional visibility to {controls_updated} controls (joystick_visible: {self.joystick_visible})")
         print(f"Specialized directional controls (trackball, dial, etc.) are unaffected")
         return controls_updated
-
-    # Also add helper methods for clarity:
 
     def is_standard_directional_control(self, control_name):
         """Check if control is a standard directional control (joystick, d-pad)"""
@@ -3711,6 +3803,36 @@ class PreviewWindow(QMainWindow):
             print(f"Error saving global text settings: {e}")
             import traceback
             traceback.print_exc()
+    
+    def load_bezel_settings_with_directional(self):
+        """Load bezel and directional mode settings from file in settings directory"""
+        settings = {
+            "bezel_visible": False,
+            "joystick_visible": True,  # Default to visible 
+            "auto_show_directionals_for_directional_only": True,
+            "directional_mode": "show_all",  # Add this
+            "hide_specialized_with_directional": False  # Add this
+        }
+        
+        try:
+            # Check new location first
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    loaded_settings = json.load(f)
+                    settings.update(loaded_settings)
+                    print(f"Loaded bezel/directional settings from {settings_file}: {settings}")
+        except Exception as e:
+            print(f"Error loading bezel/directional settings: {e}")
+        
+        # Set the directional mode variables
+        self.directional_mode = settings.get("directional_mode", "show_all")
+        self.joystick_visible = settings.get("joystick_visible", True)
+        self.hide_specialized_with_directional = settings.get("hide_specialized_with_directional", False)
+        self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
+
+        return settings
     
     def load_bezel_settings(self):
         """Load bezel and joystick visibility settings from file in settings directory"""
@@ -3909,10 +4031,9 @@ class PreviewWindow(QMainWindow):
             self.save_positions(is_global=True)
             self.show_toast_notification("Logo visibility saved globally")
     
-    # Add this method to your PreviewWindow class
     def enforce_layer_order(self):
         """
-        Enforce the correct stacking order for all elements:
+        Enforce the correct stacking order for all elements with aggressive control positioning:
         1. Background (bottom)
         2. Bezel (above background)
         3. Logo (above bezel)
@@ -3937,22 +4058,31 @@ class PreviewWindow(QMainWindow):
         # Step 3: Place logo above bezel but below controls
         if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
             self.logo_label.raise_()
-            print("Logo raised above bezel")
+            # But make sure it's still below controls
+            if hasattr(self, 'control_labels'):
+                for control_data in self.control_labels.values():
+                    if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
+                        self.logo_label.stackUnder(control_data['label'])
+                        break  # Just need to stack under one control to put it below all
+            print("Logo raised above bezel but below controls")
         
-        # Step 4: Raise all controls to the top
+        # Step 4: AGGRESSIVELY raise all controls to the top
         if hasattr(self, 'control_labels'):
             controls_raised = 0
-            for control_name, control_data in self.control_labels.items():
-                if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
-                    control_data['label'].raise_()
-                    controls_raised += 1
-            print(f"Raised {controls_raised} visible controls to top layer")
+            # Do this twice to make sure they're really on top
+            for _ in range(2):
+                for control_name, control_data in self.control_labels.items():
+                    if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
+                        control_data['label'].raise_()
+                        controls_raised += 1
+            print(f"AGGRESSIVELY raised {controls_raised} visible controls to top layer (2 passes)")
         
-        # Force a repaint
+        # Step 5: Force immediate repaint to apply changes
         if hasattr(self, 'canvas'):
             self.canvas.update()
+            self.canvas.repaint()
         
-        print("Layer order enforcement complete")
+        print("Layer order enforcement complete with immediate repaint")
     
     def save_logo_settings(self, is_global=False):
         """Save logo settings to file in settings directory"""
@@ -6295,14 +6425,14 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
     
     def toggle_joystick_controls(self):
-        """Toggle visibility of all directional controls with proper saving"""
+        """Toggle visibility of all directional controls with immediate response and proper saving"""
         self.joystick_visible = not self.joystick_visible
         
         # Update button text
         if hasattr(self, 'joystick_button'):
             self.joystick_button.setText("Show Directional" if not self.joystick_visible else "Hide Directional")
         
-        # Apply the joystick visibility
+        # Apply the joystick visibility immediately
         self.apply_joystick_visibility()
         
         # CRITICAL: Enforce correct layer order
@@ -6549,7 +6679,7 @@ class PreviewWindow(QMainWindow):
         print(f"INIT: Directional mode = {self.directional_mode}")
 
     def cycle_directional_mode(self):
-        """Cycle through the three directional visibility modes"""
+        """Cycle through the three directional visibility modes with immediate response"""
         # Define the cycle: show_all -> hide_standard -> hide_all -> show_all
         mode_cycle = {
             "show_all": "hide_standard",      # Show All -> Hide Directional
@@ -6565,7 +6695,7 @@ class PreviewWindow(QMainWindow):
         
         print(f"CYCLE: {current_mode} -> {self.directional_mode}")
         
-        # Apply the new mode
+        # Apply the new mode immediately
         self.apply_directional_mode()
         
         # Update button text
@@ -6647,9 +6777,20 @@ class PreviewWindow(QMainWindow):
             # Apply visibility change
             if control_data['label'].isVisible() != is_visible:
                 control_data['label'].setVisible(is_visible)
+                # If we're making a control visible, ensure it's on top
+                if is_visible:
+                    control_data['label'].raise_()
                 controls_updated += 1
                 control_type = "specialized" if is_specialized_directional else "standard"
                 print(f"Updated {control_type} {control_name} visibility to {is_visible}")
+        
+        # Force immediate canvas update and layer enforcement
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+            self.canvas.repaint()
+        
+        # CRITICAL: Enforce layer order after visibility changes
+        self.enforce_layer_order()
         
         print(f"Applied mode '{self.directional_mode}' to {controls_updated} controls")
 
