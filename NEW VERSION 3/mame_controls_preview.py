@@ -258,16 +258,20 @@ class PreviewWindow(QMainWindow):
             self.close()
 
     def distribute_controls_vertically(self):
-        """Distribute visible controls evenly in columns with detailed debugging"""
+        """Distribute visible controls evenly in columns with improved boundary detection"""
         # Get all visible control labels
         visible_controls = []
         for control_name, control_data in self.control_labels.items():
             if 'label' in control_data and control_data['label'].isVisible():
-                visible_controls.append((control_name, control_data['label']))
+                label = control_data['label']
+                visible_controls.append((control_name, label))
         
-        if len(visible_controls) < 3:
-            self.show_toast_notification("Need at least 3 visible controls to distribute")
+        if len(visible_controls) < 2:
+            self.show_toast_notification("Need at least 2 visible controls to distribute")
             return False
+        
+        print(f"\n=== DISTRIBUTE DEBUG (Enhanced) ===")
+        print(f"Processing {len(visible_controls)} visible controls")
         
         # Group controls by column (similar X positions)
         columns = {}
@@ -290,7 +294,6 @@ class PreviewWindow(QMainWindow):
             
             columns[assigned_column].append((control_name, label))
         
-        print(f"\n=== DISTRIBUTE DEBUG ===")
         print(f"Found {len(columns)} columns with controls:")
         for col_x, controls in columns.items():
             print(f"  Column at X={col_x}: {len(controls)} controls")
@@ -300,9 +303,9 @@ class PreviewWindow(QMainWindow):
         
         # Process each column separately
         for col_x, column_controls in columns.items():
-            # Need at least 3 controls in a column to distribute
-            if len(column_controls) < 3:
-                print(f"  Skipping column at X={col_x} - only {len(column_controls)} controls")
+            # Need at least 2 controls in a column to distribute
+            if len(column_controls) < 2:
+                print(f"  Skipping column at X={col_x} - only {len(column_controls)} control(s)")
                 continue
             
             print(f"\n--- Processing Column at X={col_x} ---")
@@ -310,69 +313,81 @@ class PreviewWindow(QMainWindow):
             # Sort controls in this column by Y position
             column_controls.sort(key=lambda item: item[1].y())
             
-            # Print BEFORE positions
+            # Print BEFORE positions with label heights
             print("BEFORE Distribution:")
             for i, (control_name, label) in enumerate(column_controls):
-                print(f"  {i}: {control_name} at Y={label.y()}")
+                label_height = label.height()
+                print(f"  {i}: {control_name} at Y={label.y()}, height={label_height}px")
             
-            # Get top and bottom boundaries for this column
-            top_label = column_controls[0][1]
-            bottom_label = column_controls[-1][1]
-            top_y = top_label.y()
-            bottom_y = bottom_label.y()
-            total_height = bottom_y - top_y
+            # Find the actual visual boundaries (topmost and bottommost controls)
+            topmost_control = column_controls[0]  # First in sorted list
+            bottommost_control = column_controls[-1]  # Last in sorted list
             
-            print(f"Top boundary: {column_controls[0][0]} at Y={top_y}")
-            print(f"Bottom boundary: {column_controls[-1][0]} at Y={bottom_y}")
-            print(f"Total height: {total_height}px")
+            topmost_name, topmost_label = topmost_control
+            bottommost_name, bottommost_label = bottommost_control
             
-            # Skip if controls are too close together
-            if total_height < 100:
-                print(f"  Skipping column - controls too close together ({total_height}px)")
+            topmost_y = topmost_label.y()
+            bottommost_y = bottommost_label.y()
+            
+            # Calculate available space between the boundaries
+            total_height = bottommost_y - topmost_y
+            
+            print(f"Visual boundaries:")
+            print(f"  Topmost: {topmost_name} at Y={topmost_y}")
+            print(f"  Bottommost: {bottommost_name} at Y={bottommost_y}")
+            print(f"  Available height: {total_height}px")
+            
+            # Calculate more reasonable minimum spacing
+            avg_label_height = sum(label.height() for _, label in column_controls) / len(column_controls)
+            min_spacing = avg_label_height + 5
+            
+            print(f"Average label height: {avg_label_height:.1f}px, Min spacing: {min_spacing:.1f}px")
+            
+            # Only skip if total height is extremely small
+            required_minimum = min_spacing * (len(column_controls) - 1)
+            if total_height < required_minimum * 0.5:  # Very relaxed requirement
+                print(f"  Skipping column - insufficient space for distribution")
+                print(f"  Need at least: {required_minimum * 0.5:.1f}px, Have: {total_height}px")
                 continue
             
             # Calculate even spacing for this column
             steps = len(column_controls) - 1
-            step_size = total_height / steps
+            if steps > 0:
+                step_size = total_height / steps
+            else:
+                step_size = 0
             
             print(f"Steps: {steps}, Step size: {step_size:.1f}px")
             
             column_changes = 0
             
-            # Calculate all target positions first
-            target_positions = []
-            for i in range(len(column_controls)):
-                if i == 0:
-                    target_y = top_y  # Keep first at boundary
-                elif i == len(column_controls) - 1:
-                    target_y = bottom_y  # Keep last at boundary
-                else:
-                    target_y = int(top_y + (i * step_size))
-                target_positions.append(target_y)
-            
+            # Calculate target positions based on actual topmost/bottommost
             print("\nTarget positions:")
-            for i, target_y in enumerate(target_positions):
-                control_name = column_controls[i][0]
-                current_y = column_controls[i][1].y()
-                will_move = abs(current_y - target_y) > 2 and i != 0 and i != len(column_controls) - 1
-                print(f"  {i}: {control_name} → Y={target_y} (current: {current_y}) {'MOVE' if will_move else 'STAY'}")
-            
-            # Now apply the moves
-            for i in range(1, len(column_controls) - 1):  # Skip first and last
-                control_name, label = column_controls[i]
-                current_y = label.y()
-                target_y = target_positions[i]
+            for i, (control_name, label) in enumerate(column_controls):
+                if i == 0:
+                    # Keep topmost exactly where it is
+                    target_y = topmost_y
+                elif i == len(column_controls) - 1:
+                    # Keep bottommost exactly where it is
+                    target_y = bottommost_y
+                else:
+                    # Distribute evenly between top and bottom
+                    target_y = int(topmost_y + (i * step_size))
                 
-                # Only move if position would change significantly
-                if abs(current_y - target_y) > 2:
+                current_y = label.y()
+                will_move = abs(current_y - target_y) > 2
+                print(f"  {i}: {control_name} → Y={target_y} (current: {current_y}) {'MOVE' if will_move else 'STAY'}")
+                
+                # Apply the move
+                if will_move:
                     label.move(label.x(), target_y)
                     column_changes += 1
                     print(f"  MOVED: {control_name} from Y={current_y} to Y={target_y}")
-                else:
-                    print(f"  SKIPPED: {control_name} already at Y={current_y}")
             
             # Print AFTER positions
             print("\nAFTER Distribution:")
+            # Re-sort to show current positions
+            column_controls.sort(key=lambda item: item[1].y())
             for i, (control_name, label) in enumerate(column_controls):
                 spacing = ""
                 if i > 0:
@@ -384,10 +399,15 @@ class PreviewWindow(QMainWindow):
             # Calculate actual spacing between adjacent controls
             print("\nActual gaps between controls:")
             for i in range(1, len(column_controls)):
-                prev_y = column_controls[i-1][1].y()
-                curr_y = column_controls[i][1].y()
+                prev_label = column_controls[i-1][1]
+                curr_label = column_controls[i][1]
+                prev_y = prev_label.y()
+                curr_y = curr_label.y()
                 gap = curr_y - prev_y
-                print(f"  Gap {i-1}→{i}: {gap}px")
+                prev_height = prev_label.height()
+                overlap_check = gap < prev_height
+                status = " (OVERLAP!)" if overlap_check else " (OK)"
+                print(f"  Gap {i-1}→{i}: {gap}px{status}")
             
             if column_changes > 0:
                 print(f"\nDistributed {column_changes} controls in column at X={col_x}")
@@ -396,6 +416,10 @@ class PreviewWindow(QMainWindow):
         
         print(f"\n=== DISTRIBUTE COMPLETE ===\n")
         
+        # Force a repaint to ensure changes are visible
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+        
         # Show results
         if total_changes > 0:
             self.show_toast_notification(f"Distributed {total_changes} controls across {columns_processed} columns")
@@ -403,7 +427,7 @@ class PreviewWindow(QMainWindow):
             self.show_toast_notification("Controls already evenly distributed")
         
         return total_changes > 0
-    
+
     def show_toast_notification(self, message, duration=2000):
         """Show a brief notification that automatically disappears after specified duration (ms)"""
         from PyQt5.QtWidgets import QLabel
@@ -1575,6 +1599,15 @@ class PreviewWindow(QMainWindow):
         self.rom_save_button.setToolTip(f"Save layout specifically for {self.rom_name}\nOverrides global layout for this game only")
         self.top_row.addWidget(self.rom_save_button)
 
+        # Mapping Save button (only if ROM has mapping)
+        if self.has_mapping():
+            mapping = self.get_current_mapping()
+            self.mapping_save_button = QPushButton(f"Save {mapping}")
+            self.mapping_save_button.clicked.connect(self.save_mapping_positions)
+            self.mapping_save_button.setStyleSheet(button_style)
+            self.mapping_save_button.setToolTip(f"Save layout for all games with mapping: {mapping}")
+            self.top_row.addWidget(self.mapping_save_button)
+        
         # In your create_floating_button_frame method, add another button:
         self.reset_rom_button = QPushButton("Reset ROM")
         self.reset_rom_button.clicked.connect(self.delete_rom_specific_settings)
@@ -5905,32 +5938,175 @@ class PreviewWindow(QMainWindow):
         # Return the prefix if found, otherwise empty string
         return all_prefixes.get(control_name, "")
     
-    # Add or update a method to load saved positions
-    def load_saved_positions(self):
-        """Load saved positions from ROM-specific or global config with improved error handling"""
+    def get_current_mapping(self):
+        """Get the mapping value for the current ROM"""
+        try:
+            # Check if game_data has mapping information
+            if hasattr(self, 'game_data') and self.game_data:
+                # Method 1: Check for mappings directly at root level (cache format)
+                if 'mappings' in self.game_data:
+                    mappings = self.game_data['mappings']
+                    if mappings:
+                        # Return first mapping if it's a list, or the mapping itself if it's a string
+                        if isinstance(mappings, list) and len(mappings) > 0:
+                            return mappings[0]
+                        elif isinstance(mappings, str):
+                            return mappings
+                
+                # Method 2: Check if game_data is nested with ROM name key (gamedata.json format)
+                elif self.rom_name in self.game_data:
+                    rom_data = self.game_data[self.rom_name]
+                    if isinstance(rom_data, dict) and 'mappings' in rom_data:
+                        mappings = rom_data['mappings']
+                        if mappings:
+                            if isinstance(mappings, list) and len(mappings) > 0:
+                                return mappings[0]
+                            elif isinstance(mappings, str):
+                                return mappings
+                
+                # Method 3: Search through all values for mappings key
+                else:
+                    for key, value in self.game_data.items():
+                        if isinstance(value, dict) and 'mappings' in value:
+                            mappings = value['mappings']
+                            if mappings:
+                                if isinstance(mappings, list) and len(mappings) > 0:
+                                    return mappings[0]
+                                elif isinstance(mappings, str):
+                                    return mappings
+            
+            print(f"No mapping found for {self.rom_name}")
+            return None
+                    
+        except Exception as e:
+            print(f"Error getting mapping for {self.rom_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def has_mapping(self):
+        """Check if the current ROM has a mapping value"""
+        mapping = self.get_current_mapping()
+        return mapping is not None and mapping.strip() != ""
+
+    def save_mapping_positions(self):
+        """Save current control positions for the current mapping"""
+        try:
+            # Get the mapping for this ROM
+            mapping = self.get_current_mapping()
+            if not mapping:
+                self.show_toast_notification("No mapping available for this ROM")
+                return False
+            
+            # Create settings directory if it doesn't exist
+            os.makedirs(self.settings_dir, exist_ok=True)
+            
+            # Define the mapping positions file
+            mapping_positions_file = os.path.join(self.settings_dir, f"{mapping}_positions.json")
+            
+            # Load existing mapping positions to preserve them
+            existing_positions = {}
+            if os.path.exists(mapping_positions_file):
+                try:
+                    with open(mapping_positions_file, 'r') as f:
+                        existing_positions = json.load(f)
+                    print(f"Loaded {len(existing_positions)} existing mapping positions to preserve")
+                except Exception as e:
+                    print(f"Error loading existing mapping positions: {e}")
+            
+            # Get positions for current controls
+            y_offset = self.text_settings.get("y_offset", -40)
+            new_positions = {}
+            
+            for control_name, control_data in self.control_labels.items():
+                label_pos = control_data['label'].pos()
+                
+                # Store normalized position (without y-offset)
+                new_positions[control_name] = [label_pos.x(), label_pos.y() - y_offset]
+            
+            # Merge existing and new positions (new ones override existing ones)
+            merged_positions = {**existing_positions, **new_positions}
+            
+            # Save merged positions to file
+            with open(mapping_positions_file, 'w') as f:
+                json.dump(merged_positions, f)
+            
+            print(f"Saved {len(new_positions)} new positions and preserved {len(existing_positions) - len(set(existing_positions.keys()) & set(new_positions.keys()))} existing positions for mapping '{mapping}' to: {mapping_positions_file}")
+            
+            # Also save text settings
+            self.save_text_settings(self.text_settings)
+            
+            # Save logo settings
+            if hasattr(self, 'logo_label') and self.logo_label:
+                # Update logo settings before saving
+                if self.logo_label.isVisible():
+                    # Update current logo position and size
+                    self.logo_settings["logo_visible"] = True
+                    self.logo_settings["custom_position"] = True
+                    self.logo_settings["x_position"] = self.logo_label.pos().x()
+                    self.logo_settings["y_position"] = self.logo_label.pos().y()
+                    
+                    # Update size percentages based on current pixmap
+                    logo_pixmap = self.logo_label.pixmap()
+                    if logo_pixmap and not logo_pixmap.isNull():
+                        canvas_width = self.canvas.width()
+                        canvas_height = self.canvas.height()
+                        
+                        width_percentage = (logo_pixmap.width() / canvas_width) * 100
+                        height_percentage = (logo_pixmap.height() / canvas_height) * 100
+                        
+                        self.logo_settings["width_percentage"] = width_percentage
+                        self.logo_settings["height_percentage"] = height_percentage
+                
+                # Save logo settings
+                self.save_logo_settings()
+            
+            # Show success notification
+            self.show_toast_notification(f"Positions saved for mapping: {mapping}")
+            
+            print(f"All settings saved for mapping '{mapping}'")
+            return True
+                
+        except Exception as e:
+            print(f"Error saving mapping positions: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Show error message
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to save mapping positions: {str(e)}"
+            )
+            return False
+
+    def load_saved_positions_with_mapping_support(self):
+        """Enhanced load_saved_positions that includes mapping-based positions with proper priority"""
         positions = {}
         rom_positions = {}
+        mapping_positions = {}
         global_positions = {}
         
         try:
-            print("\n=== Loading saved positions ===")
-            # Check for both ROM-specific and global positions (in settings directory)
+            print("\n=== Loading saved positions with mapping support ===")
+            
+            # Define file paths
             rom_positions_file = os.path.join(self.settings_dir, f"{self.rom_name}_positions.json")
             global_positions_file = os.path.join(self.settings_dir, "global_positions.json")
             
-            # Log what we're looking for
-            print(f"Looking for ROM-specific positions at: {rom_positions_file}")
-            print(f"Looking for global positions at: {global_positions_file}")
+            # Get mapping-specific file if mapping exists
+            mapping = self.get_current_mapping()
+            mapping_positions_file = None
+            if mapping:
+                mapping_positions_file = os.path.join(self.settings_dir, f"{mapping}_positions.json")
+                print(f"Looking for mapping positions at: {mapping_positions_file}")
             
-            # First load global positions (as a base)
+            # 1. Load global positions (lowest priority)
             if os.path.exists(global_positions_file):
                 with open(global_positions_file, 'r') as f:
                     global_positions = json.load(f)
-                    print(f"Loaded global positions from {global_positions_file}")
-                    print(f"Found {len(global_positions)} global positions")
+                    print(f"Loaded {len(global_positions)} global positions")
             else:
-                print("No global position file found")
-                
                 # Check legacy global paths
                 legacy_global_paths = [
                     os.path.join(self.preview_dir, "global_positions.json"),
@@ -5948,18 +6124,21 @@ class PreviewWindow(QMainWindow):
                         with open(global_positions_file, 'w') as f:
                             json.dump(global_positions, f)
                         
-                        print(f"Migrated global positions from {legacy_path} to {global_positions_file}")
+                        print(f"Migrated global positions from {legacy_path}")
                         break
             
-            # Then check for ROM-specific positions (which would override globals)
+            # 2. Load mapping positions (medium priority)
+            if mapping_positions_file and os.path.exists(mapping_positions_file):
+                with open(mapping_positions_file, 'r') as f:
+                    mapping_positions = json.load(f)
+                    print(f"Loaded {len(mapping_positions)} mapping positions for '{mapping}'")
+            
+            # 3. Load ROM-specific positions (highest priority)
             if os.path.exists(rom_positions_file):
                 with open(rom_positions_file, 'r') as f:
                     rom_positions = json.load(f)
-                    print(f"Loaded ROM-specific positions for {self.rom_name} from {rom_positions_file}")
-                    print(f"Found {len(rom_positions)} ROM-specific positions")
+                    print(f"Loaded {len(rom_positions)} ROM-specific positions")
             else:
-                print("No ROM-specific position file found")
-                
                 # Check legacy ROM-specific path
                 legacy_rom_path = os.path.join(self.preview_dir, f"{self.rom_name}_positions.json")
                 if os.path.exists(legacy_rom_path):
@@ -5972,20 +6151,119 @@ class PreviewWindow(QMainWindow):
                     with open(rom_positions_file, 'w') as f:
                         json.dump(rom_positions, f)
                     
-                    print(f"Migrated ROM-specific positions from {legacy_rom_path} to {rom_positions_file}")
+                    print(f"Migrated ROM-specific positions from {legacy_rom_path}")
             
-            # Start with global positions, then override with ROM-specific ones
+            # Apply positions in priority order: global → mapping → ROM-specific
             positions = global_positions.copy()
-            positions.update(rom_positions)  # ROM positions take precedence
+            positions.update(mapping_positions)  # Mapping positions override global
+            positions.update(rom_positions)      # ROM positions override both
             
-            print(f"Combined positions: {len(positions)} total ({len(global_positions)} global, {len(rom_positions)} ROM-specific)")
+            print(f"Final position priority: {len(global_positions)} global, {len(mapping_positions)} mapping, {len(rom_positions)} ROM-specific")
+            print(f"Total combined positions: {len(positions)}")
+            
+            # Debug which positions came from where
+            if mapping and mapping_positions:
+                print(f"Using mapping '{mapping}' positions for shared layout")
             
         except Exception as e:
-            print(f"Error loading saved positions: {e}")
+            print(f"Error loading saved positions with mapping support: {e}")
             import traceback
             traceback.print_exc()
         
-        print(f"Returning {len(positions)} positions")
+        print(f"Returning {len(positions)} total positions")
+        return positions
+    
+    def load_saved_positions(self):
+        """Enhanced load_saved_positions that includes mapping-based positions with proper priority"""
+        positions = {}
+        rom_positions = {}
+        mapping_positions = {}
+        global_positions = {}
+        
+        try:
+            print("\n=== Loading saved positions with mapping support ===")
+            
+            # Define file paths
+            rom_positions_file = os.path.join(self.settings_dir, f"{self.rom_name}_positions.json")
+            global_positions_file = os.path.join(self.settings_dir, "global_positions.json")
+            
+            # Get mapping-specific file if mapping exists
+            mapping = self.get_current_mapping()
+            mapping_positions_file = None
+            if mapping:
+                mapping_positions_file = os.path.join(self.settings_dir, f"{mapping}_positions.json")
+                print(f"Looking for mapping positions at: {mapping_positions_file}")
+            
+            # 1. Load global positions (lowest priority)
+            if os.path.exists(global_positions_file):
+                with open(global_positions_file, 'r') as f:
+                    global_positions = json.load(f)
+                    print(f"Loaded {len(global_positions)} global positions")
+            else:
+                # Check legacy global paths
+                legacy_global_paths = [
+                    os.path.join(self.preview_dir, "global_positions.json"),
+                    os.path.join(self.mame_dir, "global_positions.json")
+                ]
+                
+                for legacy_path in legacy_global_paths:
+                    if os.path.exists(legacy_path):
+                        print(f"Found legacy global positions at {legacy_path}")
+                        with open(legacy_path, 'r') as f:
+                            global_positions = json.load(f)
+                        
+                        # Migrate to new location
+                        os.makedirs(self.settings_dir, exist_ok=True)
+                        with open(global_positions_file, 'w') as f:
+                            json.dump(global_positions, f)
+                        
+                        print(f"Migrated global positions from {legacy_path}")
+                        break
+            
+            # 2. Load mapping positions (medium priority)
+            if mapping_positions_file and os.path.exists(mapping_positions_file):
+                with open(mapping_positions_file, 'r') as f:
+                    mapping_positions = json.load(f)
+                    print(f"Loaded {len(mapping_positions)} mapping positions for '{mapping}'")
+            
+            # 3. Load ROM-specific positions (highest priority)
+            if os.path.exists(rom_positions_file):
+                with open(rom_positions_file, 'r') as f:
+                    rom_positions = json.load(f)
+                    print(f"Loaded {len(rom_positions)} ROM-specific positions")
+            else:
+                # Check legacy ROM-specific path
+                legacy_rom_path = os.path.join(self.preview_dir, f"{self.rom_name}_positions.json")
+                if os.path.exists(legacy_rom_path):
+                    print(f"Found legacy ROM-specific positions at {legacy_rom_path}")
+                    with open(legacy_rom_path, 'r') as f:
+                        rom_positions = json.load(f)
+                    
+                    # Migrate to new location
+                    os.makedirs(self.settings_dir, exist_ok=True)
+                    with open(rom_positions_file, 'w') as f:
+                        json.dump(rom_positions, f)
+                    
+                    print(f"Migrated ROM-specific positions from {legacy_rom_path}")
+            
+            # Apply positions in priority order: global → mapping → ROM-specific
+            positions = global_positions.copy()
+            positions.update(mapping_positions)  # Mapping positions override global
+            positions.update(rom_positions)      # ROM positions override both
+            
+            print(f"Final position priority: {len(global_positions)} global, {len(mapping_positions)} mapping, {len(rom_positions)} ROM-specific")
+            print(f"Total combined positions: {len(positions)}")
+            
+            # Debug which positions came from where
+            if mapping and mapping_positions:
+                print(f"Using mapping '{mapping}' positions for shared layout")
+            
+        except Exception as e:
+            print(f"Error loading saved positions with mapping support: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"Returning {len(positions)} total positions")
         return positions
     
     # Replace your existing toggle_texts method with this one
