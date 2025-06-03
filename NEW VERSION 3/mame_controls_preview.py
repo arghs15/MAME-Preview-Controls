@@ -2181,35 +2181,6 @@ class PreviewWindow(QMainWindow):
                     
         print("All labels resized with improved width calculation")
 
-    def toggle_bezel_improved(self):
-        """Toggle bezel visibility and save the setting globally"""
-        if not self.has_bezel:
-            print("No bezel available to toggle")
-            return
-        
-        # Toggle visibility flag
-        self.bezel_visible = not self.bezel_visible
-        
-        # Update button text
-        self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
-        
-        # Show or hide bezel
-        if self.bezel_visible:
-            self.show_bezel_with_background()
-            print(f"Bezel visibility is now: {self.bezel_visible}")
-        else:
-            if hasattr(self, 'bezel_label') and self.bezel_label:
-                self.bezel_label.hide()
-                print("Bezel hidden")
-        
-        # CRITICAL: Enforce correct layer order
-        self.enforce_layer_order()
-        
-        # ALWAYS save as global settings
-        self.save_bezel_settings(is_global=True)
-        self.show_toast_notification("Bezel visibility saved")
-        print(f"Saved bezel visibility ({self.bezel_visible}) to GLOBAL settings")
-    
     # Add method to find bezel path
     def find_bezel_path(self, rom_name):
         """Find bezel image path for a ROM name with updated paths"""
@@ -2241,7 +2212,6 @@ class PreviewWindow(QMainWindow):
         print(f"No bezel found for {rom_name}")
         return None
 
-    # Replace the show_bezel_with_background method for better bezel display
     def show_bezel_with_background(self):
         """Display bezel while preserving background with proper layering"""
         # Find bezel path
@@ -2298,9 +2268,6 @@ class PreviewWindow(QMainWindow):
             
             # Then, if we have a background, make sure bezel is ABOVE background but BELOW other controls
             if hasattr(self, 'bg_label') and self.bg_label:
-                # Print current widget stacking info
-                print(f"Background exists: {self.bg_label.isVisible()}")
-                
                 # First lower background to bottom
                 self.bg_label.lower()
                 
@@ -2314,7 +2281,12 @@ class PreviewWindow(QMainWindow):
             self.bezel_label.show()
             self.bezel_visible = True
             
-            # Now raise all controls above bezel
+            # CRITICAL FIX: Ensure logo stays interactive by raising it above bezel
+            if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
+                self.logo_label.raise_()
+                print("Logo raised above bezel to maintain interactivity")
+            
+            # Now raise all controls above bezel (but logo should be on top)
             self.raise_controls_above_bezel()
             
             print(f"Bezel displayed: {bezel_pixmap.width()}x{bezel_pixmap.height()} at ({x},{y})")
@@ -2325,7 +2297,83 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             self.bezel_visible = False
-            
+
+    def enforce_layer_order(self):
+        """
+        Enforce the correct stacking order for all elements with logo on top:
+        1. Background (bottom)
+        2. Bezel (above background)
+        3. Controls (above bezel)
+        4. Logo (top - must be interactive)
+        """
+        print("\n--- Enforcing strict layer order with logo on top ---")
+        
+        # Step 1: Send background to the absolute bottom
+        if hasattr(self, 'bg_label') and self.bg_label:
+            self.bg_label.lower()
+            print("Background placed at bottom layer")
+        
+        # Step 2: Place bezel above background
+        if hasattr(self, 'bezel_label') and self.bezel_label and self.bezel_label.isVisible():
+            # First lower it to bottom, then raise it above background
+            self.bezel_label.lower()
+            if hasattr(self, 'bg_label') and self.bg_label:
+                self.bezel_label.stackUnder(self.bg_label)
+                self.bezel_label.raise_()
+            print("Bezel placed above background")
+        
+        # Step 3: Raise all control labels above bezel
+        if hasattr(self, 'control_labels'):
+            controls_raised = 0
+            for control_name, control_data in self.control_labels.items():
+                if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
+                    control_data['label'].raise_()
+                    controls_raised += 1
+            print(f"Raised {controls_raised} visible controls above bezel")
+        
+        # Step 4: CRITICAL - Logo must be on absolute top to remain interactive
+        if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
+            self.logo_label.raise_()
+            # Double-raise to ensure it's really on top
+            self.logo_label.raise_()
+            print("Logo placed on absolute top layer (interactive)")
+        
+        # Step 5: Force immediate repaint to apply changes
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+            self.canvas.repaint()
+        
+        print("Layer order enforcement complete: Background -> Bezel -> Controls -> Logo (top)")
+
+    def toggle_bezel_improved(self):
+        """Toggle bezel visibility and save the setting globally"""
+        if not self.has_bezel:
+            print("No bezel available to toggle")
+            return
+        
+        # Toggle visibility flag
+        self.bezel_visible = not self.bezel_visible
+        
+        # Update button text
+        self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
+        
+        # Show or hide bezel
+        if self.bezel_visible:
+            self.show_bezel_with_background()
+            print(f"Bezel visibility is now: {self.bezel_visible}")
+        else:
+            if hasattr(self, 'bezel_label') and self.bezel_label:
+                self.bezel_label.hide()
+                print("Bezel hidden")
+        
+        # CRITICAL: Enforce correct layer order with logo on top
+        self.enforce_layer_order()
+        
+        # ALWAYS save as global settings
+        self.save_bezel_settings(is_global=True)
+        self.show_toast_notification("Bezel visibility saved")
+        print(f"Saved bezel visibility ({self.bezel_visible}) to GLOBAL settings")
+
     # Improved method to raise controls above bezel
     def raise_controls_above_bezel(self):
         """Ensure all controls are above the bezel with proper debug info"""
@@ -4030,59 +4078,6 @@ class PreviewWindow(QMainWindow):
             # But make sure to use is_global=True for global saving
             self.save_positions(is_global=True)
             self.show_toast_notification("Logo visibility saved globally")
-    
-    def enforce_layer_order(self):
-        """
-        Enforce the correct stacking order for all elements with aggressive control positioning:
-        1. Background (bottom)
-        2. Bezel (above background)
-        3. Logo (above bezel)
-        4. Controls (top)
-        """
-        print("\n--- Enforcing strict layer order ---")
-        
-        # Step 1: Send background to the absolute bottom
-        if hasattr(self, 'bg_label') and self.bg_label:
-            self.bg_label.lower()
-            print("Background placed at bottom layer")
-        
-        # Step 2: Place bezel above background
-        if hasattr(self, 'bezel_label') and self.bezel_label and self.bezel_label.isVisible():
-            # First lower it to bottom, then raise it above background
-            self.bezel_label.lower()
-            if hasattr(self, 'bg_label') and self.bg_label:
-                self.bezel_label.stackUnder(self.bg_label)
-                self.bezel_label.raise_()
-            print("Bezel placed above background")
-        
-        # Step 3: Place logo above bezel but below controls
-        if hasattr(self, 'logo_label') and self.logo_label and self.logo_label.isVisible():
-            self.logo_label.raise_()
-            # But make sure it's still below controls
-            if hasattr(self, 'control_labels'):
-                for control_data in self.control_labels.values():
-                    if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
-                        self.logo_label.stackUnder(control_data['label'])
-                        break  # Just need to stack under one control to put it below all
-            print("Logo raised above bezel but below controls")
-        
-        # Step 4: AGGRESSIVELY raise all controls to the top
-        if hasattr(self, 'control_labels'):
-            controls_raised = 0
-            # Do this twice to make sure they're really on top
-            for _ in range(2):
-                for control_name, control_data in self.control_labels.items():
-                    if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
-                        control_data['label'].raise_()
-                        controls_raised += 1
-            print(f"AGGRESSIVELY raised {controls_raised} visible controls to top layer (2 passes)")
-        
-        # Step 5: Force immediate repaint to apply changes
-        if hasattr(self, 'canvas'):
-            self.canvas.update()
-            self.canvas.repaint()
-        
-        print("Layer order enforcement complete with immediate repaint")
     
     def save_logo_settings(self, is_global=False):
         """Save logo settings to file in settings directory"""
