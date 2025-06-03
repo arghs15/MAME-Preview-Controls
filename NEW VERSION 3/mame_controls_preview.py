@@ -1641,11 +1641,15 @@ class PreviewWindow(QMainWindow):
         self.bottom_row.addWidget(self.toggle_texts_button)'''
 
         # Create the joystick button with better initial text
-        self.joystick_button = QPushButton("Hide Directional" if self.joystick_visible else "Show Directional")
-        self.joystick_button.clicked.connect(self.toggle_joystick_controls)
-        self.joystick_button.setStyleSheet(button_style)
-        self.joystick_button.setToolTip("Toggle visbility of directional controls")
-        self.bottom_row.addWidget(self.joystick_button)
+        self.directional_mode_button = QPushButton("Hide Directional")
+        self.directional_mode_button.clicked.connect(self.cycle_directional_mode)
+        self.directional_mode_button.setStyleSheet(button_style)
+        self.directional_mode_button.setToolTip("Cycle through directional control visibility modes")
+        self.bottom_row.addWidget(self.directional_mode_button)
+        
+        # Initialize directional mode and update button text
+        self.init_directional_mode()
+        self.update_directional_mode_button_text()
         
         # Add a settings button if it doesn't exist
         if not hasattr(self, 'settings_button'):
@@ -6528,11 +6532,185 @@ class PreviewWindow(QMainWindow):
         
         print(f"Text settings updated and applied: {self.text_settings}")
 
+    def init_directional_mode(self):
+        """Initialize the directional mode from saved settings"""
+        # Load current settings
+        joystick_visible = getattr(self, 'joystick_visible', True)
+        hide_specialized = getattr(self, 'hide_specialized_with_directional', False)
+        
+        # Determine current mode based on settings
+        if joystick_visible:
+            self.directional_mode = "show_all"  # Everything visible
+        elif hide_specialized:
+            self.directional_mode = "hide_all"  # Both standard and specialized hidden
+        else:
+            self.directional_mode = "hide_standard"  # Only standard hidden
+        
+        print(f"INIT: Directional mode = {self.directional_mode}")
+
+    def cycle_directional_mode(self):
+        """Cycle through the three directional visibility modes"""
+        # Define the cycle: show_all -> hide_standard -> hide_all -> show_all
+        mode_cycle = {
+            "show_all": "hide_standard",      # Show All -> Hide Directional
+            "hide_standard": "hide_all",      # Hide Directional -> Hide All Directional  
+            "hide_all": "show_all"            # Hide All Directional -> Show All
+        }
+        
+        # Get current mode or default
+        current_mode = getattr(self, 'directional_mode', 'show_all')
+        
+        # Cycle to next mode
+        self.directional_mode = mode_cycle.get(current_mode, 'show_all')
+        
+        print(f"CYCLE: {current_mode} -> {self.directional_mode}")
+        
+        # Apply the new mode
+        self.apply_directional_mode()
+        
+        # Update button text
+        self.update_directional_mode_button_text()
+        
+        # Save settings
+        self.save_directional_mode_settings()
+        
+        # Show notification
+        mode_names = {
+            "show_all": "All directional controls visible",
+            "hide_standard": "Standard directional controls hidden",
+            "hide_all": "All directional controls hidden"
+        }
+        self.show_toast_notification(mode_names[self.directional_mode])
+
+    def apply_directional_mode(self):
+        """Apply the current directional mode to all controls"""
+        # Set internal flags based on mode
+        if self.directional_mode == "show_all":
+            self.joystick_visible = True
+            self.hide_specialized_with_directional = False
+        elif self.directional_mode == "hide_standard":
+            self.joystick_visible = False
+            self.hide_specialized_with_directional = False
+        elif self.directional_mode == "hide_all":
+            self.joystick_visible = False
+            self.hide_specialized_with_directional = True
+        
+        print(f"APPLY MODE: joystick_visible={self.joystick_visible}, hide_specialized={self.hide_specialized_with_directional}")
+        
+        # Apply visibility to all controls
+        controls_updated = 0
+        
+        # Get the auto-show directionals setting
+        auto_show_directionals = getattr(self, 'auto_show_directionals_for_directional_only', True)
+        is_directional_only = getattr(self, 'is_directional_only_game', False)
+        
+        for control_name, control_data in self.control_labels.items():
+            if 'label' not in control_data or not control_data['label']:
+                continue
+            
+            # Define control types
+            standard_directional_types = [
+                "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"
+            ]
+            
+            specialized_directional_types = [
+                "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", 
+                "AD_STICK", "PEDAL", "POSITIONAL"
+            ]
+            
+            is_standard_directional = any(control_type in control_name for control_type in standard_directional_types)
+            is_specialized_directional = any(control_type in control_name for control_type in specialized_directional_types)
+            
+            # Determine visibility based on mode and control type
+            is_visible = self.texts_visible  # Default for non-directional controls
+            
+            if is_standard_directional:
+                # Standard directional: affected by mode
+                if self.directional_mode == "show_all":
+                    is_visible = self.texts_visible
+                else:  # hide_standard or hide_all
+                    if is_directional_only and auto_show_directionals:
+                        is_visible = self.texts_visible  # Auto-show override
+                    else:
+                        is_visible = False
+            
+            elif is_specialized_directional:
+                # Specialized directional: only affected in hide_all mode
+                if self.directional_mode == "hide_all":
+                    if is_directional_only and auto_show_directionals:
+                        is_visible = self.texts_visible  # Auto-show override
+                    else:
+                        is_visible = False
+                else:  # show_all or hide_standard
+                    is_visible = self.texts_visible
+            
+            # Apply visibility change
+            if control_data['label'].isVisible() != is_visible:
+                control_data['label'].setVisible(is_visible)
+                controls_updated += 1
+                control_type = "specialized" if is_specialized_directional else "standard"
+                print(f"Updated {control_type} {control_name} visibility to {is_visible}")
+        
+        print(f"Applied mode '{self.directional_mode}' to {controls_updated} controls")
+
+    def update_directional_mode_button_text(self):
+        """Update button text to show what will happen NEXT"""
+        if not hasattr(self, 'directional_mode_button'):
+            return
+        
+        # Button shows what will happen when clicked (next state)
+        mode = getattr(self, 'directional_mode', 'show_all')
+        
+        if mode == "show_all":
+            self.directional_mode_button.setText("Hide Directional")
+            self.directional_mode_button.setToolTip(
+                "Currently: All directional controls visible\n"
+                "Click to hide standard directional controls (joystick, d-pad)"
+            )
+        elif mode == "hide_standard":
+            self.directional_mode_button.setText("Hide All Directional")
+            self.directional_mode_button.setToolTip(
+                "Currently: Standard directional controls hidden\n"
+                "Click to hide ALL directional controls (including specialized)"
+            )
+        elif mode == "hide_all":
+            self.directional_mode_button.setText("Show All")
+            self.directional_mode_button.setToolTip(
+                "Currently: All directional controls hidden\n"
+                "Click to show all directional controls"
+            )
+
+    def save_directional_mode_settings(self):
+        """Save directional mode settings to bezel_settings.json"""
+        try:
+            # Load existing settings
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            settings = {}
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    settings = json.load(f)
+            
+            # Update with current mode settings
+            settings['joystick_visible'] = self.joystick_visible
+            settings['hide_specialized_with_directional'] = self.hide_specialized_with_directional
+            settings['directional_mode'] = getattr(self, 'directional_mode', 'show_all')  # Save mode for reference
+            
+            # Save back to file
+            os.makedirs(self.settings_dir, exist_ok=True)
+            with open(settings_file, 'w') as f:
+                json.dump(settings, f)
+            
+            print(f"SAVE: Saved directional mode '{self.directional_mode}' settings")
+            
+        except Exception as e:
+            print(f"Error saving directional mode settings: {e}")
+    
     def create_control_labels(self, clean_mode=False):
-        """Create control labels without shadows and respect clean_mode"""
+        """Create control labels with directional mode support"""
         if not self.game_data or 'players' not in self.game_data:
             return
-                    
+                        
         # CRITICAL FIX: Make sure we have properly loaded fonts
         if not hasattr(self, 'current_font') or self.current_font is None:
             print("Font not initialized before creating labels - forcing font loading")
@@ -6597,25 +6775,42 @@ class PreviewWindow(QMainWindow):
                     if hasattr(self, 'get_button_prefix'):
                         button_prefix = self.get_button_prefix(control_name)
                 
-                # Determine visibility based on control type
+                # Determine visibility based on directional mode and control type
                 is_visible = True
-                # Check ONLY standard directional (not specialized)
-                is_standard_directional = any(control_type in control_name for control_type in [
-                    "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"  # ONLY these
-                ])
-
-                is_specialized_directional = any(control_type in control_name for control_type in [
+                
+                # Define control types
+                standard_directional_types = [
+                    "JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"
+                ]
+                
+                specialized_directional_types = [
                     "DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", 
                     "AD_STICK", "PEDAL", "POSITIONAL"
-                ])
-
+                ]
+                
+                is_standard_directional = any(control_type in control_name for control_type in standard_directional_types)
+                is_specialized_directional = any(control_type in control_name for control_type in specialized_directional_types)
+                
+                # Apply visibility based on current directional mode
+                directional_mode = getattr(self, 'directional_mode', 'show_all')
+                
                 if is_standard_directional:
-                    # Standard directional controlled by joystick setting
-                    is_visible = self.texts_visible and self.should_show_directional
+                    # Standard directional: affected by hide_standard and hide_all modes
+                    if directional_mode in ["hide_standard", "hide_all"]:
+                        is_visible = self.texts_visible and self.should_show_directional
+                        print(f"CREATE: Standard directional {control_name}, mode={directional_mode}, visible={is_visible}")
+                    else:  # show_all
+                        is_visible = self.texts_visible
+                        print(f"CREATE: Standard directional {control_name}, mode={directional_mode}, visible={is_visible}")
                 elif is_specialized_directional:
-                    # Specialized directional ALWAYS visible (not controlled by joystick button)
-                    is_visible = self.texts_visible
-                # else: regular buttons stay visible
+                    # Specialized directional: only affected in hide_all mode
+                    if directional_mode == "hide_all":
+                        is_visible = self.texts_visible and self.should_show_directional
+                        print(f"CREATE: Specialized {control_name}, mode={directional_mode}, visible={is_visible}")
+                    else:  # show_all or hide_standard
+                        is_visible = self.texts_visible
+                        print(f"CREATE: Specialized {control_name}, mode={directional_mode}, visible={is_visible}")
+                # else: regular buttons stay visible (is_visible remains True)
                 
                 # Apply text settings
                 if self.text_settings.get("use_uppercase", False):
@@ -6719,7 +6914,7 @@ class PreviewWindow(QMainWindow):
                     text_color = self.text_settings.get("action_color", "#FFFFFF")
                     label.setStyleSheet(f"color: {text_color}; background-color: transparent; font-family: '{label.font().family()}';")
                     
-                    # Apply visibility setting based on control type
+                    # Apply visibility setting based on directional mode
                     label.setVisible(is_visible)
                     
                     # First, let the label auto-size based on content
@@ -6784,7 +6979,7 @@ class PreviewWindow(QMainWindow):
         
         # Force a canvas update
         self.canvas.update()
-        print(f"Created {len(self.control_labels)} control labels with {'non-draggable' if clean_mode else 'draggable'} behavior")
+        print(f"Created {len(self.control_labels)} control labels with directional mode support")
 
     def get_button_prefix_from_mapping(self, mapping):
         """Get the button prefix based on mapping string, including multiple button assignments"""
