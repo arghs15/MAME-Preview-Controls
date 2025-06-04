@@ -2106,6 +2106,14 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.sidebar_tabs["generic"].pack(fill="x", padx=5, pady=2)
         
+        # Add "Mixed Controls" tab (add this after the "analog" tab)
+        self.sidebar_tabs["mixed_controls"] = CustomSidebarTab(
+            tabs_frame, 
+            text="Mixed Controls",
+            command=lambda: set_tab_active("mixed_controls")
+        )
+        self.sidebar_tabs["mixed_controls"].pack(fill="x", padx=5, pady=2)
+        
         # Add "Missing Controls" tab
         self.sidebar_tabs["missing"] = CustomSidebarTab(
             tabs_frame, 
@@ -2896,13 +2904,14 @@ class MAMEControlConfig(ctk.CTk):
         generic_controls = []
         custom_actions_roms = []
         clone_roms = []
-        
+
         # NEW CATEGORIES
         no_buttons_roms = []
         specialized_roms = []
         analog_roms = []
         multiplayer_roms = []
         singleplayer_roms = []
+        mixed_controls_roms = []
         
         # Build parent->clone lookup if needed
         if not hasattr(self, 'parent_lookup') or not self.parent_lookup:
@@ -2941,6 +2950,11 @@ class MAMEControlConfig(ctk.CTk):
                     generic_controls.append(rom)
                 elif categories['has_custom_controls']:
                     custom_actions_roms.append(rom)
+                
+                # ADD THIS NEW SECTION HERE - RIGHT AFTER THE ABOVE if/elif BLOCK:
+                # Check for mixed controls (some with names, some without)
+                if self.has_mixed_controls(rom):
+                    mixed_controls_roms.append(rom)
                 
                 # Get game data for additional categorization
                 from mame_data_utils import get_game_data
@@ -3011,6 +3025,8 @@ class MAMEControlConfig(ctk.CTk):
             display_roms = sorted(clone_roms)
         elif self.current_view == "custom_actions":
             display_roms = custom_actions_roms
+        elif self.current_view == "mixed_controls":
+            display_roms = mixed_controls_roms
         elif self.current_view == "no_buttons":
             display_roms = no_buttons_roms
         elif self.current_view == "specialized":
@@ -3134,15 +3150,16 @@ class MAMEControlConfig(ctk.CTk):
         # Update the title based on current view
         view_titles = {
             "all": "All ROMs",
-            "with_controls": "ROMs with Controls",
+            "with_controls": "ROMs with Controls", 
             "missing": "ROMs Missing Controls",
             "custom_config": "ROMs with Custom Config",
             "generic": "ROMs with Generic Controls",
             "custom_actions": "ROMs with Custom Actions",
             "clones": "Clone ROMs",
+            "mixed_controls": "Mixed Controls",  # NEW
             "no_buttons": "ROMs with No Buttons",
             "specialized": "Specialized Input",
-            "analog": "Analog Controls",
+            "analog": "Analog Controls", 
             "multiplayer": "Multi-Player ROMs",
             "singleplayer": "Single-Player ROMs"
         }
@@ -7030,6 +7047,7 @@ class MAMEControlConfig(ctk.CTk):
             missing_controls = 0
             generic_controls = 0
             custom_controls = 0
+            mixed_controls = 0  # NEW
             with_cfg_files = 0
             clone_roms = 0
             
@@ -7048,13 +7066,17 @@ class MAMEControlConfig(ctk.CTk):
                         generic_controls += 1
                     elif categories['has_custom_controls']:
                         custom_controls += 1
+                    
+                    # NEW: Check for mixed controls
+                    if self.has_mixed_controls(rom):
+                        mixed_controls += 1
                 else:
                     missing_controls += 1
                 
                 if categories['has_cfg_file']:
                     with_cfg_files += 1
             
-            # Format the stats with mode indicator
+            # Format the stats with mode indicator and mixed controls
             stats = (
                 f"Mode: {mode_text}\n"
                 f"ROMs: {total_roms}\n"
@@ -7062,6 +7084,7 @@ class MAMEControlConfig(ctk.CTk):
                 f"Missing Controls: {missing_controls}\n"
                 f"Custom Actions: {custom_controls}\n"
                 f"Generic Controls: {generic_controls}\n"
+                f"Mixed Controls: {mixed_controls}\n"  # NEW LINE
             )
             
             # Only show clone count in physical mode (database mode shows parents only)
@@ -7073,7 +7096,7 @@ class MAMEControlConfig(ctk.CTk):
             # Debug output
             print(f"Stats ({mode_text}): Total={total_roms}, WithControls={with_controls}, "
                 f"Missing={missing_controls}, Custom={custom_controls}, "
-                f"Generic={generic_controls}, CFG={with_cfg_files}, Clones={clone_roms}")
+                f"Generic={generic_controls}, Mixed={mixed_controls}, CFG={with_cfg_files}, Clones={clone_roms}")
             
         except Exception as e:
             print(f"Error updating stats: {e}")
@@ -7081,6 +7104,82 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
             self.stats_label.configure(text="Statistics: Error")
    
+    def has_mixed_controls(self, rom_name):
+        """
+        Check if a ROM has mixed P1 button controls 
+        Returns True only if:
+        1. ROM has some P1_BUTTON1-8 with custom 'name' values (like "Jab Punch")
+        2. ROM has some P1_BUTTON1-8 without 'name' values
+        3. Only looks at P1 buttons, ignores P2, joysticks, and other controls
+        """
+        try:
+            # Get the raw gamedata for this ROM (before any processing/fallbacks)
+            rom_data = None
+            
+            # Check ROM directly
+            if rom_name in self.gamedata_json:
+                rom_data = self.gamedata_json[rom_name]
+            # Check parent if this is a clone
+            elif hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup:
+                parent_rom = self.parent_lookup[rom_name]
+                if parent_rom in self.gamedata_json:
+                    rom_data = self.gamedata_json[parent_rom]
+            
+            if not rom_data or 'controls' not in rom_data:
+                return False
+            
+            controls = rom_data['controls']
+            if not controls:
+                return False
+            
+            # Only look at P1_BUTTON1 through P1_BUTTON8
+            p1_buttons = []
+            for i in range(1, 9):  # BUTTON1 through BUTTON8
+                button_name = f"P1_BUTTON{i}"
+                if button_name in controls:
+                    control_data = controls[button_name]
+                    # Only include if the control has actual data
+                    if control_data and isinstance(control_data, dict):
+                        # Must have tag/mask or other meaningful data
+                        if 'tag' in control_data or 'mask' in control_data:
+                            p1_buttons.append((button_name, control_data))
+            
+            # Need at least 2 P1 buttons to have a meaningful mix
+            if len(p1_buttons) < 2:
+                return False
+            
+            # Count P1 buttons with and without custom names
+            buttons_with_names = 0
+            buttons_without_names = 0
+            
+            for button_name, control_data in p1_buttons:
+                # Check if it has a meaningful 'name' field
+                if 'name' in control_data:
+                    name_value = control_data.get('name', '').strip()
+                    if name_value:  # Has real custom name like "Jab Punch"
+                        buttons_with_names += 1
+                    else:  # Has 'name' key but it's empty
+                        buttons_without_names += 1
+                else:
+                    # No 'name' key at all - just has tag/mask
+                    buttons_without_names += 1
+            
+            # Return True only if we have BOTH named and unnamed P1 buttons
+            result = buttons_with_names > 0 and buttons_without_names > 0
+            
+            if result:
+                #print(f"Mixed P1 buttons found for {rom_name}: {buttons_with_names} with names, {buttons_without_names} without names")
+                # Debug: show which buttons have names
+                for button_name, control_data in p1_buttons:
+                    name_value = control_data.get('name', '').strip()
+                    #print(f"  {button_name}: {'HAS NAME' if name_value else 'NO NAME'} - {name_value}")
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error checking mixed controls for {rom_name}: {e}")
+            return False
+    
     def update_game_list(self):
         """Update the game list to show all available ROMs with improved performance"""
         # For compatibility, now just calls the category-based update
