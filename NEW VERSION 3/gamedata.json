@@ -2545,7 +2545,8 @@
     "controls": {
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "START1": {
         "tag": ":IN0",
@@ -2553,15 +2554,18 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_BUTTON1": {
         "tag": ":IN0",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "COIN1": {
         "tag": ":IN0",
@@ -2569,39 +2573,48 @@
       },
       "P1_BUTTON3": {
         "tag": ":IN0",
-        "mask": "64"
+        "mask": "64",
+        "name": "Transform"
       },
       "P1_BUTTON2": {
         "tag": ":IN0",
-        "mask": "32"
+        "mask": "32",
+        "name": "Special attack"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_BUTTON2": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "B Button"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "A Button"
       },
       "COIN2": {
         "tag": ":IN1",
@@ -2609,13 +2622,15 @@
       },
       "P2_BUTTON3": {
         "tag": ":IN1",
-        "mask": "64"
+        "mask": "64",
+        "name": "X Button"
       },
       "START2": {
         "tag": ":IN1",
         "mask": "128"
       }
-    }
+    },
+    "alternating": false
   },
   "kbash": {
     "description": "Knuckle Bash",
@@ -4019,7 +4034,8 @@
     "controls": {
       "P1_BUTTON1": {
         "tag": ":600000",
-        "mask": "256"
+        "mask": "256",
+        "name": "Start/Boost"
       },
       "P3_BUTTON1": {
         "tag": ":600000",
@@ -4027,27 +4043,33 @@
       },
       "P2_BUTTON1": {
         "tag": ":600002",
-        "mask": "256"
+        "mask": "256",
+        "name": "A Button"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":600020",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":600020",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":600020",
-        "mask": "32"
+        "mask": "32",
+        "name": "Left"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":600020",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":600020",
-        "mask": "64"
+        "mask": "64",
+        "name": "Down"
       },
       "P3_JOYSTICK_UP": {
         "tag": ":600020",
@@ -4059,7 +4081,8 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":600020",
-        "mask": "16"
+        "mask": "16",
+        "name": "Right"
       },
       "P3_JOYSTICK_RIGHT": {
         "tag": ":600020",
@@ -4067,7 +4090,8 @@
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":600020",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P3_JOYSTICK_LEFT": {
         "tag": ":600020",
@@ -4075,7 +4099,8 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":600020",
-        "mask": "128"
+        "mask": "128",
+        "name": "Up"
       },
       "COIN1": {
         "tag": ":jsa:JSAIII",
@@ -4085,7 +4110,8 @@
         "tag": ":jsa:JSAIII",
         "mask": "2"
       }
-    }
+    },
+    "alternating": false
   },
   "warriorb": {
     "description": "Warrior Blade - Rastan Saga Episode III (Japan)",
@@ -12359,51 +12385,63 @@
     "controls": {
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Punch"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P1_BUTTON2": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Jump"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Left"
       },
       "P2_BUTTON1": {
         "tag": ":P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "A Button"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Right"
       },
       "P2_BUTTON2": {
         "tag": ":P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "B Button"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "START1": {
         "tag": ":SYSTEM",
@@ -22669,23 +22707,28 @@
     "controls": {
       "P1_BUTTON2": {
         "tag": ":IN0",
-        "mask": "32"
+        "mask": "32",
+        "name": "Jump"
       },
       "P1_BUTTON1": {
         "tag": ":IN0",
-        "mask": "16"
+        "mask": "16",
+        "name": "Attack"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "START1": {
         "tag": ":IN0",
@@ -22693,15 +22736,18 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "A Button"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "START2": {
         "tag": ":IN1",
@@ -22709,19 +22755,23 @@
       },
       "P2_BUTTON2": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "B Button"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "COIN3": {
         "tag": ":IN2",
@@ -22795,7 +22845,8 @@
         "tag": ":IN4",
         "mask": "4"
       }
-    }
+    },
+    "alternating": false
   },
   "tceptor": {
     "description": "Thunder Ceptor",
@@ -23507,53 +23558,66 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_BUTTON2": {
         "tag": ":IN1",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "B Button"
       },
       "P1_BUTTON2": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Bomb"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P2_BUTTON1": {
         "tag": ":IN1",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "A Button"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       }
-    }
+    },
+    "alternating": false
   },
   "eightman": {
     "description": "Eight Man (NGM-025 ~ NGH-025)",
@@ -28166,27 +28230,33 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Up"
       },
       "P1_BUTTON2": {
         "tag": ":IN2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Lock-on"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Right"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Left"
       },
       "P1_BUTTON1": {
         "tag": ":IN2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Fire"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Down"
       },
       "START1": {
         "tag": ":IN2",
@@ -28194,13 +28264,16 @@
       },
       "P1_AD_STICK_X": {
         "tag": ":STICKX",
-        "mask": "255"
+        "mask": "255",
+        "name": "Steering Left/Right"
       },
       "P1_AD_STICK_Y": {
         "tag": ":STICKY",
-        "mask": "255"
+        "mask": "255",
+        "name": "Lean Forward/Back"
       }
-    }
+    },
+    "alternating": false
   },
   "pocketrc": {
     "description": "Pocket Racer (Japan, PKR1/VER.B)",
@@ -31028,47 +31101,58 @@
     "controls": {
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Right"
       },
       "P1_BUTTON2": {
         "tag": ":P1P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Jump"
       },
       "P2_BUTTON3": {
         "tag": ":P1P2",
-        "mask": "32768"
+        "mask": "32768",
+        "name": "X Button"
       },
       "P2_BUTTON2": {
         "tag": ":P1P2",
-        "mask": "16384"
+        "mask": "16384",
+        "name": "B Button"
       },
       "P1_BUTTON3": {
         "tag": ":P1P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Magic"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P1P2",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "Right"
       },
       "P2_BUTTON1": {
         "tag": ":P1P2",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "A Button"
       },
       "P1_BUTTON1": {
         "tag": ":P1P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Attack"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P1P2",
-        "mask": "512"
+        "mask": "512",
+        "name": "Up"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P1P2",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "START2": {
         "tag": ":P1P2",
@@ -31076,11 +31160,13 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Left"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P1P2",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Left"
       },
       "START1": {
         "tag": ":P1P2",
@@ -31088,7 +31174,8 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P3_BUTTON1": {
         "tag": ":P3P4",
@@ -31176,17 +31263,20 @@
       },
       "P2_BUTTON4": {
         "tag": ":Service",
-        "mask": "512"
+        "mask": "512",
+        "name": "Y Button"
       },
       "P1_BUTTON4": {
         "tag": ":Service",
-        "mask": "256"
+        "mask": "256",
+        "name": "Special"
       },
       "COIN4": {
         "tag": ":Service",
         "mask": "8"
       }
-    }
+    },
+    "alternating": false
   },
   "fatfury3": {
     "description": "Fatal Fury 3 - Road to the Final Victory / Garou Densetsu 3 - Haruka-naru Tatakai (NGM-069 ~ NGH-069)",
@@ -31789,43 +31879,53 @@
     "controls": {
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "P2_BUTTON1": {
         "tag": ":IN0",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "A Button"
       },
       "P1_BUTTON1": {
         "tag": ":IN0",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "START1": {
         "tag": ":IN2",
@@ -31843,7 +31943,8 @@
         "tag": ":IN2",
         "mask": "4096"
       }
-    }
+    },
+    "alternating": false
   },
   "f1gpstr2": {
     "description": "F-1 Grand Prix Star II",
@@ -40412,31 +40513,38 @@
     "controls": {
       "P2_JOYSTICK_RIGHT": {
         "tag": ":INPUTS",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Right"
       },
       "P2_BUTTON2": {
         "tag": ":INPUTS",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "B Button"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":INPUTS",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":INPUTS",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Left"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":INPUTS",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":INPUTS",
-        "mask": "256"
+        "mask": "256",
+        "name": "Up"
       },
       "P2_BUTTON1": {
         "tag": ":INPUTS",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "A Button"
       },
       "START2": {
         "tag": ":INPUTS",
@@ -40444,11 +40552,13 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":INPUTS",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_BUTTON2": {
         "tag": ":INPUTS",
-        "mask": "32"
+        "mask": "32",
+        "name": "Special shot"
       },
       "START1": {
         "tag": ":INPUTS",
@@ -40456,15 +40566,18 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":INPUTS",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":INPUTS",
-        "mask": "512"
+        "mask": "512",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":INPUTS",
-        "mask": "16"
+        "mask": "16",
+        "name": "Serve"
       },
       "COIN2": {
         "tag": ":SYSTEM",
@@ -40474,7 +40587,8 @@
         "tag": ":SYSTEM",
         "mask": "1"
       }
-    }
+    },
+    "alternating": false
   },
   "zwackery": {
     "description": "Zwackery",
@@ -40576,51 +40690,63 @@
       },
       "P2_BUTTON2": {
         "tag": ":P1_P2",
-        "mask": "16384"
+        "mask": "16384",
+        "name": "B Button"
       },
       "P1_BUTTON2": {
         "tag": ":P1_P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Jump"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P1_P2",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1_P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P1_P2",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "P2_BUTTON1": {
         "tag": ":P1_P2",
-        "mask": "32768"
+        "mask": "32768",
+        "name": "A Button"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P1_P2",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P1_BUTTON1": {
         "tag": ":P1_P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Attack"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P1_P2",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1_P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1_P2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1_P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P4_BUTTON1": {
         "tag": ":P3_P4",
@@ -40686,7 +40812,8 @@
         "tag": ":P3_P4",
         "mask": "8"
       }
-    }
+    },
+    "alternating": false
   },
   "s1945": {
     "description": "Strikers 1945 (World)",
@@ -66596,59 +66723,73 @@
     "controls": {
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "512"
+        "mask": "512",
+        "name": "Down"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN0",
-        "mask": "256"
+        "mask": "256",
+        "name": "Up"
       },
       "P2_BUTTON1": {
         "tag": ":IN0",
-        "mask": "16384"
+        "mask": "16384",
+        "name": "A Button"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN0",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_BUTTON2": {
         "tag": ":IN0",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "B Button"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_BUTTON1": {
         "tag": ":IN0",
-        "mask": "64"
+        "mask": "64",
+        "name": "Shoot/Block"
       },
       "P1_BUTTON2": {
         "tag": ":IN0",
-        "mask": "16"
+        "mask": "16",
+        "name": "Pass/Steal"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN0",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Right"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN0",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Left"
       },
       "P1_BUTTON3": {
         "tag": ":IN0",
-        "mask": "32"
+        "mask": "32",
+        "name": "Turbo"
       },
       "P2_BUTTON3": {
         "tag": ":IN0",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "X Button"
       },
       "COIN2": {
         "tag": ":IN1",
@@ -66738,7 +66879,8 @@
         "tag": ":IN2",
         "mask": "256"
       }
-    }
+    },
+    "alternating": false
   },
   "kingdmgp": {
     "description": "Kingdom Grandprix",
@@ -68959,53 +69101,66 @@
       },
       "P2_BUTTON2": {
         "tag": ":IN1",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "B Button"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P2_BUTTON1": {
         "tag": ":IN1",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "A Button"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P1_BUTTON2": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Transform"
       },
       "P1_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       }
-    }
+    },
+    "alternating": false
   },
   "ncv1": {
     "description": "Namco Classic Collection Vol.1",
@@ -73714,53 +73869,66 @@
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P1_P2",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1_P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P1_P2",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P2_BUTTON2": {
         "tag": ":P1_P2",
-        "mask": "16384"
+        "mask": "16384",
+        "name": "B Button"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1_P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1_P2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_BUTTON1": {
         "tag": ":P1_P2",
-        "mask": "32768"
+        "mask": "32768",
+        "name": "A Button"
       },
       "P1_BUTTON1": {
         "tag": ":P1_P2",
-        "mask": "128"
+        "mask": "128",
+        "name": "Fire"
       },
       "P1_BUTTON2": {
         "tag": ":P1_P2",
-        "mask": "64"
+        "mask": "64",
+        "name": "Jump"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P1_P2",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P1_P2",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1_P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       }
-    }
+    },
+    "alternating": false
   },
   "mmonkey": {
     "description": "Minky Monkey",
@@ -91151,51 +91319,63 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":PAD1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":PAD1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":PAD1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_BUTTON2": {
         "tag": ":PAD1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Jump"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":PAD1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":PAD1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":PAD2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":PAD2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":PAD2",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":PAD2",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_BUTTON2": {
         "tag": ":PAD2",
-        "mask": "32"
+        "mask": "32",
+        "name": "B Button"
       },
       "P2_BUTTON1": {
         "tag": ":PAD2",
-        "mask": "16"
+        "mask": "16",
+        "name": "A Button"
       }
     }
   },
@@ -109221,7 +109401,8 @@
     "controls": {
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "COIN1": {
         "tag": ":P1",
@@ -109229,11 +109410,13 @@
       },
       "P1_BUTTON1": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Smoke screen"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "START1": {
         "tag": ":P1",
@@ -109241,19 +109424,23 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P2",
-        "mask": "16"
+        "mask": "16",
+        "name": "Down"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P2",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "START2": {
         "tag": ":P2",
@@ -109265,15 +109452,18 @@
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P2",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_BUTTON1": {
         "tag": ":P2",
-        "mask": "2"
+        "mask": "2",
+        "name": "A Button"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P2",
-        "mask": "32"
+        "mask": "32",
+        "name": "Up"
       }
     }
   },
@@ -123997,53 +124187,66 @@
       },
       "P1_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "256"
+        "mask": "256",
+        "name": "Right"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Down"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P2_BUTTON2": {
         "tag": ":IN1",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "B Button"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "512"
+        "mask": "512",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Up"
       },
       "P1_BUTTON2": {
         "tag": ":IN1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Transform"
       },
       "P2_BUTTON1": {
         "tag": ":IN1",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "A Button"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       }
-    }
+    },
+    "alternating": false
   },
   "hangonjr": {
     "description": "Hang-On Jr. (Rev. B)",
@@ -126762,11 +126965,13 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1_P3",
-        "mask": "4"
+        "mask": "4",
+        "name": "Up"
       },
       "P1_BUTTON2": {
         "tag": ":P1_P3",
-        "mask": "32"
+        "mask": "32",
+        "name": "Jump"
       },
       "P3_BUTTON2": {
         "tag": ":P1_P3",
@@ -126774,7 +126979,8 @@
       },
       "P1_BUTTON1": {
         "tag": ":P1_P3",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P3_JOYSTICK_LEFT": {
         "tag": ":P1_P3",
@@ -126786,11 +126992,13 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1_P3",
-        "mask": "1"
+        "mask": "1",
+        "name": "Left"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1_P3",
-        "mask": "8"
+        "mask": "8",
+        "name": "Down"
       },
       "P3_BUTTON1": {
         "tag": ":P1_P3",
@@ -126802,7 +127010,8 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1_P3",
-        "mask": "2"
+        "mask": "2",
+        "name": "Right"
       },
       "P3_JOYSTICK_RIGHT": {
         "tag": ":P1_P3",
@@ -126814,7 +127023,8 @@
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":P2_P4",
-        "mask": "2"
+        "mask": "2",
+        "name": "Right"
       },
       "P4_JOYSTICK_LEFT": {
         "tag": ":P2_P4",
@@ -126838,11 +127048,13 @@
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":P2_P4",
-        "mask": "1"
+        "mask": "1",
+        "name": "Left"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P2_P4",
-        "mask": "8"
+        "mask": "8",
+        "name": "Down"
       },
       "P4_BUTTON1": {
         "tag": ":P2_P4",
@@ -126850,11 +127062,13 @@
       },
       "P2_BUTTON1": {
         "tag": ":P2_P4",
-        "mask": "16"
+        "mask": "16",
+        "name": "A Button"
       },
       "P2_BUTTON2": {
         "tag": ":P2_P4",
-        "mask": "32"
+        "mask": "32",
+        "name": "B Button"
       },
       "P4_JOYSTICK_RIGHT": {
         "tag": ":P2_P4",
@@ -126862,9 +127076,11 @@
       },
       "P2_JOYSTICK_UP": {
         "tag": ":P2_P4",
-        "mask": "4"
+        "mask": "4",
+        "name": "Up"
       }
-    }
+    },
+    "alternating": false
   },
   "bestbest": {
     "description": "Best Of Best",
