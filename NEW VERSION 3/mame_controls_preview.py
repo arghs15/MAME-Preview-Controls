@@ -110,7 +110,7 @@ class PreviewWindow(QMainWindow):
             # Scan game data to identify control types
             # Analyze game controls to determine if it's standard-directional-only
             self.analyze_game_controls_improved()
-            
+
             print(f"Early game control analysis: {directional_count} directional, {button_count} buttons")
             print(f"Is directional-only game: {self.is_directional_only_game}")
             
@@ -251,10 +251,29 @@ class PreviewWindow(QMainWindow):
             # CRITICAL: Enforce layer order AFTER everything is created but BEFORE showing
             self.enforce_layer_order()
             
-            # ADDITIONAL: Force proper layering with a small delay to ensure bezel is properly layered
+            # Find this section (near the end of __init__):
             QTimer.singleShot(100, self.enforce_layer_order)
             QTimer.singleShot(200, self.enforce_layer_order)
-            
+
+            # ADD THESE LINES RIGHT HERE:
+            # Initialize no buttons notification support
+            self.no_buttons_label = None
+            self.no_buttons_visible = False
+
+            # Create No Buttons notification AFTER control analysis and canvas creation
+            self.create_no_buttons_notification()
+
+            # Debug check
+            if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                print(f"DEBUG: No buttons label created successfully for {self.rom_name}")
+                print(f"DEBUG: has_any_buttons = {self.has_any_buttons}")
+            else:
+                print(f"DEBUG: No buttons label NOT created for {self.rom_name}")
+                print(f"DEBUG: has_any_buttons = {getattr(self, 'has_any_buttons', 'NOT SET')}")
+
+            # Update No Buttons visibility after a delay
+            QTimer.singleShot(400, self.update_no_buttons_visibility)
+
             self.setVisible(True)  # Now show the window
 
             print(f"Window size: {self.width()}x{self.height()}")
@@ -267,6 +286,159 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    def create_no_buttons_notification(self):
+        """Create the 'No Buttons Used' notification label"""
+        
+        print("Creating No Buttons notification for button-less game")
+        
+        notification_text = "NB: No Buttons Used"
+        if self.text_settings.get("use_uppercase", False):
+            notification_text = notification_text.upper()
+        
+        # Get gradient settings
+        use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+        use_action_gradient = self.text_settings.get("use_action_gradient", False)
+        use_gradient = use_prefix_gradient or use_action_gradient
+        
+        try:
+            # Create the appropriate label type based on gradient settings
+            if use_gradient:
+                # Use the gradient-enabled label
+                self.no_buttons_label = GradientDraggableLabel(notification_text, self.canvas, settings=self.text_settings)
+                
+                # Set gradient properties explicitly
+                self.no_buttons_label.use_prefix_gradient = use_prefix_gradient
+                self.no_buttons_label.use_action_gradient = use_action_gradient
+                self.no_buttons_label.prefix_gradient_start = QColor(self.text_settings.get("prefix_gradient_start", "#FFC107"))
+                self.no_buttons_label.prefix_gradient_end = QColor(self.text_settings.get("prefix_gradient_end", "#FF5722"))
+                self.no_buttons_label.action_gradient_start = QColor(self.text_settings.get("action_gradient_start", "#2196F3"))
+                self.no_buttons_label.action_gradient_end = QColor(self.text_settings.get("action_gradient_end", "#4CAF50"))
+            else:
+                # Use the color-enabled label
+                self.no_buttons_label = ColoredDraggableLabel(notification_text, self.canvas, settings=self.text_settings)
+            
+            # Apply font
+            if hasattr(self, 'current_font') and self.current_font:
+                self.no_buttons_label.setFont(self.current_font)
+            
+            # Style the label with proper font family
+            action_color = self.text_settings.get("action_color", "#FFFFFF")
+            font_family = self.current_font.family() if hasattr(self, 'current_font') else "Arial"
+            self.no_buttons_label.setStyleSheet(f"color: {action_color}; background-color: transparent; border: none; font-family: '{font_family}';")
+            
+            # Configure label sizing
+            self.no_buttons_label.setMinimumSize(0, 0)
+            self.no_buttons_label.setMaximumSize(16777215, 16777215)
+            self.no_buttons_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            
+            # Make sure settings are properly stored
+            self.no_buttons_label.settings = self.text_settings.copy()
+            self.no_buttons_label.adjustSize()
+
+            # Calculate proper width with padding
+            font_metrics = QFontMetrics(self.no_buttons_label.font())
+            text_width = font_metrics.horizontalAdvance(notification_text)
+            
+            # Add generous padding for the notification text
+            padding = 60
+            label_width = text_width + padding
+            label_height = self.no_buttons_label.height()
+            self.no_buttons_label.resize(label_width, label_height)
+            
+            # Position the notification
+            saved_positions = self.load_saved_positions()
+            if "NO_BUTTONS_NOTIFICATION" in saved_positions:
+                pos_x, pos_y = saved_positions["NO_BUTTONS_NOTIFICATION"]
+                y_offset = self.text_settings.get("y_offset", -40)
+                x, y = pos_x, pos_y + y_offset
+            else:
+                x = (self.canvas.width() - label_width) // 2
+                y = (self.canvas.height() - label_height) // 2
+            
+            self.no_buttons_label.move(x, y)
+            
+            # Set up dragging if not in clean mode
+            if not self.clean_mode:
+                self.no_buttons_label.mousePressEvent = lambda event: self.on_label_press(event, self.no_buttons_label)
+                self.no_buttons_label.mouseMoveEvent = lambda event: self.on_label_move(event, self.no_buttons_label)
+                self.no_buttons_label.mouseReleaseEvent = lambda event: self.on_label_release(event, self.no_buttons_label)
+            
+            # Initially hide the notification
+            self.no_buttons_label.setVisible(False)
+            self.no_buttons_visible = False
+            
+            # Add to control_labels immediately so it gets processed by apply_text_settings
+            self.control_labels["NO_BUTTONS_NOTIFICATION"] = {
+                'label': self.no_buttons_label,
+                'action': "No Buttons Used",
+                'prefix': "",
+                'original_pos': QPoint(x, y - self.text_settings.get("y_offset", -40))
+            }
+            
+            print(f"DEBUG: No buttons label positioned at ({x}, {y})")
+            print(f"DEBUG: Label type: {type(self.no_buttons_label).__name__}")
+            print(f"DEBUG: Use gradient: {use_gradient}, prefix: {use_prefix_gradient}, action: {use_action_gradient}")
+            print(f"DEBUG: Added to control_labels for text settings processing")
+            
+        except Exception as e:
+            print(f"Error creating No Buttons notification: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # Force apply current text settings immediately
+        QTimer.singleShot(50, self.apply_text_settings)
+
+    def update_no_buttons_visibility(self):
+        """Update the visibility of the No Buttons notification"""
+        if not hasattr(self, 'no_buttons_label') or not self.no_buttons_label:
+            return
+        
+        # Only auto-show/hide for games WITHOUT buttons in normal ROM view
+        if self.has_any_buttons:
+            # For games with buttons, only show in specialized "Show All Controls" view
+            # This is handled manually in show_all_controls_combined()
+            return
+        
+        # For games without buttons, auto-manage visibility based on directional controls
+        all_directional_hidden = True
+        for control_name, control_data in self.control_labels.items():
+            if control_name == "NO_BUTTONS_NOTIFICATION":
+                continue
+            if 'label' not in control_data or not control_data['label']:
+                continue
+            
+            is_directional = (
+                any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"]) or
+                any(control_type in control_name for control_type in ["DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", "AD_STICK", "PEDAL", "POSITIONAL"])
+            )
+            
+            if is_directional and control_data['label'].isVisible():
+                all_directional_hidden = False
+                break
+        
+        should_show = all_directional_hidden and self.texts_visible
+        
+        if should_show != self.no_buttons_visible:
+            self.no_buttons_label.setVisible(should_show)
+            self.no_buttons_visible = should_show
+            if should_show:
+                self.no_buttons_label.raise_()
+
+    def save_no_buttons_position(self):
+        """Save the position of the No Buttons notification"""
+        if not hasattr(self, 'no_buttons_label') or not self.no_buttons_label:
+            return
+        
+        pos = self.no_buttons_label.pos()
+        y_offset = self.text_settings.get("y_offset", -40)
+        normalized_pos = [pos.x(), pos.y() - y_offset]
+        
+        # UPDATE the existing entry instead of creating new one
+        if "NO_BUTTONS_NOTIFICATION" in self.control_labels:
+            self.control_labels["NO_BUTTONS_NOTIFICATION"]['original_pos'] = QPoint(normalized_pos[0], normalized_pos[1])
+        
+        print(f"No Buttons notification position updated: {normalized_pos}")
+    
     def init_directional_mode_on_startup(self):
         """Initialize directional mode from saved settings on startup"""
         
@@ -2338,6 +2510,11 @@ class PreviewWindow(QMainWindow):
             self.logo_label.raise_()
             print("Logo placed on absolute top layer (interactive)")
         
+        # Step 4: Place No Buttons notification above regular controls
+        if hasattr(self, 'no_buttons_label') and self.no_buttons_label and self.no_buttons_label.isVisible():
+            self.no_buttons_label.raise_()
+            print("No Buttons notification placed above controls")
+        
         # Step 5: Force immediate repaint to apply changes
         if hasattr(self, 'canvas'):
             self.canvas.update()
@@ -2699,7 +2876,7 @@ class PreviewWindow(QMainWindow):
         
         return self._show_specialized_group(specialized_controls_group_2, "Group 2 (Action/Input)")
 
-    def _show_specialized_group(self, controls_dict, group_name):
+    def _show_specialized_group(self, controls_dict, group_name, hide_no_buttons=True):
         """Common method to show a group of specialized controls"""
         try:
             from PyQt5.QtGui import QFont, QFontInfo, QColor, QFontDatabase, QFontMetrics
@@ -2719,8 +2896,17 @@ class PreviewWindow(QMainWindow):
                         'original_pos': control_data.get('original_pos', QPoint(0, 0))
                     }
             
-            # Clear ALL existing controls first
+            # Clear ALL existing controls first AND hide No Buttons notification
             for control_name in list(self.control_labels.keys()):
+                if control_name == "NO_BUTTONS_NOTIFICATION":
+                    # ALWAYS hide No Buttons notification during specialized views
+                    if 'label' in self.control_labels[control_name] and self.control_labels[control_name]['label']:
+                        self.control_labels[control_name]['label'].setVisible(False)
+                        self.no_buttons_visible = False
+                        print("DEBUG: Hiding No Buttons notification in specialized view")
+                    continue  # Don't delete it, just hide it
+                
+                # Remove other controls from the canvas
                 if control_name in self.control_labels:
                     if 'label' in self.control_labels[control_name]:
                         self.control_labels[control_name]['label'].deleteLater()
@@ -2879,12 +3065,17 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
             
             print(f"Created and displayed {len(controls_dict)} controls in {group_name}")
+        
+            # Only hide No Buttons notification if requested
+            if hide_no_buttons and hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                self.no_buttons_label.setVisible(False)
+                self.no_buttons_visible = False
+                print(f"DEBUG: Hiding No Buttons notification in {group_name}")
+            
             return True
             
         except Exception as e:
             print(f"Error showing {group_name}: {e}")
-            import traceback
-            traceback.print_exc()
             return False
 
     # Update the toggle_controls_view method to cycle through 5 states
@@ -2985,12 +3176,19 @@ class PreviewWindow(QMainWindow):
         elif self.current_view_state == 'specialized_2':
             self.current_view_state = 'normal'
 
-            # 🔁 Clear all existing control labels
+            # Clear existing controls, keep No Buttons notification visible
             for control_name in list(self.control_labels.keys()):
+                if control_name == "NO_BUTTONS_NOTIFICATION":
+                    # Keep No Buttons notification visible for "Show All Controls"
+                    if 'label' in self.control_labels[control_name] and self.control_labels[control_name]['label']:
+                        self.control_labels[control_name]['label'].setVisible(True)
+                        self.control_labels[control_name]['label'].raise_()
+                        self.no_buttons_visible = True
+                    continue
+                
                 if 'label' in self.control_labels[control_name]:
                     self.control_labels[control_name]['label'].deleteLater()
                 del self.control_labels[control_name]
-            self.control_labels = {}
 
             # 🧩 Recreate default ROM-specific layout
             self.create_control_labels(clean_mode=False)
@@ -3007,7 +3205,7 @@ class PreviewWindow(QMainWindow):
         else:
             self.current_view_state = 'normal'
             next_state_text = "All Controls"
-
+        
         # 🔄 Update button label for next toggle
         self.controls_mode_button.setText(f"Show {next_state_text}")
 
@@ -3016,6 +3214,12 @@ class PreviewWindow(QMainWindow):
         """Show all possible control types in one view"""
 
         print("\n--- Showing all combined controls ---")
+        
+        # DEBUG: Check notification state at start
+        if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+            print(f"DEBUG: No Buttons notification exists, currently visible: {self.no_buttons_label.isVisible()}")
+        else:
+            print("DEBUG: No Buttons notification does not exist")
 
         # Combine all groups manually
         combined_controls = {}
@@ -3063,15 +3267,53 @@ class PreviewWindow(QMainWindow):
             "P1_GAMBLE_LOW": "Gamble Low",
         })
 
-        # Clear existing controls
+        # BEFORE clearing controls, preserve No Buttons notification if it exists
+        no_buttons_exists = hasattr(self, 'no_buttons_label') and self.no_buttons_label and "NO_BUTTONS_NOTIFICATION" in self.control_labels
+        if no_buttons_exists:
+            print("DEBUG: Preserving No Buttons notification for Show All Controls")
+
+        # Clear existing controls, keep No Buttons notification
         for control_name in list(self.control_labels.keys()):
+            if control_name == "NO_BUTTONS_NOTIFICATION":
+                continue  # Preserve the notification, don't delete it
             if 'label' in self.control_labels[control_name]:
                 self.control_labels[control_name]['label'].deleteLater()
             del self.control_labels[control_name]
-        self.control_labels = {}
 
         # Now create the combined label layout
         self._show_specialized_group(combined_controls, group_name="All Combined Controls")
+
+        # AFTER creating controls, show No Buttons notification for ALL games (for positioning)
+        if no_buttons_exists:
+            try:
+                self.no_buttons_label.setVisible(True)
+                self.no_buttons_label.raise_()
+                self.no_buttons_visible = True
+                print("DEBUG: Showing No Buttons notification in Show All Controls view (for positioning)")
+            except RuntimeError:
+                print("DEBUG: No buttons label was deleted, recreating...")
+                self.create_no_buttons_notification()
+                # AFTER creating controls, show No Buttons notification for ALL games (for positioning)
+                # AFTER creating controls, show No Buttons notification for ALL games (for positioning)
+                if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                    try:
+                        # FORCE it to show, regardless of current visibility state
+                        self.no_buttons_label.setVisible(True)
+                        self.no_buttons_label.raise_()
+                        self.no_buttons_visible = True
+                        print("DEBUG: Forcing No Buttons notification visible in Show All Controls view")
+                    except RuntimeError:
+                        print("DEBUG: No buttons label was deleted, recreating...")
+                        self.create_no_buttons_notification()
+                        # Now create the combined label layout (DON'T hide No Buttons notification)
+                        self._show_specialized_group(combined_controls, group_name="All Combined Controls", hide_no_buttons=False)
+
+                        # AFTER creating controls, show No Buttons notification for ALL games
+                        if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                            self.no_buttons_label.setVisible(True)
+                            self.no_buttons_label.raise_()
+                            self.no_buttons_visible = True
+                            print("DEBUG: Showing No Buttons notification in Show All Controls view")
 
 
     def truncate_display_text(self, text, max_length=15):
@@ -3373,9 +3615,17 @@ class PreviewWindow(QMainWindow):
                     }
                 print(f"Backed up {len(self.original_controls_backup)} original controls")
             
-            # Clear ALL existing controls first
+            # Clear ALL existing controls first AND hide No Buttons notification
             for control_name in list(self.control_labels.keys()):
-                # Remove the control from the canvas
+                if control_name == "NO_BUTTONS_NOTIFICATION":
+                    # ALWAYS hide No Buttons notification during specialized views
+                    if 'label' in self.control_labels[control_name] and self.control_labels[control_name]['label']:
+                        self.control_labels[control_name]['label'].setVisible(False)
+                        self.no_buttons_visible = False
+                        print("DEBUG: Hiding No Buttons notification in specialized view")
+                    continue  # Don't delete it, just hide it
+                
+                # Remove other controls from the canvas
                 if control_name in self.control_labels:
                     if 'label' in self.control_labels[control_name]:
                         self.control_labels[control_name]['label'].deleteLater()
@@ -3637,6 +3887,13 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
             
             print(f"Created and displayed {len(standard_controls)} standard controls with fixed P1 prefixes")
+    
+            # Hide No Buttons notification in specialized views (except Show All Controls)
+            if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                self.no_buttons_label.setVisible(False)
+                self.no_buttons_visible = False
+                print("DEBUG: Hiding No Buttons notification in specialized view")
+            
             return True
             
         except Exception as e:
@@ -3798,6 +4055,7 @@ class PreviewWindow(QMainWindow):
         
         # Determine if this is a directional-only game (based on STANDARD directional only)
         self.is_directional_only_game = directional_count > 0 and button_count == 0
+        self.has_any_buttons = button_count > 0
         print(f"Game control analysis: {directional_count} standard directional, {button_count} buttons")
         print(f"Is standard-directional-only game: {self.is_directional_only_game}")
         
@@ -6501,6 +6759,8 @@ class PreviewWindow(QMainWindow):
                 except Exception as e:
                     print(f"Error loading existing positions: {e}")
             
+            if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
+                self.save_no_buttons_position()
             # Get positions for current controls
             y_offset = self.text_settings.get("y_offset", -40)
             new_positions = {}
@@ -6791,7 +7051,7 @@ class PreviewWindow(QMainWindow):
         
         # CRITICAL: Enforce layer order after visibility changes
         self.enforce_layer_order()
-        
+        QTimer.singleShot(100, self.update_no_buttons_visibility)
         print(f"Applied mode '{self.directional_mode}' to {controls_updated} controls")
 
     def update_directional_mode_button_text(self):
@@ -7554,6 +7814,52 @@ class PreviewWindow(QMainWindow):
         for control_name, control_data in self.control_labels.items():
             if 'label' in control_data:
                 label = control_data['label']
+
+                # Special handling for No Buttons notification
+                if control_name == "NO_BUTTONS_NOTIFICATION":
+                    notification_text = "NB: No Buttons Used"
+                    if use_uppercase:
+                        notification_text = notification_text.upper()
+                    
+                    print(f"DEBUG: Applying text settings to No Buttons notification")
+                    print(f"DEBUG: Font family: {font_family}, size: {font_size}")
+                    print(f"DEBUG: Use action gradient: {use_action_gradient}")
+                    print(f"DEBUG: Action color: {action_color}")
+                    
+                    # Update text and font
+                    label.setText(notification_text)
+                    label.setFont(font)
+                    
+                    # Update label settings completely
+                    if hasattr(label, 'settings'):
+                        label.settings.update(self.text_settings)
+                    
+                    # Handle gradient settings properly
+                    if hasattr(label, 'use_prefix_gradient') and hasattr(label, 'use_action_gradient'):
+                        label.use_prefix_gradient = use_prefix_gradient
+                        label.use_action_gradient = use_action_gradient
+                        
+                        # Update all gradient colors
+                        if hasattr(label, 'prefix_gradient_start'):
+                            label.prefix_gradient_start = QColor(prefix_gradient_start)
+                        if hasattr(label, 'prefix_gradient_end'):
+                            label.prefix_gradient_end = QColor(prefix_gradient_end)
+                        if hasattr(label, 'action_gradient_start'):
+                            label.action_gradient_start = QColor(action_gradient_start)
+                        if hasattr(label, 'action_gradient_end'):
+                            label.action_gradient_end = QColor(action_gradient_end)
+                    
+                    # Apply complete styling
+                    label.setStyleSheet(f"color: {action_color}; background-color: transparent; border: none; font-family: '{font.family()}';")
+                    
+                    # Debug what we actually applied
+                    actual_font = label.font()
+                    print(f"DEBUG: Applied font to notification: {actual_font.family()}, size: {actual_font.pointSize()}")
+                    
+                    # Force repaint and resize
+                    label.adjustSize()
+                    label.update()
+                    continue
                 
                 # Get original action text (store in lowercase)
                 action_text = control_data['action']
