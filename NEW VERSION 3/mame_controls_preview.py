@@ -389,40 +389,89 @@ class PreviewWindow(QMainWindow):
         QTimer.singleShot(50, self.apply_text_settings)
 
     def update_no_buttons_visibility(self):
-        """Update the visibility of the No Buttons notification"""
+        """Update the visibility of the No Buttons notification - STRICT logic"""
         if not hasattr(self, 'no_buttons_label') or not self.no_buttons_label:
             return
         
-        # Only auto-show/hide for games WITHOUT buttons in normal ROM view
-        if self.has_any_buttons:
-            # For games with buttons, only show in specialized "Show All Controls" view
-            # This is handled manually in show_all_controls_combined()
+        # Get current view state
+        current_view = getattr(self, 'current_view_state', 'normal')
+        
+        print(f"DEBUG: update_no_buttons_visibility called - view: {current_view}, has_any_buttons: {getattr(self, 'has_any_buttons', 'UNKNOWN')}")
+        
+        # RULE 1: NEVER show in specialized views (except Show All Controls)
+        if current_view in ['all_buttons', 'specialized_1', 'specialized_2']:
+            if self.no_buttons_visible:
+                self.no_buttons_label.setVisible(False)
+                self.no_buttons_visible = False
+                print("DEBUG: Force hiding - specialized view")
             return
         
-        # For games without buttons, auto-manage visibility based on directional controls
-        all_directional_hidden = True
-        for control_name, control_data in self.control_labels.items():
-            if control_name == "NO_BUTTONS_NOTIFICATION":
-                continue
-            if 'label' not in control_data or not control_data['label']:
-                continue
-            
-            is_directional = (
-                any(control_type in control_name for control_type in ["JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"]) or
-                any(control_type in control_name for control_type in ["DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", "AD_STICK", "PEDAL", "POSITIONAL"])
-            )
-            
-            if is_directional and control_data['label'].isVisible():
-                all_directional_hidden = False
-                break
-        
-        should_show = all_directional_hidden and self.texts_visible
-        
-        if should_show != self.no_buttons_visible:
-            self.no_buttons_label.setVisible(should_show)
-            self.no_buttons_visible = should_show
-            if should_show:
+        # RULE 2: Only show in Show All Controls if we want to demonstrate it exists
+        if current_view == 'all_controls':
+            # Show it in Show All Controls only
+            if not self.no_buttons_visible:
+                self.no_buttons_label.setVisible(True)
                 self.no_buttons_label.raise_()
+                self.no_buttons_visible = True
+                print("DEBUG: Showing in Show All Controls view")
+            return
+        
+        # RULE 3: Normal view - ONLY for games with no buttons AND all directionals hidden
+        if current_view == 'normal':
+            # First check: Does this game actually have NO buttons?
+            has_buttons = getattr(self, 'has_any_buttons', True)
+            
+            if has_buttons:
+                # Game has buttons - NEVER show notification
+                if self.no_buttons_visible:
+                    self.no_buttons_label.setVisible(False)
+                    self.no_buttons_visible = False
+                    print("DEBUG: Game has buttons - hiding notification")
+                return
+            
+            # Game has no buttons - check if all directionals are hidden
+            all_directional_hidden = True
+            directional_count = 0
+            
+            for control_name, control_data in self.control_labels.items():
+                if control_name == "NO_BUTTONS_NOTIFICATION":
+                    continue
+                if 'label' not in control_data or not control_data['label']:
+                    continue
+                
+                # Check if this is any type of directional control
+                is_directional = (
+                    any(control_type in control_name for control_type in 
+                        ["JOYSTICK", "JOYSTICKLEFT", "JOYSTICKRIGHT", "DPAD"]) or
+                    any(control_type in control_name for control_type in 
+                        ["DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN", "AD_STICK", "PEDAL", "POSITIONAL"])
+                )
+                
+                if is_directional:
+                    directional_count += 1
+                    if control_data['label'].isVisible():
+                        all_directional_hidden = False
+                        print(f"DEBUG: Found visible directional: {control_name}")
+                        break
+            
+            print(f"DEBUG: Directional analysis - count: {directional_count}, all_hidden: {all_directional_hidden}")
+            
+            # Show notification ONLY if: no buttons + all directionals hidden + texts visible
+            should_show = all_directional_hidden and self.texts_visible and directional_count > 0
+            
+            if should_show != self.no_buttons_visible:
+                self.no_buttons_label.setVisible(should_show)
+                self.no_buttons_visible = should_show
+                if should_show:
+                    self.no_buttons_label.raise_()
+                print(f"DEBUG: Normal view final decision - {'SHOW' if should_show else 'HIDE'}")
+        
+        # RULE 4: Any other case - hide it
+        else:
+            if self.no_buttons_visible:
+                self.no_buttons_label.setVisible(False)
+                self.no_buttons_visible = False
+                print("DEBUG: Unknown view state - hiding notification")
 
     def save_no_buttons_position(self):
         """Save the position of the No Buttons notification"""
@@ -3083,9 +3132,8 @@ class PreviewWindow(QMainWindow):
             print(f"Error showing {group_name}: {e}")
             return False
 
-    # Fix 1: Update toggle_controls_view to preserve the No Buttons notification
     def toggle_controls_view(self):
-        """Toggle between control views: All Controls → XInput → Specialized 1 → Specialized 2 → Normal"""
+        """Toggle between control views with proper No Buttons notification handling"""
 
         if not hasattr(self, 'current_view_state'):
             self.current_view_state = 'normal'
@@ -3130,7 +3178,7 @@ class PreviewWindow(QMainWindow):
                     self.control_labels[control_name]['label'].deleteLater()
                 del self.control_labels[control_name]
 
-            # 🧩 Recreate default ROM-specific layout
+            # Recreate default ROM-specific layout
             self.create_control_labels(clean_mode=False)
 
             # RESTORE No Buttons notification if it existed
@@ -3138,12 +3186,12 @@ class PreviewWindow(QMainWindow):
                 self.control_labels["NO_BUTTONS_NOTIFICATION"] = no_buttons_data
                 print("DEBUG: Preserved No Buttons notification during view transition")
 
-            # 🎨 Restore appearance and layout
+            # Restore appearance and layout
             QTimer.singleShot(100, self.apply_text_settings)
             QTimer.singleShot(200, self.force_resize_all_labels)
 
-            # ✅ CRITICAL: Reapply directional visibility setting
-            self.apply_joystick_visibility()
+            # CRITICAL: Reapply directional visibility setting
+            self.apply_directional_mode()
 
             next_state_text = "All Controls"
 
@@ -3151,8 +3199,11 @@ class PreviewWindow(QMainWindow):
             self.current_view_state = 'normal'
             next_state_text = "All Controls"
         
-        # 🔄 Update button label for next toggle
+        # Update button label for next toggle
         self.controls_mode_button.setText(f"Show {next_state_text}")
+        
+        # IMPORTANT: Update No Buttons visibility based on new view state
+        QTimer.singleShot(150, self.update_no_buttons_visibility)
 
     # Fix 2: Update show_all_controls_combined to ensure notification is created and shown
     def show_all_controls_combined(self):
@@ -6949,7 +7000,7 @@ class PreviewWindow(QMainWindow):
         self.show_toast_notification(mode_names[self.directional_mode])
 
     def apply_directional_mode(self):
-        """Apply the current directional mode to all controls (now with 4 modes)"""
+        """Apply the current directional mode to all controls (no notification update)"""
         # Set internal flags based on mode
         if self.directional_mode == "show_all":
             self.joystick_visible = True
@@ -6974,6 +7025,10 @@ class PreviewWindow(QMainWindow):
         is_directional_only = getattr(self, 'is_directional_only_game', False)
         
         for control_name, control_data in self.control_labels.items():
+            # SKIP the No Buttons notification entirely during directional mode changes
+            if control_name == "NO_BUTTONS_NOTIFICATION":
+                continue
+                
             if 'label' not in control_data or not control_data['label']:
                 continue
             
@@ -7030,7 +7085,10 @@ class PreviewWindow(QMainWindow):
         
         # CRITICAL: Enforce layer order after visibility changes
         self.enforce_layer_order()
-        QTimer.singleShot(100, self.update_no_buttons_visibility)
+        
+        # REMOVED: No longer calling update_no_buttons_visibility here
+        # The notification will be handled separately based on view state changes
+        
         print(f"Applied mode '{self.directional_mode}' to {controls_updated} controls")
 
     def update_directional_mode_button_text(self):
