@@ -296,7 +296,7 @@ class MAMEControlConfig(ctk.CTk):
             return {}
     
     def _start_loading_process(self):
-        """Begin the sequential loading process with separate splash window"""
+        """Begin the sequential loading process - FIXED with proper game selection"""
         
         # Update splash message
         self.update_splash_message("Loading settings...")
@@ -308,7 +308,7 @@ class MAMEControlConfig(ctk.CTk):
         self.after(100, self._load_essential_data)
 
     def _load_essential_data(self):
-        """Load essential data synchronously - FIXED"""
+        """Load essential data synchronously - FIXED to NOT auto-select"""
         try:
             # Update message
             self.update_splash_message("Scanning ROMs directory...")
@@ -319,15 +319,12 @@ class MAMEControlConfig(ctk.CTk):
             # Update message
             self.update_splash_message("Updating game list...")
             
-            # Update the game list (this will auto-select first ROM)
+            # Update the game list WITHOUT auto-selecting
             if hasattr(self, 'game_listbox'):
-                self.update_game_list_by_category()  # ← This already calls select_first_rom!
+                self.update_game_list_by_category(auto_select_first=False)  # CRITICAL: False here
             
             # Update stats
             self.update_stats_label()
-            
-            # REMOVE THIS LINE - it's causing the double call:
-            # self.select_first_rom()  # ← DELETE THIS LINE
             
             # Schedule secondary data loading
             self.after(100, self._load_secondary_data)
@@ -510,13 +507,128 @@ class MAMEControlConfig(ctk.CTk):
         if hasattr(self, 'after_init_setup'):
             self.after_init_setup()
         
-        # CRITICAL: Schedule the first game selection AFTER the UI is fully shown
-        # This ensures the game list is populated and visible before trying to select
-        self.after(1000, self._delayed_first_game_selection)  # Longer delay
-        
-        # Schedule showing the main window
+        # Schedule showing the main window FIRST
         self.after(500, self.show_application)
+        
+        # THEN schedule first game selection AFTER window is shown and stable
+        self.after(1500, self._safe_first_game_selection)  # Much longer delay
 
+    def _safe_first_game_selection(self):
+        """Safely select first game with splash updates"""
+        try:
+            print("=== SAFE FIRST GAME SELECTION START ===")
+            
+            # Update splash to show we're loading the first ROM
+            self.update_splash_message("Loading first ROM...")
+            
+            # Multiple safety checks
+            if not hasattr(self, 'available_roms') or not self.available_roms:
+                print("ERROR: No available ROMs")
+                self._close_splash_safely()
+                return
+                
+            if not hasattr(self, 'game_listbox') or not self.game_listbox.winfo_exists():
+                print("ERROR: Game listbox doesn't exist")
+                self._close_splash_safely()
+                return
+                
+            if self.game_listbox.size() == 0:
+                print("ERROR: Game listbox is empty")
+                self._close_splash_safely()
+                return
+                
+            if not hasattr(self, 'game_list_data') or not self.game_list_data:
+                print("ERROR: Game list data is empty")
+                self._close_splash_safely()
+                return
+            
+            # Check if already selected
+            if hasattr(self, 'current_game') and self.current_game:
+                print(f"Game already selected: {self.current_game}")
+                self._close_splash_safely()
+                return
+            
+            # Get first ROM
+            first_rom, _ = self.game_list_data[0]
+            print(f"Selecting first ROM: {first_rom}")
+            
+            # Update splash with specific ROM name
+            self.update_splash_message(f"Loading {first_rom}...")
+            
+            # Set current game FIRST
+            self.current_game = first_rom
+            self.selected_line = 1
+            
+            # Update listbox selection
+            self.game_listbox.selection_clear(0, tk.END)
+            self.game_listbox.selection_set(0)
+            self.game_listbox.activate(0)
+            self.game_listbox.see(0)
+            
+            # Update toolbar if available
+            if hasattr(self, 'update_toolbar_status'):
+                self.update_toolbar_status()
+            
+            # Display the game info - THIS is what takes time
+            # We'll close splash after this completes
+            self.display_game_info_with_splash_close(first_rom)
+            
+            print(f"=== INITIATED LOADING OF: {first_rom} ===")
+            
+        except Exception as e:
+            print(f"ERROR in safe first game selection: {e}")
+            import traceback
+            traceback.print_exc()
+            # Close splash on error
+            self._close_splash_safely()
+    
+    def _close_splash_safely(self):
+        """Safely close the splash window"""
+        try:
+            if hasattr(self, 'splash_window') and self.splash_window:
+                print("=== CLOSING SPLASH WINDOW ===")
+                self.splash_window.destroy()
+                self.splash_window = None
+                
+                # Bring main window to front
+                self.lift()
+                self.focus_force()
+                
+        except Exception as e:
+            print(f"Error closing splash: {e}")
+
+    def display_game_info_with_splash_close(self, rom_name):
+        """Display game info and close splash when done"""
+        try:
+            print(f"=== LOADING GAME INFO FOR: {rom_name} ===")
+            
+            # Update splash one more time
+            self.update_splash_message(f"Processing {rom_name} controls...")
+            
+            # Call the regular display_game_info method
+            self.display_game_info(rom_name)
+            
+            # Close splash after a short delay to ensure display is complete
+            self.after(500, self._close_splash_with_completion_message)
+            
+        except Exception as e:
+            print(f"Error in display_game_info_with_splash_close: {e}")
+            # Close splash even on error
+            self._close_splash_safely()
+
+    def _close_splash_with_completion_message(self):
+        """Close splash with a completion message"""
+        try:
+            # Show completion message briefly
+            self.update_splash_message("Ready!")
+            
+            # Close splash after showing ready message
+            self.after(300, self._close_splash_safely)
+            
+        except Exception as e:
+            print(f"Error in completion message: {e}")
+            self._close_splash_safely()
+    
     def _delayed_first_game_selection(self):
         """Select first game after UI is fully loaded - FIXED"""
         try:
@@ -589,16 +701,12 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
     
     def show_application(self):
-        """Show the application window - FIXED to prevent duplicate selections"""
+        """Show the application window - KEEP SPLASH until first ROM loads"""
         try:
+            print("=== SHOWING APPLICATION WINDOW (keeping splash) ===")
             
-            # Close splash window
-            if hasattr(self, 'splash_window') and self.splash_window:
-                try:
-                    self.splash_window.destroy()
-                except:
-                    pass
-                self.splash_window = None
+            # DON'T close splash window yet! Keep it visible during first ROM loading
+            # We'll close it in _safe_first_game_selection after ROM loads
             
             # Force full UI update
             self.update_idletasks()
@@ -623,7 +731,7 @@ class MAMEControlConfig(ctk.CTk):
             # Position window on the appropriate monitor
             self.geometry(f"{win_width}x{win_height}+{x}+{y}")
             
-            # Show the main window
+            # Show the main window (but splash stays on top)
             self.deiconify()
             
             # Auto maximize after showing
@@ -632,12 +740,7 @@ class MAMEControlConfig(ctk.CTk):
             # Force another update to ensure complete rendering
             self.update_idletasks()
             
-            # IMPORTANT: Reset the first game selection flag here
-            # This ensures that the delayed selection can work properly
-            if hasattr(self, '_first_rom_selected'):
-                del self._first_rom_selected
-            
-            print("DEBUG: Main application window shown")
+            print("=== APPLICATION WINDOW SHOWN (splash still visible) ===")
                     
         except Exception as e:
             import traceback
@@ -782,12 +885,26 @@ class MAMEControlConfig(ctk.CTk):
             self.splash_progress.pack(pady=10)
             self.splash_progress.start(15)  # Start animation
             
-            # Now show the window
+            # Show the splash window
             splash.deiconify()
             
-            # Ensure it stays on top
+            # ENHANCED: Ensure it stays on top even after main window shows
             splash.attributes('-topmost', True)
             splash.focus_force()
+            
+            # ENHANCED: Keep it on top during the entire loading process
+            def keep_splash_on_top():
+                try:
+                    if splash.winfo_exists():
+                        splash.attributes('-topmost', True)  
+                        splash.lift()
+                        # Schedule next check
+                        splash.after(500, keep_splash_on_top)
+                except:
+                    pass  # Window was destroyed
+            
+            # Start the keep-on-top loop
+            splash.after(500, keep_splash_on_top)
             
             # Disable closing with X button
             splash.protocol("WM_DELETE_WINDOW", lambda: None)
@@ -796,16 +913,26 @@ class MAMEControlConfig(ctk.CTk):
             splash.update()
             
             return splash
-                
+                    
         except Exception as e:
             return None
     
     def update_splash_message(self, message):
-        """Update the splash window message"""
-        if hasattr(self, 'splash_message'):
-            self.splash_message.set(message)
+        """Update the splash window message - FIXED to handle destroyed window"""
+        try:
             if hasattr(self, 'splash_window') and self.splash_window:
-                self.splash_window.update_idletasks()
+                # Check if the window still exists
+                if self.splash_window.winfo_exists():
+                    if hasattr(self, 'splash_message'):
+                        self.splash_message.set(message)
+                        self.splash_window.update_idletasks()
+                        print(f"SPLASH: {message}")
+                else:
+                    print(f"Splash window destroyed, message was: {message}")
+            else:
+                print(f"No splash window, message was: {message}")
+        except Exception as e:
+            print(f"Error updating splash message: {e}")
     
     def check_and_build_db_if_needed(self):
         """Check and build the database only if needed"""
@@ -3197,23 +3324,26 @@ class MAMEControlConfig(ctk.CTk):
         for item in list_display_items:
             self.game_listbox.insert(tk.END, item)
         
-        # Handle ROM selection - FIXED logic
-        if auto_select_first and display_roms and not hasattr(self, '_first_rom_selected'):
-            # Auto-select first ROM when switching categories (only if not already selected)
-            first_rom, _ = self.game_list_data[0]
-            self.current_game = first_rom
-            self.selected_line = 1
-            
-            # Select in listbox
-            self.game_listbox.selection_clear(0, tk.END)
-            self.game_listbox.selection_set(0)
-            self.game_listbox.see(0)
-            
-            # Mark as selected
-            self._first_rom_selected = True
-            
-            # Display ROM info after a brief delay to ensure UI is ready
-            self.after(50, lambda: self.display_game_info(first_rom))
+        # Handle ROM selection - FIXED to not interfere with startup
+        if auto_select_first and display_roms:
+            # Check if this is during startup (no current game set yet)
+            if not hasattr(self, 'current_game') or not self.current_game:
+                # During startup - DON'T auto-select, let the safe selection handle it
+                print("DEBUG: Skipping auto-select during startup")
+                pass
+            else:
+                # After startup - normal category switching behavior
+                first_rom, _ = self.game_list_data[0]
+                self.current_game = first_rom
+                self.selected_line = 1
+                
+                # Select in listbox
+                self.game_listbox.selection_clear(0, tk.END)
+                self.game_listbox.selection_set(0)
+                self.game_listbox.see(0)
+                
+                # Display ROM info
+                self.after(50, lambda: self.display_game_info(first_rom))
             
         elif previously_selected_rom:
             # Try to select the previously selected ROM if it's still in the list
@@ -3342,9 +3472,13 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Warning: Could not save cache for {rom_name}: {e}")
     
     def display_game_info(self, rom_name, processed_data=None):
-        """Display game information and controls - WITH STARTUP GUARD"""
+        """Display game information and controls - WITH PROGRESS INDICATION"""
         try:     
             print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}")
+            
+            # Update splash if it's still visible (for first ROM)
+            if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
+                self.update_splash_message(f"Loading {rom_name} controls...")
             
             # Update toolbar status when a new ROM is selected
             if hasattr(self, 'update_toolbar_status'):
@@ -3368,6 +3502,11 @@ class MAMEControlConfig(ctk.CTk):
                 game_data = self.processed_cache[cache_key]
             else:
                 print(f"Processing fresh data for {rom_name}")
+                
+                # Update splash during processing
+                if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
+                    self.update_splash_message(f"Processing {rom_name} data...")
+                
                 # Get raw game data ONCE
                 game_data = self.get_game_data(rom_name)
                 
@@ -3410,6 +3549,10 @@ class MAMEControlConfig(ctk.CTk):
                     for control, mapping in cfg_controls.items()
                 }
 
+            # Update splash before display
+            if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
+                self.update_splash_message(f"Displaying {rom_name}...")
+
             # Now display using the processed data
             current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
             print(f"Display game info using input mode: {current_mode}")
@@ -3426,6 +3569,8 @@ class MAMEControlConfig(ctk.CTk):
             # Display controls with processed data (no more duplicate processing)
             row = 0
             self.display_controls_table(row, game_data, cfg_controls)
+            
+            print(f"=== COMPLETED DISPLAY FOR: {rom_name} ===")
             
         except Exception as e:
             print(f"Error displaying game info: {e}")
