@@ -6721,8 +6721,8 @@ class MAMEControlConfig(ctk.CTk):
                 # Ensure the selected item is visible
                 self.game_list.see(f"{line_index}.0")
 
-    def create_hover_label(self, parent, text, font, color, bg_color, x_pos, width, tooltip_text=None):
-        """Create a label with hover functionality and tooltip for long text"""
+    def create_hover_label(self, parent, text, font, color, bg_color, x_pos, width, tooltip_text=None, anchor="w"):
+        """Create a label with hover functionality and tooltip for long text - UPDATED with anchor support"""
         
         # Check if text is longer than available width
         import tkinter.font as tkFont
@@ -6745,8 +6745,8 @@ class MAMEControlConfig(ctk.CTk):
             parent,
             text=text,
             font=font,
-            anchor="w",
-            justify="left",
+            anchor=anchor,  # NEW: Use the provided anchor parameter
+            justify="left" if anchor == "w" else "right",  # NEW: Adjust justify based on anchor
             background=bg_color,
             foreground=display_color
         )
@@ -7080,21 +7080,29 @@ class MAMEControlConfig(ctk.CTk):
             header_frame.pack(fill="x", pady=(0, 5))
             header_frame.pack_propagate(False)
             
-            # Header setup
+            # Header setup - UPDATED column widths for better spacing
             header_titles = ["MAME Control", "Controller Input", "Game Action", "Mapping Source"]
-            col_widths = [180, 200, 180, 160]
+            
+            # NEW: Adjust column widths - first 3 columns equal, last column smaller and right-aligned
+            total_width = 760  # Approximate total available width
+            source_col_width = 120  # Fixed smaller width for mapping source
+            remaining_width = total_width - source_col_width
+            equal_col_width = remaining_width // 3  # Divide remaining space equally among first 3 columns
+            
+            col_widths = [equal_col_width, equal_col_width, equal_col_width, source_col_width]
+            
             x_positions = [15]
             for i in range(1, len(header_titles)):
                 x_positions.append(x_positions[i-1] + col_widths[i-1] + 15)
-            
+
             for i, title in enumerate(header_titles):
                 header_label = ctk.CTkLabel(
                     header_frame,
                     text=title,
                     font=("Arial", 13, "bold"),
                     text_color="#ffffff",
-                    anchor="w",
-                    justify="left"
+                    anchor="w" if i < 3 else "e",  # NEW: Right-align the last column header
+                    justify="left" if i < 3 else "right"  # NEW: Right-align the last column header
                 )
                 header_label.place(x=x_positions[i], y=5)
             
@@ -7163,16 +7171,16 @@ class MAMEControlConfig(ctk.CTk):
                     # FIX: Use source color, not enhanced color for default mappings
                     display_color = control.get('source_color', self.theme_colors["text"])
                 
-                # Create labels with corrected data
+                # Create labels with corrected data and alignment
                 labels_data = [
-                    (control['control_name'], ("Consolas", 12), "#888888"),
-                    (display_name, ("Arial", 13), display_color),  # Use corrected color
-                    (control['action'], ("Arial", 13, "bold"), self.theme_colors["text"]),
-                    (control['display_source'], ("Arial", 12), control['source_color'])
+                    (control['control_name'], ("Consolas", 12), self.get_mame_control_color(control['control_name']), "w"),  # Left-aligned
+                    (display_name, ("Arial", 13), display_color, "w"),               # Left-aligned
+                    (control['action'], ("Arial", 13, "bold"), self.theme_colors["text"], "w"),  # Left-aligned
+                    (control['display_source'], ("Arial", 12), control['source_color'], "e")     # NEW: Right-aligned
                 ]
                 
-                # Create labels with enhanced tooltip support
-                for j, (text, font, color) in enumerate(labels_data):
+                # Create labels with enhanced tooltip support and proper alignment
+                for j, (text, font, color, anchor) in enumerate(labels_data):
                     # Enhanced tooltip text for controller input column (j==1)
                     if j == 1 and tooltip_text:
                         label_tooltip = tooltip_text
@@ -7183,6 +7191,7 @@ class MAMEControlConfig(ctk.CTk):
                     else:
                         label_tooltip = None
                     
+                    # NEW: Pass the anchor parameter to create_hover_label
                     label = self.create_hover_label(
                         row_frame,
                         text=text,
@@ -7191,7 +7200,8 @@ class MAMEControlConfig(ctk.CTk):
                         bg_color=alt_colors[i % 2],
                         x_pos=x_positions[j],
                         width=col_widths[j],
-                        tooltip_text=label_tooltip
+                        tooltip_text=label_tooltip,
+                        anchor=anchor  # NEW: Pass anchor parameter
                     )
             
             # Canvas update functions
@@ -7215,6 +7225,26 @@ class MAMEControlConfig(ctk.CTk):
             import traceback
             traceback.print_exc()
             return start_row + 1
+    
+    
+    # Alternative: Dynamic color based on control type for even better visual organization
+    def get_mame_control_color(self, control_name):
+        """Get color for MAME control based on control type"""
+        
+        if "BUTTON" in control_name:
+            #return "#4A90E2"  # Blue for buttons
+            return "#4A90E2"  # Blue for buttons
+        elif "JOYSTICK" in control_name or "STICK" in control_name:
+            #return "#16A085"  # Teal for joysticks/movement
+            return "#4A90E2"  # Teal for joysticks/movement
+        elif any(special in control_name for special in ["DIAL", "PADDLE", "TRACKBALL", "MOUSE", "LIGHTGUN"]):
+            #return "#E67E22"  # Orange for specialized controls
+            return "#4A90E2"  # Orange for specialized controls
+        elif any(special in control_name for special in ["PEDAL", "AD_STICK"]):
+            #return "#8E44AD"  # Purple for analog controls
+            return "#4A90E2"  # Purple for analog controls
+        else:
+            return self.theme_colors["primary"]  # Default blue
     
     def toggle_input_mode(self):
         """Handle toggling between input modes with FORCED cache clearing"""
