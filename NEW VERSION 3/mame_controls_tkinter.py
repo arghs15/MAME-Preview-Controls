@@ -6172,14 +6172,16 @@ class MAMEControlConfig(ctk.CTk):
             return False
 
     def load_settings(self):
-        """Load settings from JSON file in settings directory"""
+        """Load settings from JSON file in settings directory - UPDATED with directional display"""
         # Set sensible defaults
         self.preferred_preview_screen = 1
         self.visible_control_types = ["BUTTON"]
         self.hide_preview_buttons = False
         self.show_button_names = True
-        self.input_mode = 'xinput'  # Change default to 'xinput' instead of boolean
+        self.input_mode = 'xinput'
         self.xinput_only_mode = True
+        self.rom_source_mode = 'physical'
+        self.show_directional_alternatives = True  # NEW SETTING
         
         # Load custom settings if available
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
@@ -6225,6 +6227,10 @@ class MAMEControlConfig(ctk.CTk):
                 # Load XInput Only Mode setting
                 if 'xinput_only_mode' in settings:
                     self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
+                    
+                # NEW: Load directional alternatives setting
+                if 'show_directional_alternatives' in settings:
+                    self.show_directional_alternatives = bool(settings.get('show_directional_alternatives', True))
                     
             except Exception as e:
                 print(f"Error loading settings: {e}")
@@ -6304,14 +6310,16 @@ class MAMEControlConfig(ctk.CTk):
         }
     
     def save_settings(self):
-        """Save current settings to the standard settings file"""
+        """Save current settings to the standard settings file - UPDATED with directional display"""
         settings = {
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
             "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
             "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
             "show_button_names": getattr(self, 'show_button_names', True),
-            "input_mode": getattr(self, 'input_mode', 'xinput'),  # Save as string
-            "xinput_only_mode": getattr(self, 'xinput_only_mode', True)
+            "input_mode": getattr(self, 'input_mode', 'xinput'),
+            "xinput_only_mode": getattr(self, 'xinput_only_mode', True),
+            "rom_source_mode": getattr(self, 'rom_source_mode', 'physical'),
+            "show_directional_alternatives": getattr(self, 'show_directional_alternatives', True)  # NEW
         }
         
         print(f"Debug - saving settings: {settings}")
@@ -6889,6 +6897,7 @@ class MAMEControlConfig(ctk.CTk):
             # Create control rows
             alt_colors = [self.theme_colors["card_bg"], self.theme_colors["card_bg"]]
             
+            # In the control processing loop, around line where you create control entries:
             for i, control in enumerate(processed_controls):
                 row_frame = tk.Frame(
                     controls_frame,
@@ -6898,22 +6907,42 @@ class MAMEControlConfig(ctk.CTk):
                 row_frame.pack(fill=tk.X, pady=1, expand=True)
                 row_frame.pack_propagate(False)
                 
-                # Create labels with pre-processed data
+                # ENHANCED: Special handling for directional controls with alternatives
+                display_name = control['display_name']
+                
+                # Check if this control has XInput alternatives
+                if (hasattr(self, 'input_mode') and self.input_mode == 'xinput' and 
+                    '|' in display_name and any(direction in control['control_name'] for direction in 
+                    ['JOYSTICK_UP', 'JOYSTICK_DOWN', 'JOYSTICK_LEFT', 'JOYSTICK_RIGHT'])):
+                    
+                    # Enhanced tooltip for directional controls
+                    tooltip_text = f"XInput Options: {display_name}"
+                    
+                    # Color coding for directional controls
+                    display_color = self.theme_colors["success"]  # Green for enhanced controls
+                else:
+                    tooltip_text = None
+                    display_color = control.get('source_color', self.theme_colors["primary"])
+                
+                # Create labels with enhanced data
                 labels_data = [
                     (control['control_name'], ("Consolas", 12), "#888888"),
-                    (control['display_name'], ("Arial", 13), self.theme_colors["primary"]),
+                    (display_name, ("Arial", 13), display_color),  # Use enhanced color
                     (control['action'], ("Arial", 13, "bold"), self.theme_colors["text"]),
                     (control['display_source'], ("Arial", 12), control['source_color'])
                 ]
                 
-                # With this:
+                # Create labels with enhanced tooltip support
                 for j, (text, font, color) in enumerate(labels_data):
-                    # Create tooltip text for long entries
-                    tooltip_text = None
-                    if j == 2 and len(text) > 20:  # Game Action column with long text
-                        tooltip_text = f"Full Action: {text}"
-                    elif j == 1 and len(text) > 25:  # Controller Input column with long text
-                        tooltip_text = f"Full Input: {text}"
+                    # Enhanced tooltip text for controller input column (j==1)
+                    if j == 1 and tooltip_text:
+                        label_tooltip = tooltip_text
+                    elif j == 2 and len(text) > 20:
+                        label_tooltip = f"Full Action: {text}"
+                    elif j == 1 and len(text) > 25:
+                        label_tooltip = f"Full Input: {text}"
+                    else:
+                        label_tooltip = None
                     
                     label = self.create_hover_label(
                         row_frame,
@@ -6923,7 +6952,7 @@ class MAMEControlConfig(ctk.CTk):
                         bg_color=alt_colors[i % 2],
                         x_pos=x_positions[j],
                         width=col_widths[j],
-                        tooltip_text=tooltip_text
+                        tooltip_text=label_tooltip
                     )
             
             # Canvas update functions

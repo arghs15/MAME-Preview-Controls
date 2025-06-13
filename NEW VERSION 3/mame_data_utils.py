@@ -1739,8 +1739,66 @@ def format_keycode_display(mapping: str) -> str:
     friendly_name = key_mappings.get(key_name, key_name)
     return f"Key {friendly_name}"
 
+
+def get_xinput_directional_alternatives(control_name: str) -> str:
+    """
+    Get XInput alternatives for directional controls showing both D-pad and analog options
+    Returns a formatted string with multiple XInput options
+    """
+    directional_mappings = {
+        # P1 Joystick directions - show both D-pad and Left Stick options
+        'P1_JOYSTICK_UP': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG',
+        'P1_JOYSTICK_DOWN': 'XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS', 
+        'P1_JOYSTICK_LEFT': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG',
+        'P1_JOYSTICK_RIGHT': 'XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        
+        # P1 Right Stick directions
+        'P1_JOYSTICKRIGHT_UP': 'XINPUT_1_RIGHTY_NEG',
+        'P1_JOYSTICKRIGHT_DOWN': 'XINPUT_1_RIGHTY_POS',
+        'P1_JOYSTICKRIGHT_LEFT': 'XINPUT_1_RIGHTX_NEG', 
+        'P1_JOYSTICKRIGHT_RIGHT': 'XINPUT_1_RIGHTX_POS',
+        
+        # P1 D-pad directions (if explicitly defined)
+        'P1_DPAD_UP': 'XINPUT_1_DPAD_UP',
+        'P1_DPAD_DOWN': 'XINPUT_1_DPAD_DOWN',
+        'P1_DPAD_LEFT': 'XINPUT_1_DPAD_LEFT',
+        'P1_DPAD_RIGHT': 'XINPUT_1_DPAD_RIGHT',
+        
+        # P2 Joystick directions
+        'P2_JOYSTICK_UP': 'XINPUT_2_DPAD_UP | XINPUT_2_LEFTY_NEG',
+        'P2_JOYSTICK_DOWN': 'XINPUT_2_DPAD_DOWN | XINPUT_2_LEFTY_POS',
+        'P2_JOYSTICK_LEFT': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG',
+        'P2_JOYSTICK_RIGHT': 'XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+    }
+    
+    return directional_mappings.get(control_name, '')
+
+def get_friendly_xinput_alternatives(xinput_mapping: str) -> str:
+    """
+    Convert XInput mapping with alternatives to friendly display names
+    Example: 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG' -> 'D-Pad Up | Left Stick Up'
+    """
+    if '|' not in xinput_mapping:
+        # Single mapping, use existing function
+        return get_friendly_xinput_name(xinput_mapping)
+    
+    # Multiple mappings separated by |
+    parts = xinput_mapping.split('|')
+    friendly_parts = []
+    
+    for part in parts:
+        part = part.strip()
+        friendly_name = get_friendly_xinput_name(part)
+        friendly_parts.append(friendly_name)
+    
+    return ' | '.join(friendly_parts)
+
+# Update the existing get_friendly_xinput_name function to handle the new axis mappings
 def get_friendly_xinput_name(mapping: str) -> str:
-    """Convert an XINPUT mapping code into a human-friendly button/stick name."""
+    """Convert an XINPUT mapping code into a human-friendly button/stick name - ENHANCED"""
+    if not mapping or not mapping.startswith('XINPUT_'):
+        return mapping
+        
     parts = mapping.split('_', 2)
     if len(parts) < 3:
         return mapping
@@ -1748,7 +1806,7 @@ def get_friendly_xinput_name(mapping: str) -> str:
     
     friendly_map = {
         "A": "A Button",
-        "B": "B Button",
+        "B": "B Button", 
         "X": "X Button",
         "Y": "Y Button",
         "SHOULDER_L": "LB Button",
@@ -1761,14 +1819,15 @@ def get_friendly_xinput_name(mapping: str) -> str:
         "DPAD_DOWN": "D-Pad Down",
         "DPAD_LEFT": "D-Pad Left",
         "DPAD_RIGHT": "D-Pad Right",
-        "LEFTX_NEG": "Left Stick (Left)",
-        "LEFTX_POS": "Left Stick (Right)",
-        "LEFTY_NEG": "Left Stick (Up)",
-        "LEFTY_POS": "Left Stick (Down)",
-        "RIGHTX_NEG": "Right Stick (Left)",
-        "RIGHTX_POS": "Right Stick (Right)",
-        "RIGHTY_NEG": "Right Stick (Up)",
-        "RIGHTY_POS": "Right Stick (Down)"
+        # ENHANCED: Add the new axis mappings
+        "LEFTX_NEG": "Left Stick Left",
+        "LEFTX_POS": "Left Stick Right",
+        "LEFTY_NEG": "Left Stick Up",
+        "LEFTY_POS": "Left Stick Down",
+        "RIGHTX_NEG": "Right Stick Left",
+        "RIGHTX_POS": "Right Stick Right",
+        "RIGHTY_NEG": "Right Stick Up",
+        "RIGHTY_POS": "Right Stick Down"
     }
     return friendly_map.get(action, action)
 
@@ -2002,10 +2061,12 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
     return game_data
 
 def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str):
-    """Process target_button efficiently with minimal string operations"""
+    """Process target_button efficiently with enhanced XInput directional support"""
+    
+    control_name = label.get('name', '')
     
     if " ||| " in mapping:
-        # Handle increment/decrement pairs
+        # Handle increment/decrement pairs (for analog controls like dials)
         inc_mapping, dec_mapping = mapping.split(" ||| ")
         
         if input_mode == 'xinput':
@@ -2029,9 +2090,30 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
         else:
             label['target_button'] = format_mapping_display(mapping, input_mode)
     else:
-        # Regular mapping
-        if input_mode == 'xinput' and 'XINPUT' in mapping:
-            label['target_button'] = get_friendly_xinput_name(mapping)
+        # Regular mapping - ENHANCED for directional controls
+        if input_mode == 'xinput':
+            # Check if this is a directional control that should show alternatives
+            xinput_alternatives = get_xinput_directional_alternatives(control_name)
+            
+            if xinput_alternatives:
+                # Use the alternatives mapping instead of the single mapping
+                label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                label['xinput_alternatives'] = xinput_alternatives  # Store for reference
+            elif 'XINPUT' in mapping:
+                label['target_button'] = get_friendly_xinput_name(mapping)
+            else:
+                # Try to convert to XInput
+                converted = convert_mapping(mapping, 'xinput')
+                if converted.startswith('XINPUT'):
+                    # Check if the converted mapping is directional
+                    xinput_alternatives = get_xinput_directional_alternatives(control_name)
+                    if xinput_alternatives:
+                        label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                        label['xinput_alternatives'] = xinput_alternatives
+                    else:
+                        label['target_button'] = get_friendly_xinput_name(converted)
+                else:
+                    label['target_button'] = format_mapping_display(mapping, input_mode)
         elif input_mode == 'dinput' and 'DINPUT' in mapping:
             label['target_button'] = get_friendly_dinput_name(mapping)
         elif input_mode == 'keycode':
@@ -2041,14 +2123,19 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
             label['target_button'] = format_mapping_display(mapping, input_mode)
 
 def _set_display_name_for_label(label: Dict, input_mode: str):
-    """Set display name efficiently"""
+    """Set display name efficiently with enhanced directional control support"""
     
     if 'target_button' in label:
         if input_mode == 'keycode':
             label['display_name'] = label['target_button']
         else:
             target = label['target_button']
-            if not target.startswith('P1 '):
+            
+            # For directional controls with alternatives, format nicely
+            if '|' in target and input_mode == 'xinput':
+                # Already formatted with alternatives, use as-is
+                label['display_name'] = target
+            elif not target.startswith('P1 '):
                 label['display_name'] = f'P1 {target}'
             else:
                 label['display_name'] = target
@@ -2057,6 +2144,13 @@ def _set_display_name_for_label(label: Dict, input_mode: str):
         control_name = label['name']
         if input_mode == 'keycode':
             label['display_name'] = "No Key Assigned"
+        elif input_mode == 'xinput':
+            # Check for directional alternatives
+            xinput_alternatives = get_xinput_directional_alternatives(control_name)
+            if xinput_alternatives:
+                label['display_name'] = get_friendly_xinput_alternatives(xinput_alternatives)
+            else:
+                label['display_name'] = f"P1 {control_name.split('_')[-1]}"
         else:
             label['display_name'] = f"P1 {control_name.split('_')[-1]}"
 
