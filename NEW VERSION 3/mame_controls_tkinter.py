@@ -500,7 +500,7 @@ class MAMEControlConfig(ctk.CTk):
             self.after(100, self._check_loading_progress)
 
     def _finish_loading(self):
-        """Finish loading and show the main application"""
+        """Finish loading and show the main application - FIXED startup sequence"""
         
         # Update message for the final step
         self.update_splash_message("Starting application...")
@@ -510,11 +510,86 @@ class MAMEControlConfig(ctk.CTk):
         if hasattr(self, 'after_init_setup'):
             self.after_init_setup()
         
+        # CRITICAL: Schedule the first game selection AFTER the UI is fully shown
+        # This ensures the game list is populated and visible before trying to select
+        self.after(1000, self._delayed_first_game_selection)  # Longer delay
+        
         # Schedule showing the main window
         self.after(500, self.show_application)
 
+    def _delayed_first_game_selection(self):
+        """Select first game after UI is fully loaded - FIXED"""
+        try:
+            print("DEBUG: Starting delayed first game selection")
+            
+            # Ensure we have available ROMs
+            if not hasattr(self, 'available_roms') or not self.available_roms:
+                print("DEBUG: No available ROMs found")
+                return
+                
+            # Ensure game list is populated
+            if not hasattr(self, 'game_list_data') or not self.game_list_data:
+                print("DEBUG: Game list not populated, updating...")
+                self.update_game_list_by_category(auto_select_first=False)
+                
+            # Wait a bit more for the update to complete
+            self.after(200, self._actually_select_first_game)
+            
+        except Exception as e:
+            print(f"DEBUG: Error in delayed first game selection: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _actually_select_first_game(self):
+        """Actually select the first game - FIXED"""
+        try:
+            print("DEBUG: Actually selecting first game")
+            
+            # Check if we have data
+            if not hasattr(self, 'game_list_data') or not self.game_list_data:
+                print("DEBUG: Still no game list data")
+                return
+                
+            # Check if listbox exists and has items
+            if not hasattr(self, 'game_listbox') or self.game_listbox.size() == 0:
+                print("DEBUG: Listbox not ready")
+                return
+                
+            # Get first ROM
+            first_rom, _ = self.game_list_data[0]
+            print(f"DEBUG: Selecting first ROM: {first_rom}")
+            
+            # Clear any existing selection
+            self.game_listbox.selection_clear(0, tk.END)
+            
+            # Select first item
+            self.game_listbox.selection_set(0)
+            self.game_listbox.activate(0)
+            self.game_listbox.see(0)
+            
+            # Set current game
+            self.current_game = first_rom
+            self.selected_line = 1
+            
+            # Mark as selected to prevent future auto-selection
+            self._first_rom_selected = True
+            
+            # Update toolbar
+            if hasattr(self, 'update_toolbar_status'):
+                self.update_toolbar_status()
+            
+            # Display the game info
+            self.display_game_info(first_rom)
+            
+            print(f"DEBUG: Successfully selected first ROM: {first_rom}")
+            
+        except Exception as e:
+            print(f"DEBUG: Error in actually selecting first game: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def show_application(self):
-        """Show the application window on the same monitor as the splash"""
+        """Show the application window - FIXED to prevent duplicate selections"""
         try:
             
             # Close splash window
@@ -528,13 +603,12 @@ class MAMEControlConfig(ctk.CTk):
             # Force full UI update
             self.update_idletasks()
             
-            # Get the monitor to use - use the one we determined at launch time
+            # Get the monitor to use
             if hasattr(self, 'launch_monitor'):
                 monitor = self.launch_monitor
             else:
-                # Fallback to primary monitor if launch_monitor wasn't set
                 monitors = get_monitors()
-                monitor = monitors[0]  # Default to first
+                monitor = monitors[0]
                 for m in monitors:
                     if getattr(m, 'is_primary', False):
                         monitor = m
@@ -558,7 +632,13 @@ class MAMEControlConfig(ctk.CTk):
             # Force another update to ensure complete rendering
             self.update_idletasks()
             
-                
+            # IMPORTANT: Reset the first game selection flag here
+            # This ensures that the delayed selection can work properly
+            if hasattr(self, '_first_rom_selected'):
+                del self._first_rom_selected
+            
+            print("DEBUG: Main application window shown")
+                    
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2705,8 +2785,14 @@ class MAMEControlConfig(ctk.CTk):
 
     
     def on_game_select_from_listbox(self, event):
-        """Handle game selection from listbox with improved stability and NO duplicate calls"""
+        """Handle game selection from listbox with FIXED duplicate call prevention"""
         try:
+            # Add debouncing to prevent rapid-fire calls
+            current_time = time.time()
+            if hasattr(self, '_last_selection_time') and (current_time - self._last_selection_time) < 0.1:
+                return  # Skip if called too recently
+            self._last_selection_time = current_time
+            
             # Check if selection is active
             if not self.game_listbox.winfo_exists():
                 return
@@ -2736,23 +2822,14 @@ class MAMEControlConfig(ctk.CTk):
                 # Store selected line (for compatibility)
                 self.selected_line = index + 1
                 
-                # CRITICAL FIX: Check processed cache first to avoid duplicate work
-                cache_key = f"{rom_name}_{self.input_mode}"
-                
-                if hasattr(self, 'processed_cache') and cache_key in self.processed_cache:
-                    # Use cached processed data - no duplicate calls!
-                    print(f"Using processed cache for {rom_name}")
-                    processed_data = self.processed_cache[cache_key]
-                    self.after(10, lambda: self.display_game_info(rom_name, processed_data))
-                else:
-                    # Load and process data once, then cache it
-                    self.after(10, lambda: self.display_game_info(rom_name))
+                # Process display with slight delay to prevent rapid calls
+                self.after(50, lambda: self.display_game_info(rom_name))
                 
                 # Explicitly maintain selection (prevents flickering)
-                self.after(20, lambda idx=index: self.game_listbox.selection_set(idx))
+                self.after(70, lambda idx=index: self.game_listbox.selection_set(idx))
                 
                 # Ensure listbox still has focus
-                self.after(30, lambda: self.game_listbox.focus_set())
+                self.after(90, lambda: self.game_listbox.focus_set())
             
         except Exception as e:
             print(f"Error selecting game from listbox: {e}")
@@ -2890,6 +2967,9 @@ class MAMEControlConfig(ctk.CTk):
         ).pack(pady=(10, 0))
 
     def update_game_list_by_category(self, auto_select_first=True):
+        """Update game list by category with FIXED first ROM selection logic"""
+        
+        # Store previously selected ROM if we're not auto-selecting
         previously_selected_rom = None
         if not auto_select_first and hasattr(self, 'current_game'):
             previously_selected_rom = self.current_game
@@ -3117,9 +3197,9 @@ class MAMEControlConfig(ctk.CTk):
         for item in list_display_items:
             self.game_listbox.insert(tk.END, item)
         
-        # Handle ROM selection
-        if auto_select_first and display_roms:
-            # Auto-select first ROM when switching categories
+        # Handle ROM selection - FIXED logic
+        if auto_select_first and display_roms and not hasattr(self, '_first_rom_selected'):
+            # Auto-select first ROM when switching categories (only if not already selected)
             first_rom, _ = self.game_list_data[0]
             self.current_game = first_rom
             self.selected_line = 1
@@ -3128,6 +3208,9 @@ class MAMEControlConfig(ctk.CTk):
             self.game_listbox.selection_clear(0, tk.END)
             self.game_listbox.selection_set(0)
             self.game_listbox.see(0)
+            
+            # Mark as selected
+            self._first_rom_selected = True
             
             # Display ROM info after a brief delay to ensure UI is ready
             self.after(50, lambda: self.display_game_info(first_rom))
@@ -6415,7 +6498,13 @@ class MAMEControlConfig(ctk.CTk):
             return f"{player_num}_{control_type}"
 
     def select_first_rom(self):
-        """Select the first available ROM in the listbox"""
+        """Select the first available ROM in the listbox - FIXED to prevent duplicate calls"""
+        
+        # Add guard to prevent multiple calls during startup
+        if hasattr(self, '_first_rom_selected') and self._first_rom_selected:
+            print("First ROM already selected, skipping duplicate call")
+            return
+        
         # Check if we have any ROMs
         if not self.available_roms:
             print("No available ROMs, exiting select_first_rom")
@@ -6425,7 +6514,7 @@ class MAMEControlConfig(ctk.CTk):
         if not hasattr(self, 'game_list_data') or not self.game_list_data:
             # If we don't have any items in the data list yet, trigger an update
             if hasattr(self, 'update_game_list_by_category'):
-                self.update_game_list_by_category()
+                self.update_game_list_by_category(auto_select_first=False)  # Don't auto-select during update
         
         # Check if we have any items in the listbox
         if not hasattr(self, 'game_listbox') or self.game_listbox.size() == 0:
@@ -6446,12 +6535,14 @@ class MAMEControlConfig(ctk.CTk):
             # Update selected_line for compatibility with other methods
             self.selected_line = 1
             
-            # Display the ROM info
+            # Mark as selected to prevent duplicate calls
+            self._first_rom_selected = True
+            
+            # Display the ROM info with a slight delay to ensure UI is ready
             self.after(200, lambda: self.display_game_info(first_rom))
+            print(f"Selected first ROM: {first_rom}")
         else:
             print("No game data available for selection")
-            
-        print(f"Selected first ROM: {getattr(self, 'current_game', 'None')}")
 
             
     def highlight_selected_game(self, line_index):
@@ -6907,27 +6998,30 @@ class MAMEControlConfig(ctk.CTk):
                 row_frame.pack(fill=tk.X, pady=1, expand=True)
                 row_frame.pack_propagate(False)
                 
-                # ENHANCED: Special handling for directional controls with alternatives
+                # FIXED: Enhanced handling for directional controls with proper color coding
                 display_name = control['display_name']
                 
-                # Check if this control has XInput alternatives
+                # FIX: Only show enhanced color for XInput alternatives, not default mappings
                 if (hasattr(self, 'input_mode') and self.input_mode == 'xinput' and 
-                    '|' in display_name and any(direction in control['control_name'] for direction in 
-                    ['JOYSTICK_UP', 'JOYSTICK_DOWN', 'JOYSTICK_LEFT', 'JOYSTICK_RIGHT'])):
+                    '|' in display_name and 
+                    any(direction in control['control_name'] for direction in 
+                    ['JOYSTICK_UP', 'JOYSTICK_DOWN', 'JOYSTICK_LEFT', 'JOYSTICK_RIGHT']) and
+                    control.get('is_custom', False)):  # FIX: Only for custom mappings, not defaults
                     
                     # Enhanced tooltip for directional controls
                     tooltip_text = f"XInput Options: {display_name}"
                     
-                    # Color coding for directional controls
+                    # Color coding ONLY for custom enhanced controls
                     display_color = self.theme_colors["success"]  # Green for enhanced controls
                 else:
                     tooltip_text = None
-                    display_color = control.get('source_color', self.theme_colors["primary"])
+                    # FIX: Use source color, not enhanced color for default mappings
+                    display_color = control.get('source_color', self.theme_colors["text"])
                 
-                # Create labels with enhanced data
+                # Create labels with corrected data
                 labels_data = [
                     (control['control_name'], ("Consolas", 12), "#888888"),
-                    (display_name, ("Arial", 13), display_color),  # Use enhanced color
+                    (display_name, ("Arial", 13), display_color),  # Use corrected color
                     (control['action'], ("Arial", 13, "bold"), self.theme_colors["text"]),
                     (control['display_source'], ("Arial", 12), control['source_color'])
                 ]
@@ -6978,18 +7072,29 @@ class MAMEControlConfig(ctk.CTk):
             return start_row + 1
     
     def toggle_input_mode(self):
-        """Handle toggling between input modes with cache clearing"""
+        """Handle toggling between input modes with FORCED cache clearing"""
         if hasattr(self, 'input_mode_var'):
             old_mode = self.input_mode
             self.input_mode = self.input_mode_var.get()
             print(f"Input mode changed from {old_mode} to {self.input_mode}")
             
-            # Clear BOTH caches when mode changes
+            # CRITICAL: Clear ALL caches when mode changes
             if hasattr(self, 'rom_data_cache'):
                 self.rom_data_cache.clear()
+                print("Cleared rom_data_cache")
             if hasattr(self, 'processed_cache'):
                 self.processed_cache.clear()
-                print("Cleared processed cache due to input mode change")
+                print("Cleared processed_cache")
+            
+            # ALSO clear any disk cache files for current game to force regeneration
+            if hasattr(self, 'current_game') and self.current_game:
+                cache_file = os.path.join(self.cache_dir, f"{self.current_game}_cache.json")
+                if os.path.exists(cache_file):
+                    try:
+                        os.remove(cache_file)
+                        print(f"Removed disk cache file for {self.current_game}")
+                    except Exception as e:
+                        print(f"Error removing cache file: {e}")
             
             # Save the setting
             self.save_settings()
