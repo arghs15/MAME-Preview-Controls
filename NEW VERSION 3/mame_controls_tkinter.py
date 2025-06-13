@@ -7173,10 +7173,13 @@ class MAMEControlConfig(ctk.CTk):
                 
                 # Create labels with corrected data and alignment
                 labels_data = [
-                    (control['control_name'], ("Consolas", 12), self.get_mame_control_color(control['control_name']), "w"),  # Left-aligned
+                    # FIXED: Use source_color for MAME control when it's from ROM CFG, otherwise use MAME control color
+                    (control['control_name'], ("Consolas", 12), 
+                    control['source_color'] if control.get('is_custom', False) else self.get_mame_control_color(control['control_name']), 
+                    "w"),  # Left-aligned
                     (display_name, ("Arial", 13), display_color, "w"),               # Left-aligned
                     (control['action'], ("Arial", 13, "bold"), self.theme_colors["text"], "w"),  # Left-aligned
-                    (control['display_source'], ("Arial", 12), control['source_color'], "e")     # NEW: Right-aligned
+                    (control['display_source'], ("Arial", 12), control['source_color'], "e")     # Right-aligned
                 ]
                 
                 # Create labels with enhanced tooltip support and proper alignment
