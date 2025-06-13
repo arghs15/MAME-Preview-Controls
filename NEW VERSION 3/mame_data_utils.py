@@ -1740,17 +1740,26 @@ def format_keycode_display(mapping: str) -> str:
     return f"Key {friendly_name}"
 
 
+# Update the get_xinput_directional_alternatives function in mame_data_utils.py
+
 def get_xinput_directional_alternatives(control_name: str) -> str:
     """
     Get XInput alternatives for directional controls showing both D-pad and analog options
+    ENHANCED: Now includes P1_JOYSTICKLEFT_* controls and specialized controls
     Returns a formatted string with multiple XInput options
     """
     directional_mappings = {
-        # P1 Joystick directions - show both D-pad and Left Stick options
+        # Standard P1 Joystick directions - show both D-pad and Left Stick options
         'P1_JOYSTICK_UP': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG',
         'P1_JOYSTICK_DOWN': 'XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS', 
         'P1_JOYSTICK_LEFT': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG',
         'P1_JOYSTICK_RIGHT': 'XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        
+        # P1 Left Stick directions (MISSING - this is what Black Widow uses!)
+        'P1_JOYSTICKLEFT_UP': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG',
+        'P1_JOYSTICKLEFT_DOWN': 'XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        'P1_JOYSTICKLEFT_LEFT': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG',
+        'P1_JOYSTICKLEFT_RIGHT': 'XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
         
         # P1 Right Stick directions
         'P1_JOYSTICKRIGHT_UP': 'XINPUT_1_RIGHTY_NEG',
@@ -1764,11 +1773,145 @@ def get_xinput_directional_alternatives(control_name: str) -> str:
         'P1_DPAD_LEFT': 'XINPUT_1_DPAD_LEFT',
         'P1_DPAD_RIGHT': 'XINPUT_1_DPAD_RIGHT',
         
+        # Specialized directional controls
+        'P1_AD_STICK_X': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_AD_STICK_Y': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        'P1_AD_STICK_Z': 'XINPUT_1_TRIGGER_L | XINPUT_1_TRIGGER_R',
+        
+        # Paddle controls (typically left/right movement)
+        'P1_PADDLE': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_PADDLE_V': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        
+        # Dial controls (rotary, typically left/right)
+        'P1_DIAL': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_DIAL_V': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        
+        # Trackball (X and Y axes)
+        'P1_TRACKBALL_X': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_TRACKBALL_Y': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        
+        # Mouse controls
+        'P1_MOUSE_X': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_MOUSE_Y': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        
+        # Light Gun controls
+        'P1_LIGHTGUN_X': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        'P1_LIGHTGUN_Y': 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG | XINPUT_1_DPAD_DOWN | XINPUT_1_LEFTY_POS',
+        
+        # Positional controls
+        'P1_POSITIONAL': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        
+        # Steering wheel (left/right)
+        'P1_STEER': 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS',
+        
         # P2 Joystick directions
         'P2_JOYSTICK_UP': 'XINPUT_2_DPAD_UP | XINPUT_2_LEFTY_NEG',
         'P2_JOYSTICK_DOWN': 'XINPUT_2_DPAD_DOWN | XINPUT_2_LEFTY_POS',
         'P2_JOYSTICK_LEFT': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG',
         'P2_JOYSTICK_RIGHT': 'XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        
+        # P2 Left Stick directions
+        'P2_JOYSTICKLEFT_UP': 'XINPUT_2_DPAD_UP | XINPUT_2_LEFTY_NEG',
+        'P2_JOYSTICKLEFT_DOWN': 'XINPUT_2_DPAD_DOWN | XINPUT_2_LEFTY_POS',
+        'P2_JOYSTICKLEFT_LEFT': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG',
+        'P2_JOYSTICKLEFT_RIGHT': 'XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        
+        # P2 Right Stick directions  
+        'P2_JOYSTICKRIGHT_UP': 'XINPUT_2_RIGHTY_NEG',
+        'P2_JOYSTICKRIGHT_DOWN': 'XINPUT_2_RIGHTY_POS',
+        'P2_JOYSTICKRIGHT_LEFT': 'XINPUT_2_RIGHTX_NEG',
+        'P2_JOYSTICKRIGHT_RIGHT': 'XINPUT_2_RIGHTX_POS',
+        
+        # P2 Specialized controls
+        'P2_AD_STICK_X': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG | XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        'P2_AD_STICK_Y': 'XINPUT_2_DPAD_UP | XINPUT_2_LEFTY_NEG | XINPUT_2_DPAD_DOWN | XINPUT_2_LEFTY_POS',
+        'P2_PADDLE': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG | XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        'P2_DIAL': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG | XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        'P2_TRACKBALL_X': 'XINPUT_2_DPAD_LEFT | XINPUT_2_LEFTX_NEG | XINPUT_2_DPAD_RIGHT | XINPUT_2_LEFTX_POS',
+        'P2_TRACKBALL_Y': 'XINPUT_2_DPAD_UP | XINPUT_2_LEFTY_NEG | XINPUT_2_DPAD_DOWN | XINPUT_2_LEFTY_POS',
+    }
+    
+    return directional_mappings.get(control_name, '')
+
+# Also update the DInput version
+def get_dinput_directional_alternatives(control_name: str) -> str:
+    """
+    Get DInput alternatives for directional controls with CLEAR, USER-FRIENDLY names
+    ENHANCED: Now includes P1_JOYSTICKLEFT_* controls and specialized controls
+    """
+    directional_mappings = {
+        # P1 Joystick directions - show both D-Pad and Stick options with clear names
+        'P1_JOYSTICK_UP': 'D-Pad Up | Left Stick Up',
+        'P1_JOYSTICK_DOWN': 'D-Pad Down | Left Stick Down', 
+        'P1_JOYSTICK_LEFT': 'D-Pad Left | Left Stick Left',
+        'P1_JOYSTICK_RIGHT': 'D-Pad Right | Left Stick Right',
+        
+        # P1 Left Stick directions (MISSING - this is what Black Widow uses!)
+        'P1_JOYSTICKLEFT_UP': 'D-Pad Up | Left Stick Up',
+        'P1_JOYSTICKLEFT_DOWN': 'D-Pad Down | Left Stick Down',
+        'P1_JOYSTICKLEFT_LEFT': 'D-Pad Left | Left Stick Left',
+        'P1_JOYSTICKLEFT_RIGHT': 'D-Pad Right | Left Stick Right',
+        
+        # P1 Right Stick directions (if they exist)
+        'P1_JOYSTICKRIGHT_UP': 'Right Stick Up',
+        'P1_JOYSTICKRIGHT_DOWN': 'Right Stick Down',
+        'P1_JOYSTICKRIGHT_LEFT': 'Right Stick Left', 
+        'P1_JOYSTICKRIGHT_RIGHT': 'Right Stick Right',
+        
+        # Specialized directional controls with friendly names
+        'P1_AD_STICK_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_AD_STICK_Y': 'D-Pad Up/Down | Left Stick Up/Down',
+        'P1_AD_STICK_Z': 'Left Trigger | Right Trigger',
+        
+        # Paddle controls
+        'P1_PADDLE': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_PADDLE_V': 'D-Pad Up/Down | Left Stick Up/Down',
+        
+        # Dial controls
+        'P1_DIAL': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_DIAL_V': 'D-Pad Up/Down | Left Stick Up/Down',
+        
+        # Trackball
+        'P1_TRACKBALL_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_TRACKBALL_Y': 'D-Pad Up/Down | Left Stick Up/Down',
+        
+        # Mouse controls
+        'P1_MOUSE_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_MOUSE_Y': 'D-Pad Up/Down | Left Stick Up/Down',
+        
+        # Light Gun
+        'P1_LIGHTGUN_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_LIGHTGUN_Y': 'D-Pad Up/Down | Left Stick Up/Down',
+        
+        # Positional and Steering
+        'P1_POSITIONAL': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P1_STEER': 'D-Pad Left/Right | Left Stick Left/Right',
+        
+        # P2 Joystick directions
+        'P2_JOYSTICK_UP': 'D-Pad Up | Left Stick Up',
+        'P2_JOYSTICK_DOWN': 'D-Pad Down | Left Stick Down',
+        'P2_JOYSTICK_LEFT': 'D-Pad Left | Left Stick Left',
+        'P2_JOYSTICK_RIGHT': 'D-Pad Right | Left Stick Right',
+        
+        # P2 Left Stick directions
+        'P2_JOYSTICKLEFT_UP': 'D-Pad Up | Left Stick Up',
+        'P2_JOYSTICKLEFT_DOWN': 'D-Pad Down | Left Stick Down',
+        'P2_JOYSTICKLEFT_LEFT': 'D-Pad Left | Left Stick Left',
+        'P2_JOYSTICKLEFT_RIGHT': 'D-Pad Right | Left Stick Right',
+        
+        # P2 Right Stick directions
+        'P2_JOYSTICKRIGHT_UP': 'Right Stick Up',
+        'P2_JOYSTICKRIGHT_DOWN': 'Right Stick Down',
+        'P2_JOYSTICKRIGHT_LEFT': 'Right Stick Left',
+        'P2_JOYSTICKRIGHT_RIGHT': 'Right Stick Right',
+        
+        # P2 Specialized controls
+        'P2_AD_STICK_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P2_AD_STICK_Y': 'D-Pad Up/Down | Left Stick Up/Down',
+        'P2_PADDLE': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P2_DIAL': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P2_TRACKBALL_X': 'D-Pad Left/Right | Left Stick Left/Right',
+        'P2_TRACKBALL_Y': 'D-Pad Up/Down | Left Stick Up/Down',
     }
     
     return directional_mappings.get(control_name, '')
@@ -1776,24 +1919,43 @@ def get_xinput_directional_alternatives(control_name: str) -> str:
 def get_friendly_xinput_alternatives(xinput_mapping: str) -> str:
     """
     Convert XInput mapping with alternatives to friendly display names
-    Example: 'XINPUT_1_DPAD_UP | XINPUT_1_LEFTY_NEG' -> 'D-Pad Up | Left Stick Up'
+    ENHANCED: Better handling of multiple alternatives for specialized controls
+    Example: 'XINPUT_1_DPAD_LEFT | XINPUT_1_LEFTX_NEG | XINPUT_1_DPAD_RIGHT | XINPUT_1_LEFTX_POS' 
+             -> 'D-Pad Left/Right | Left Stick Left/Right'
     """
     if '|' not in xinput_mapping:
         # Single mapping, use existing function
         return get_friendly_xinput_name(xinput_mapping)
     
     # Multiple mappings separated by |
-    parts = xinput_mapping.split('|')
-    friendly_parts = []
+    parts = [part.strip() for part in xinput_mapping.split('|')]
     
+    # For specialized controls with 4 parts (left/right or up/down pairs)
+    if len(parts) == 4:
+        # Group related parts together
+        if 'DPAD_LEFT' in parts[0] and 'LEFTX_NEG' in parts[1] and 'DPAD_RIGHT' in parts[2] and 'LEFTX_POS' in parts[3]:
+            return 'D-Pad Left/Right | Left Stick Left/Right'
+        elif 'DPAD_UP' in parts[0] and 'LEFTY_NEG' in parts[1] and 'DPAD_DOWN' in parts[2] and 'LEFTY_POS' in parts[3]:
+            return 'D-Pad Up/Down | Left Stick Up/Down'
+        elif 'TRIGGER_L' in parts[0] and 'TRIGGER_R' in parts[1]:
+            return 'Left Trigger | Right Trigger'
+    
+    # For regular 2-part alternatives
+    elif len(parts) == 2:
+        friendly_parts = []
+        for part in parts:
+            friendly_name = get_friendly_xinput_name(part)
+            friendly_parts.append(friendly_name)
+        return ' | '.join(friendly_parts)
+    
+    # Fallback: convert each part individually
+    friendly_parts = []
     for part in parts:
-        part = part.strip()
         friendly_name = get_friendly_xinput_name(part)
         friendly_parts.append(friendly_name)
     
     return ' | '.join(friendly_parts)
 
-# Update the existing get_friendly_xinput_name function to handle the new axis mappings
 def get_friendly_xinput_name(mapping: str) -> str:
     """Convert an XINPUT mapping code into a human-friendly button/stick name - ENHANCED"""
     if not mapping or not mapping.startswith('XINPUT_'):
@@ -2081,33 +2243,6 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
     
     return game_data
 
-def get_dinput_directional_alternatives(control_name: str) -> str:
-    """
-    Get DInput alternatives for directional controls with CLEAR, USER-FRIENDLY names
-    POV is confusing - use D-Pad instead
-    """
-    directional_mappings = {
-        # P1 Joystick directions - show both D-Pad and Stick options with clear names
-        'P1_JOYSTICK_UP': 'D-Pad Up | Left Stick Up',
-        'P1_JOYSTICK_DOWN': 'D-Pad Down | Left Stick Down', 
-        'P1_JOYSTICK_LEFT': 'D-Pad Left | Left Stick Left',
-        'P1_JOYSTICK_RIGHT': 'D-Pad Right | Left Stick Right',
-        
-        # P1 Right Stick directions (if they exist)
-        'P1_JOYSTICKRIGHT_UP': 'Right Stick Up',
-        'P1_JOYSTICKRIGHT_DOWN': 'Right Stick Down',
-        'P1_JOYSTICKRIGHT_LEFT': 'Right Stick Left', 
-        'P1_JOYSTICKRIGHT_RIGHT': 'Right Stick Right',
-        
-        # P2 Joystick directions
-        'P2_JOYSTICK_UP': 'D-Pad Up | Left Stick Up',
-        'P2_JOYSTICK_DOWN': 'D-Pad Down | Left Stick Down',
-        'P2_JOYSTICK_LEFT': 'D-Pad Left | Left Stick Left',
-        'P2_JOYSTICK_RIGHT': 'D-Pad Right | Left Stick Right',
-    }
-    
-    return directional_mappings.get(control_name, '')
-
 def get_friendly_dinput_alternatives(dinput_mapping: str) -> str:
     """
     Convert DInput mapping with alternatives to friendly display names
@@ -2121,30 +2256,52 @@ def get_friendly_dinput_alternatives(dinput_mapping: str) -> str:
     return dinput_mapping
 
 def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str):
-    """Process target_button with SIMPLIFIED and CLEAR DInput support"""
+    """Process target_button with FIXED support for specialized directional controls"""
     
     control_name = label.get('name', '')
     
     if " ||| " in mapping:
-        # Handle increment/decrement pairs 
+        # Handle increment/decrement pairs - FIXED for specialized controls
         inc_mapping, dec_mapping = mapping.split(" ||| ")
         
         if input_mode == 'xinput':
-            inc_friendly = get_friendly_xinput_name(inc_mapping) if inc_mapping != "NONE" else ""
-            dec_friendly = get_friendly_xinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+            # IMPORTANT: Check if this is a specialized directional control first
+            xinput_alternatives = get_xinput_directional_alternatives(control_name)
             
-            if inc_friendly and dec_friendly:
-                label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+            if xinput_alternatives:
+                # Use the specialized directional alternatives instead of raw mapping
+                label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                label['xinput_alternatives'] = xinput_alternatives
+                print(f"Applied specialized XInput alternatives for {control_name}: {label['target_button']}")
             else:
-                label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
+                # Fall back to processing the raw increment/decrement mappings
+                inc_friendly = get_friendly_xinput_name(inc_mapping) if inc_mapping != "NONE" else ""
+                dec_friendly = get_friendly_xinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+                
+                if inc_friendly and dec_friendly:
+                    label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+                else:
+                    label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
+                    
         elif input_mode == 'dinput':
-            inc_friendly = get_friendly_dinput_name(inc_mapping) if inc_mapping != "NONE" else ""
-            dec_friendly = get_friendly_dinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+            # IMPORTANT: Check for DInput directional alternatives first
+            dinput_alternatives = get_dinput_directional_alternatives(control_name)
             
-            if inc_friendly and dec_friendly:
-                label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+            if dinput_alternatives:
+                # Use the specialized directional alternatives
+                label['target_button'] = dinput_alternatives
+                label['dinput_alternatives'] = dinput_alternatives
+                print(f"Applied specialized DInput alternatives for {control_name}: {label['target_button']}")
             else:
-                label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
+                # Fall back to processing raw mappings
+                inc_friendly = get_friendly_dinput_name(inc_mapping) if inc_mapping != "NONE" else ""
+                dec_friendly = get_friendly_dinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+                
+                if inc_friendly and dec_friendly:
+                    label['target_button'] = f"{inc_friendly} | {dec_friendly}"
+                else:
+                    label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
+                    
         elif input_mode == 'keycode':
             inc_keycode = extract_keycode_from_mapping(inc_mapping)
             dec_keycode = extract_keycode_from_mapping(dec_mapping)
@@ -2158,7 +2315,7 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
         else:
             label['target_button'] = format_mapping_display(mapping, input_mode)
     else:
-        # Regular mapping
+        # Regular mapping (no increment/decrement pairs)
         if input_mode == 'xinput':
             # XInput logic (existing, working)
             xinput_alternatives = get_xinput_directional_alternatives(control_name)
@@ -2215,7 +2372,7 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
             label['target_button'] = format_mapping_display(mapping, input_mode)
 
 def _set_display_name_for_label(label: Dict, input_mode: str):
-    """Set display name with FIXED DInput alternatives support"""
+    """Set display name with FIXED support for specialized controls"""
     
     if 'target_button' in label:
         if input_mode == 'keycode':
