@@ -392,10 +392,8 @@ class MAMEControlConfig(ctk.CTk):
             import traceback
             traceback.print_exc()
     
-    # Replace your _load_secondary_data method with this corrected version:
-
     def _load_secondary_data(self):
-        """Load secondary data with proper database checking - NO FORCED REBUILD"""
+        """Load secondary data with proper database checking and ROM source initialization"""
         try:
             self.update_splash_message("Loading default controls...")
             
@@ -463,6 +461,26 @@ class MAMEControlConfig(ctk.CTk):
                         print("❌ Database build failed")
                 else:
                     print("❌ ERROR: No gamedata available for database building!")
+            
+            # CRITICAL FIX: Initialize ROM source based on saved settings
+            self.update_splash_message("Loading ROM sources...")
+            
+            # Load the appropriate ROM set based on startup mode
+            if hasattr(self, 'rom_source_mode') and self.rom_source_mode == "database":
+                print("Startup mode: database - loading all database ROMs")
+                self.load_database_roms()
+                self.available_roms = self.database_roms.copy()
+                # Ensure toggle reflects the correct state
+                if hasattr(self, 'rom_source_toggle'):
+                    self.rom_source_toggle.select()
+            else:
+                print("Startup mode: physical - scanning physical ROMs")
+                self.available_roms = scan_roms_directory(self.mame_dir)
+                # Ensure toggle reflects the correct state
+                if hasattr(self, 'rom_source_toggle'):
+                    self.rom_source_toggle.deselect()
+            
+            print(f"Loaded {len(self.available_roms)} ROMs in {self.rom_source_mode} mode")
             
             # Move to finish loading
             self.after(100, self._finish_loading)
@@ -2521,11 +2539,10 @@ class MAMEControlConfig(ctk.CTk):
             button_color=self.theme_colors["primary"],
             button_hover_color=self.theme_colors["secondary"]
         )
-        # Set initial state based on settings
-        if hasattr(self, 'rom_source_mode') and self.rom_source_mode == "database":
-            self.rom_source_toggle.select()
-        else:
-            self.rom_source_toggle.deselect()
+        
+        # CRITICAL FIX: Set initial state based on loaded settings AFTER switch creation
+        # This ensures the toggle shows the correct state on startup
+        self.after(50, self._set_initial_toggle_state)
         
         self.rom_source_toggle.pack(side="right", padx=10)
         
@@ -2547,6 +2564,23 @@ class MAMEControlConfig(ctk.CTk):
             
             self.hide_buttons_toggle.pack(side="right", padx=10)
     
+    def _set_initial_toggle_state(self):
+        """Set the initial toggle state based on loaded settings"""
+        try:
+            if hasattr(self, 'rom_source_mode'):
+                if self.rom_source_mode == "database":
+                    self.rom_source_toggle.select()
+                    print("Set toggle to SELECTED (database mode)")
+                else:
+                    self.rom_source_toggle.deselect()
+                    print("Set toggle to DESELECTED (physical mode)")
+            else:
+                # Default to physical mode
+                self.rom_source_toggle.deselect()
+                print("No rom_source_mode found, defaulting to physical mode")
+        except Exception as e:
+            print(f"Error setting initial toggle state: {e}")
+
     def toggle_rom_source(self):
         """Toggle between physical ROMs and database ROMs - FIXED for startup"""
         try:
@@ -2579,34 +2613,24 @@ class MAMEControlConfig(ctk.CTk):
                 self.game_listbox.unbind("<Button-3>")
                 self.game_listbox.unbind("<Double-Button-1>")
             
-            # FIXED: Ensure gamedata is loaded before loading database ROMs
-            if self.rom_source_mode == "database":
-                # Make sure gamedata.json is loaded
-                if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
-                    print("Loading gamedata.json for database mode...")
-                    from mame_data_utils import load_gamedata_json
-                    self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
-                    print(f"Loaded {len(self.gamedata_json)} games from gamedata.json")
-            
-            # Load ROM set for current mode
+            # CRITICAL FIX: Always load ROM set for current mode
             self.load_rom_set_for_current_mode()
             
             # FIXED: Ensure we have ROMs before updating the list
             if not hasattr(self, 'available_roms') or not self.available_roms:
                 print(f"ERROR: No ROMs loaded for {self.rom_source_mode} mode")
-                # Try to reload
-                if self.rom_source_mode == "database":
-                    self.load_database_roms()
-                    self.available_roms = self.database_roms.copy()
-                else:
-                    from mame_data_utils import scan_roms_directory
-                    self.available_roms = scan_roms_directory(self.mame_dir)
-            
-            print(f"Available ROMs after mode change: {len(self.available_roms)}")
-            
-            # Update game list WITHOUT auto-selecting first ROM
-            if hasattr(self, 'game_listbox'):
-                self.update_game_list_by_category(auto_select_first=False)
+                # Show error message
+                if hasattr(self, 'game_title'):
+                    self.game_title.configure(text=f"No ROMs available in {self.rom_source_mode} mode")
+                if hasattr(self, 'control_frame'):
+                    for widget in self.control_frame.winfo_children():
+                        widget.destroy()
+            else:
+                print(f"Available ROMs after mode change: {len(self.available_roms)}")
+                
+                # Update game list WITHOUT auto-selecting first ROM
+                if hasattr(self, 'game_listbox'):
+                    self.update_game_list_by_category(auto_select_first=False)
             
             # Re-bind selection events
             if hasattr(self, 'game_listbox'):
@@ -2638,10 +2662,8 @@ class MAMEControlConfig(ctk.CTk):
             import traceback
             traceback.print_exc()
 
-    # Also add this method to ensure database ROMs are properly loaded:
-
     def load_database_roms(self):
-        """Load all parent ROMs from gamedata.json (exclude clones) - ENHANCED"""
+        """Load all parent ROMs from gamedata.json (exclude clones) - ENHANCED with better error handling"""
         try:
             # Ensure gamedata is loaded first
             if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
@@ -2670,6 +2692,16 @@ class MAMEControlConfig(ctk.CTk):
                 print(f"Sample database ROMs: {sample_roms}")
             else:
                 print("WARNING: No database ROMs were loaded!")
+                # Try to diagnose the issue
+                if self.gamedata_json:
+                    print(f"gamedata.json has {len(self.gamedata_json)} total entries")
+                    # Show sample of what's in gamedata
+                    sample_keys = list(self.gamedata_json.keys())[:5]
+                    print(f"Sample gamedata keys: {sample_keys}")
+                    # Check if they all have 'parent' keys
+                    for key in sample_keys[:3]:
+                        has_parent = 'parent' in self.gamedata_json[key]
+                        print(f"  {key}: has_parent={has_parent}")
                 
         except Exception as e:
             print(f"Error loading database ROMs: {e}")
