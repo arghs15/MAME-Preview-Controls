@@ -189,7 +189,7 @@ class CustomSidebarTab(ctk.CTkFrame):
 class MAMEControlConfig(ctk.CTk):
     def __init__(self, preview_only=False, initially_hidden=False):
         # FEATURE TOGGLES - Set to False to disable features
-        self.ALLOW_CUSTOM_CONTROLS = False  # Set to True to enable custom controls dropdown
+        self.ALLOW_CUSTOM_CONTROLS = True  # Set to True to enable custom controls dropdown
         self.ALLOW_ADD_NEW_GAME = True     # Set to True to enable "Add New Game" tab
         self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
         self.SHOW_HIDE_BUTTONS_TOGGLE = False  # NEW: Set to False to hide the toggle
@@ -2548,7 +2548,7 @@ class MAMEControlConfig(ctk.CTk):
             self.hide_buttons_toggle.pack(side="right", padx=10)
     
     def toggle_rom_source(self):
-        """Toggle between physical ROMs and database ROMs - FIXED VERSION"""
+        """Toggle between physical ROMs and database ROMs - FIXED for startup"""
         try:
             # Cancel any pending display updates
             if hasattr(self, '_display_timer') and self._display_timer:
@@ -2564,6 +2564,8 @@ class MAMEControlConfig(ctk.CTk):
             if old_mode == self.rom_source_mode:
                 return
             
+            print(f"ROM source mode changed from {old_mode} to {self.rom_source_mode}")
+            
             # NEW: Clear current selection to prevent selection events
             self.current_game = None
             
@@ -2577,11 +2579,34 @@ class MAMEControlConfig(ctk.CTk):
                 self.game_listbox.unbind("<Button-3>")
                 self.game_listbox.unbind("<Double-Button-1>")
             
-            # Load ROM set
+            # FIXED: Ensure gamedata is loaded before loading database ROMs
+            if self.rom_source_mode == "database":
+                # Make sure gamedata.json is loaded
+                if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                    print("Loading gamedata.json for database mode...")
+                    from mame_data_utils import load_gamedata_json
+                    self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
+                    print(f"Loaded {len(self.gamedata_json)} games from gamedata.json")
+            
+            # Load ROM set for current mode
             self.load_rom_set_for_current_mode()
             
+            # FIXED: Ensure we have ROMs before updating the list
+            if not hasattr(self, 'available_roms') or not self.available_roms:
+                print(f"ERROR: No ROMs loaded for {self.rom_source_mode} mode")
+                # Try to reload
+                if self.rom_source_mode == "database":
+                    self.load_database_roms()
+                    self.available_roms = self.database_roms.copy()
+                else:
+                    from mame_data_utils import scan_roms_directory
+                    self.available_roms = scan_roms_directory(self.mame_dir)
+            
+            print(f"Available ROMs after mode change: {len(self.available_roms)}")
+            
             # Update game list WITHOUT auto-selecting first ROM
-            self.update_game_list_by_category(auto_select_first=False)
+            if hasattr(self, 'game_listbox'):
+                self.update_game_list_by_category(auto_select_first=False)
             
             # Re-bind selection events
             if hasattr(self, 'game_listbox'):
@@ -2589,15 +2614,19 @@ class MAMEControlConfig(ctk.CTk):
                 self.game_listbox.bind("<Button-3>", self.show_game_context_menu_listbox)
                 self.game_listbox.bind("<Double-Button-1>", self.on_game_double_click)
             
-            # Schedule single display update
+            # Schedule single display update only if we have ROMs
             if hasattr(self, 'available_roms') and self.available_roms:
                 self._display_timer = self.after(150, self._delayed_first_rom_select)
             else:
+                # Clear display if no ROMs
                 self.current_game = None
-                self.game_title.configure(text="No ROMs available")
-                for widget in self.control_frame.winfo_children():
-                    widget.destroy()
+                if hasattr(self, 'game_title'):
+                    self.game_title.configure(text="No ROMs available in this mode")
+                if hasattr(self, 'control_frame'):
+                    for widget in self.control_frame.winfo_children():
+                        widget.destroy()
             
+            # Update stats and save settings
             self.update_stats_label()
             self.save_settings()
             
@@ -2606,6 +2635,47 @@ class MAMEControlConfig(ctk.CTk):
             
         except Exception as e:
             print(f"Error toggling ROM source: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # Also add this method to ensure database ROMs are properly loaded:
+
+    def load_database_roms(self):
+        """Load all parent ROMs from gamedata.json (exclude clones) - ENHANCED"""
+        try:
+            # Ensure gamedata is loaded first
+            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                print("Loading gamedata.json for database ROMs...")
+                from mame_data_utils import load_gamedata_json
+                self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
+            
+            if not self.gamedata_json:
+                print("ERROR: Could not load gamedata.json")
+                self.database_roms = set()
+                return
+            
+            self.database_roms = set()
+            
+            # Add all parent ROMs (those that aren't clones themselves)
+            for rom_name, game_data in self.gamedata_json.items():
+                # Skip if this ROM is a clone (has 'parent' key)
+                if 'parent' not in game_data:
+                    self.database_roms.add(rom_name)
+            
+            print(f"Loaded {len(self.database_roms)} parent ROMs from database")
+            
+            # Sample output for debugging
+            if len(self.database_roms) > 0:
+                sample_roms = list(self.database_roms)[:5]
+                print(f"Sample database ROMs: {sample_roms}")
+            else:
+                print("WARNING: No database ROMs were loaded!")
+                
+        except Exception as e:
+            print(f"Error loading database ROMs: {e}")
+            import traceback
+            traceback.print_exc()
+            self.database_roms = set()
     
     def _delayed_first_rom_select(self):
         """Select first ROM with single display update - NO FLASH VERSION"""
@@ -4593,132 +4663,144 @@ class MAMEControlConfig(ctk.CTk):
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
 
-        # Get existing controls from game data to ensure we show ALL controls
+        # Get existing controls from game data - ONLY PLAYER 1 CONTROLS
         existing_controls = []
-        existing_control_names = set()  # Track which control names exist in the game data
+        existing_control_names = set()
                 
         if game_data and 'players' in game_data:
             for player in game_data.get('players', []):
-                for label in player.get('labels', []):
-                    # Add all controls to our list including specialized ones like P1_DIAL
-                    existing_controls.append((label['name'], label['value']))
-                    existing_control_names.add(label['name'])
+                # ONLY process Player 1 controls
+                if player.get('number') == 1:
+                    for label in player.get('labels', []):
+                        # Only add P1 controls
+                        if label['name'].startswith('P1_'):
+                            existing_controls.append((label['name'], label['value']))
+                            existing_control_names.add(label['name'])
 
-        # FIXED: Only show controls that actually exist, don't auto-generate
+        print(f"Found {len(existing_control_names)} P1 controls: {sorted(existing_control_names)}")
+
+        # Initialize all control lists
         standard_controls = []
+        directional_controls = []
+        right_stick_controls = []
+        dpad_controls = []
+        system_controls = []
+        specialized_controls = []
 
         if not is_new_game:
-            # For existing games, ONLY show controls that are actually defined
-            # Don't auto-generate based on button count
+            # Track which controls we've already added to prevent duplicates
+            added_controls = set()
             
-            print(f"Existing game: found {len(existing_control_names)} actual controls")
-            print(f"Controls found: {sorted(existing_control_names)}")
-            
-            # Only add controls that actually exist in the game data
+            # 1. Add standard buttons first
             for control_name in sorted(existing_control_names):
-                # Only include standard button/joystick controls in the standard_controls list
-                # Specialized controls will be handled separately
-                if (control_name.startswith('P1_BUTTON') or 
-                    control_name.startswith('P1_JOYSTICK') or
-                    control_name.startswith('P1_START') or 
-                    control_name.startswith('P1_SELECT')):
-                    
-                    # Create display name
-                    if control_name.startswith('P1_BUTTON'):
-                        button_num = control_name.replace('P1_BUTTON', '')
-                        display_name = f'P1 Button {button_num}'
-                    elif control_name == 'P1_START':
-                        display_name = 'P1 Start Button'
-                    elif control_name == 'P1_SELECT':
-                        display_name = 'P1 Select/Coin Button'
-                    elif control_name == 'P1_JOYSTICK_UP':
-                        display_name = 'P1 Joystick Up'
-                    elif control_name == 'P1_JOYSTICK_DOWN':
-                        display_name = 'P1 Joystick Down'
-                    elif control_name == 'P1_JOYSTICK_LEFT':
-                        display_name = 'P1 Joystick Left'
-                    elif control_name == 'P1_JOYSTICK_RIGHT':
-                        display_name = 'P1 Joystick Right'
-                    else:
-                        display_name = control_name
-                        
+                if control_name.startswith('P1_BUTTON'):
+                    button_num = control_name.replace('P1_BUTTON', '')
+                    display_name = f'P1 Button {button_num}'
                     standard_controls.append((control_name, display_name))
-
-        # For new games, don't pre-generate any controls - let user add what they need
-        if is_new_game:
-            print("New game: not pre-generating any controls")
-            standard_controls = []
-
-        # Only add directional controls if they actually exist in the game data
-        directional_controls = []
-        if not is_new_game and any(name.startswith('P1_JOYSTICK_') for name in existing_control_names):
-            # Only add the specific directional controls that exist
+                    added_controls.add(control_name)
+                    
+            # 2. Add directional controls (handle duplicates)
             for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
-                control_name = f'P1_JOYSTICK_{direction}'
-                if control_name in existing_control_names:
-                    directional_controls.append((control_name, f'P1 Joystick {direction.capitalize()}'))
-
-        # Only add right stick controls if they actually exist
-        right_stick_controls = []
-        if any(name.startswith('P1_JOYSTICKRIGHT_') for name in existing_control_names):
+                # Check all possible joystick variants for this direction
+                variants = [
+                    f'P1_JOYSTICK_{direction}',
+                    f'P1_JOYSTICKLEFT_{direction}'
+                ]
+                
+                # Only add the first variant that exists and hasn't been added yet
+                for variant in variants:
+                    if variant in existing_control_names and variant not in added_controls:
+                        if 'LEFT' in variant:
+                            display_name = f'P1 Left Stick {direction.capitalize()}'
+                        else:
+                            display_name = f'P1 Joystick {direction.capitalize()}'
+                        directional_controls.append((variant, display_name))
+                        added_controls.add(variant)
+                        break  # Only add one variant per direction
+                        
+            # 3. Add right stick controls if they exist
             for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
                 control_name = f'P1_JOYSTICKRIGHT_{direction}'
-                if control_name in existing_control_names:
-                    right_stick_controls.append((control_name, f'P1 Right Stick {direction.capitalize()}'))
-
-        # Only add D-pad controls if they actually exist
-        dpad_controls = []
-        if any(name.startswith('P1_DPAD_') for name in existing_control_names):
+                if control_name in existing_control_names and control_name not in added_controls:
+                    display_name = f'P1 Right Stick {direction.capitalize()}'
+                    right_stick_controls.append((control_name, display_name))
+                    added_controls.add(control_name)
+                    
+            # 4. Add D-pad controls if they exist
             for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
                 control_name = f'P1_DPAD_{direction}'
-                if control_name in existing_control_names:
-                    dpad_controls.append((control_name, f'P1 D-Pad {direction.capitalize()}'))
+                if control_name in existing_control_names and control_name not in added_controls:
+                    display_name = f'P1 D-Pad {direction.capitalize()}'
+                    dpad_controls.append((control_name, display_name))
+                    added_controls.add(control_name)
+                    
+            # 5. Add system controls
+            for control_name in ['P1_START', 'P1_SELECT']:
+                if control_name in existing_control_names and control_name not in added_controls:
+                    if control_name == 'P1_START':
+                        display_name = 'P1 Start Button'
+                    else:
+                        display_name = 'P1 Select/Coin Button'
+                    system_controls.append((control_name, display_name))
+                    added_controls.add(control_name)
+                    
+            # 6. Add specialized controls
+            specialized_types = [
+                ('P1_DIAL', 'Rotary Dial'),
+                ('P1_DIAL_V', 'Vertical Dial'),
+                ('P1_PADDLE', 'Paddle Controller'),
+                ('P1_TRACKBALL_X', 'Trackball X-Axis'),
+                ('P1_TRACKBALL_Y', 'Trackball Y-Axis'),
+                ('P1_MOUSE_X', 'Mouse X-Axis'),
+                ('P1_MOUSE_Y', 'Mouse Y-Axis'),
+                ('P1_LIGHTGUN_X', 'Light Gun X-Axis'),
+                ('P1_LIGHTGUN_Y', 'Light Gun Y-Axis'),
+                ('P1_AD_STICK_X', 'Analog Stick X-Axis'),
+                ('P1_AD_STICK_Y', 'Analog Stick Y-Axis'),
+                ('P1_AD_STICK_Z', 'Analog Stick Z-Axis'),
+                ('P1_PEDAL', 'Pedal Input'),
+                ('P1_PEDAL2', 'Second Pedal Input'),
+                ('P1_POSITIONAL', 'Positional Control'),
+                ('P1_GAMBLE_HIGH', 'Gamble High'),
+                ('P1_GAMBLE_LOW', 'Gamble Low'),
+            ]
+            
+            for control_name, display_name in specialized_types:
+                if control_name in existing_control_names and control_name not in added_controls:
+                    specialized_controls.append((control_name, display_name))
+                    added_controls.add(control_name)
 
-        # System buttons - only if they exist
-        system_controls = []
-        for control_name in ['P1_START', 'P1_SELECT']:
-            if control_name in existing_control_names:
-                if control_name == 'P1_START':
-                    system_controls.append((control_name, 'P1 Start Button'))
-                elif control_name == 'P1_SELECT':
-                    system_controls.append((control_name, 'P1 Select/Coin Button'))
+        # For new games, start with empty lists
+        if is_new_game:
+            print("New game: not pre-generating any controls")
 
-        # Define all specialized controls but only add the ones that exist in the game data
-        all_specialized_controls = [
-            ('P1_DIAL', 'Rotary Dial'),
-            ('P1_DIAL_V', 'Vertical Dial'),
-            ('P1_PADDLE', 'Paddle Controller'),
-            ('P1_TRACKBALL_X', 'Trackball X-Axis'),
-            ('P1_TRACKBALL_Y', 'Trackball Y-Axis'),
-            ('P1_MOUSE_X', 'Mouse X-Axis'),
-            ('P1_MOUSE_Y', 'Mouse Y-Axis'),
-            ('P1_LIGHTGUN_X', 'Light Gun X-Axis'),
-            ('P1_LIGHTGUN_Y', 'Light Gun Y-Axis'),
-            ('P1_AD_STICK_X', 'Analog Stick X-Axis'),
-            ('P1_AD_STICK_Y', 'Analog Stick Y-Axis'),
-            ('P1_AD_STICK_Z', 'Analog Stick Z-Axis'),
-            ('P1_PEDAL', 'Pedal Input'),
-            ('P1_PEDAL2', 'Second Pedal Input'),
-            ('P1_POSITIONAL', 'Positional Control'),
-            ('P1_GAMBLE_HIGH', 'Gamble High'),
-            ('P1_GAMBLE_LOW', 'Gamble Low'),
-        ]
+        # Create the final control list - P1 controls only, no duplicates
+        all_controls = (standard_controls + directional_controls + 
+                       right_stick_controls + dpad_controls + 
+                       system_controls + specialized_controls)
 
-        # Only include specialized controls if they exist in the game data
-        specialized_controls = [
-            control for control in all_specialized_controls 
-            if control[0] in existing_control_names
-        ]
+        print(f"Final P1 controls to display: {len(all_controls)}")
+        for control_name, display_name in all_controls:
+            print(f"  {control_name}: {display_name}")
+
+        # Verify no duplicates
+        control_names_check = [c[0] for c in all_controls]
+        if len(control_names_check) != len(set(control_names_check)):
+            print("WARNING: Duplicate controls detected!")
+            duplicates = [name for name in control_names_check if control_names_check.count(name) > 1]
+            print(f"Duplicates: {duplicates}")
+        else:
+            print("✓ No duplicate controls found")
 
         # Create the final control list, merging all relevant controls
         all_controls = standard_controls + directional_controls + right_stick_controls + dpad_controls + system_controls + specialized_controls
 
-        # Add any custom controls that aren't in our lists but are in the game data
-        for control_name, action in existing_controls:
-            if not any(control[0] == control_name for control in all_controls):
-                all_controls.append((control_name, action))
+        # Create the final control list - P1 controls only
+        all_controls = (standard_controls + directional_controls + 
+                       right_stick_controls + dpad_controls + 
+                       system_controls + specialized_controls)
 
-        print(f"Final controls to display: {len(all_controls)}")
+        print(f"Final P1 controls to display: {len(all_controls)}")
         for control_name, display_name in all_controls:
             print(f"  {control_name}: {display_name}")
 
