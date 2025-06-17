@@ -195,9 +195,9 @@ class MAMEControlConfig(ctk.CTk):
         self.SHOW_HIDE_BUTTONS_TOGGLE = False  # NEW: Set to False to hide the toggle
         self.CONTROLS_ONLY_EDIT = True     # NEW: Set to True to disable game property editing
         # Add ROM source mode tracking
-        self.rom_source_mode = "physical"  # "physical" or "database"
+        self.rom_source_mode = "physical"  # ALWAYS DEFAULT TO PHYSICAL
         self.database_roms = set()  # Will hold all parent ROMs from gamedata
-        
+
         # Add panel proportion configuration here
         self.LEFT_PANEL_RATIO = 0.35  # Left panel takes 35% of window width
         self.MIN_LEFT_PANEL_WIDTH = 400  # Minimum width in pixels
@@ -392,106 +392,6 @@ class MAMEControlConfig(ctk.CTk):
             import traceback
             traceback.print_exc()
     
-    def _load_secondary_data(self):
-        """Load secondary data with proper database checking and ROM source initialization"""
-        try:
-            self.update_splash_message("Loading default controls...")
-            
-            # Load default config
-            self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
-            print(f"Loaded {len(self.default_controls)} default controls")
-            
-            self.update_splash_message("Loading custom configurations...")
-            
-            # Load custom configs  
-            self.custom_configs = load_custom_configs(self.mame_dir)
-            print(f"Loaded {len(self.custom_configs)} custom configs")
-            
-            self.update_splash_message("Checking database...")
-            
-            # Ensure gamedata.json is loaded
-            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
-                print("Loading gamedata.json for database operations...")
-                from mame_data_utils import load_gamedata_json
-                self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
-            
-            # PROPER CHECK: Only rebuild if actually needed
-            needs_rebuild = False
-            
-            # Check if database file exists
-            if not os.path.exists(self.db_path):
-                print("Database file doesn't exist, will create new one")
-                needs_rebuild = True
-            else:
-                # Check if database has valid schema
-                try:
-                    conn = sqlite3.connect(self.db_path)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM games")
-                    game_count = cursor.fetchone()[0]
-                    conn.close()
-                    
-                    if game_count == 0:
-                        print("Database exists but is empty, rebuilding...")
-                        needs_rebuild = True
-                    else:
-                        print(f"Database found with {game_count} games")
-                        # Check timestamps
-                        if check_db_update_needed(self.gamedata_path, self.db_path):
-                            print("gamedata.json is newer than database, rebuilding...")
-                            needs_rebuild = True
-                        else:
-                            print("Database is up to date, no rebuild needed")
-                            
-                except sqlite3.Error as e:
-                    print(f"Database appears corrupted ({e}), rebuilding...")
-                    needs_rebuild = True
-            
-            # Only rebuild if actually needed
-            if needs_rebuild:
-                self.update_splash_message("Building database...")
-                print(f"Building database with {len(self.gamedata_json)} game entries...")
-                
-                if self.gamedata_json:
-                    from mame_data_utils import build_gamedata_db
-                    success = build_gamedata_db(self.gamedata_json, self.db_path)
-                    if success:
-                        print("✅ Database build completed successfully")
-                    else:
-                        print("❌ Database build failed")
-                else:
-                    print("❌ ERROR: No gamedata available for database building!")
-            
-            # CRITICAL FIX: Initialize ROM source based on saved settings
-            self.update_splash_message("Loading ROM sources...")
-            
-            # Load the appropriate ROM set based on startup mode
-            if hasattr(self, 'rom_source_mode') and self.rom_source_mode == "database":
-                print("Startup mode: database - loading all database ROMs")
-                self.load_database_roms()
-                self.available_roms = self.database_roms.copy()
-                # Ensure toggle reflects the correct state
-                if hasattr(self, 'rom_source_toggle'):
-                    self.rom_source_toggle.select()
-            else:
-                print("Startup mode: physical - scanning physical ROMs")
-                self.available_roms = scan_roms_directory(self.mame_dir)
-                # Ensure toggle reflects the correct state
-                if hasattr(self, 'rom_source_toggle'):
-                    self.rom_source_toggle.deselect()
-            
-            print(f"Loaded {len(self.available_roms)} ROMs in {self.rom_source_mode} mode")
-            
-            # Move to finish loading
-            self.after(100, self._finish_loading)
-            
-        except Exception as e:
-            print(f"Error in secondary data loading: {e}")
-            import traceback
-            traceback.print_exc()
-            self.after(500, self._finish_loading)
-
-
     def _load_default_config_wrapper(self):
         """Wrapper for loading default config"""
         self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
@@ -513,9 +413,9 @@ class MAMEControlConfig(ctk.CTk):
         else:
             # Not done yet, check again soon
             self.after(100, self._check_loading_progress)
-
+    
     def _finish_loading(self):
-        """Finish loading and show the main application - FIXED startup sequence"""
+        """Finish loading and show the main application - SIMPLIFIED"""
         
         # Update message for the final step
         self.update_splash_message("Starting application...")
@@ -525,11 +425,13 @@ class MAMEControlConfig(ctk.CTk):
         if hasattr(self, 'after_init_setup'):
             self.after_init_setup()
         
+        # REMOVED: self.debug_rom_source_state()
+        
         # Schedule showing the main window FIRST
         self.after(500, self.show_application)
         
         # THEN schedule first game selection AFTER window is shown and stable
-        self.after(1500, self._safe_first_game_selection)  # Much longer delay
+        self.after(1500, self._safe_first_game_selection)
 
     def _safe_first_game_selection(self):
         """Safely select first game with splash updates"""
@@ -2472,7 +2374,7 @@ class MAMEControlConfig(ctk.CTk):
         self.current_view = "all"
 
     def create_top_bar(self):
-        """Create top bar with control buttons - UPDATED with ROM source toggle"""
+        """Create top bar with control buttons - NO ROM source toggle"""
         self.top_bar = ctk.CTkFrame(self.main_content, height=60, fg_color=self.theme_colors["card_bg"], corner_radius=0)
         self.top_bar.grid(row=0, column=0, sticky="ew")
         
@@ -2531,7 +2433,7 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.preview_button.pack(side="right", padx=10)
         
-        # NEW: ROM Source Toggle (rightmost)
+        # ROM Source Toggle - ALWAYS START OFF
         self.rom_source_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="Show All Games",
@@ -2540,14 +2442,14 @@ class MAMEControlConfig(ctk.CTk):
             button_hover_color=self.theme_colors["secondary"]
         )
         
-        # CRITICAL FIX: Set initial state based on loaded settings AFTER switch creation
-        # This ensures the toggle shows the correct state on startup
-        self.after(50, self._set_initial_toggle_state)
+        # ALWAYS start with toggle OFF (physical ROMs)
+        self.rom_source_toggle.deselect()
+        print("Toggle set to OFF - starting with physical ROMs")
         
         self.rom_source_toggle.pack(side="right", padx=10)
-        
+
         # Only show hide buttons toggle if feature is enabled
-        if getattr(self, 'SHOW_HIDE_BUTTONS_TOGGLE', True):  # Default to True for backwards compatibility
+        if getattr(self, 'SHOW_HIDE_BUTTONS_TOGGLE', True):
             # Hide buttons toggle
             self.hide_buttons_toggle = ctk.CTkSwitch(
                 toggle_frame,
@@ -2582,7 +2484,7 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error setting initial toggle state: {e}")
 
     def toggle_rom_source(self):
-        """Toggle between physical ROMs and database ROMs - FIXED for startup"""
+        """Toggle between physical ROMs and database ROMs - DON'T SAVE STATE"""
         try:
             # Cancel any pending display updates
             if hasattr(self, '_display_timer') and self._display_timer:
@@ -2600,26 +2502,22 @@ class MAMEControlConfig(ctk.CTk):
             
             print(f"ROM source mode changed from {old_mode} to {self.rom_source_mode}")
             
-            # NEW: Clear current selection to prevent selection events
+            # Clear current selection to prevent selection events
             self.current_game = None
             
-            # NEW: Temporarily disable selection events
+            # Temporarily disable selection events
             if hasattr(self, 'game_listbox'):
-                # Clear listbox selection to prevent events
                 self.game_listbox.selection_clear(0, tk.END)
-                
-                # Temporarily unbind selection events
                 self.game_listbox.unbind("<ButtonRelease-1>")
                 self.game_listbox.unbind("<Button-3>")
                 self.game_listbox.unbind("<Double-Button-1>")
             
-            # CRITICAL FIX: Always load ROM set for current mode
+            # Load ROM set for current mode
             self.load_rom_set_for_current_mode()
             
-            # FIXED: Ensure we have ROMs before updating the list
+            # Ensure we have ROMs before updating the list
             if not hasattr(self, 'available_roms') or not self.available_roms:
                 print(f"ERROR: No ROMs loaded for {self.rom_source_mode} mode")
-                # Show error message
                 if hasattr(self, 'game_title'):
                     self.game_title.configure(text=f"No ROMs available in {self.rom_source_mode} mode")
                 if hasattr(self, 'control_frame'):
@@ -2650,9 +2548,11 @@ class MAMEControlConfig(ctk.CTk):
                     for widget in self.control_frame.winfo_children():
                         widget.destroy()
             
-            # Update stats and save settings
+            # Update stats
             self.update_stats_label()
-            self.save_settings()
+            
+            # DON'T SAVE SETTINGS - this is the key change!
+            # self.save_settings()  # REMOVED - don't save toggle state
             
             mode_text = "all games in database" if self.rom_source_mode == "database" else "physical ROMs"
             self.update_status_message(f"Now showing {mode_text}")
@@ -2663,7 +2563,7 @@ class MAMEControlConfig(ctk.CTk):
             traceback.print_exc()
 
     def load_database_roms(self):
-        """Load all parent ROMs from gamedata.json (exclude clones) - ENHANCED with better error handling"""
+        """Load all parent ROMs from gamedata.json (exclude clones)"""
         try:
             # Ensure gamedata is loaded first
             if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
@@ -2692,17 +2592,7 @@ class MAMEControlConfig(ctk.CTk):
                 print(f"Sample database ROMs: {sample_roms}")
             else:
                 print("WARNING: No database ROMs were loaded!")
-                # Try to diagnose the issue
-                if self.gamedata_json:
-                    print(f"gamedata.json has {len(self.gamedata_json)} total entries")
-                    # Show sample of what's in gamedata
-                    sample_keys = list(self.gamedata_json.keys())[:5]
-                    print(f"Sample gamedata keys: {sample_keys}")
-                    # Check if they all have 'parent' keys
-                    for key in sample_keys[:3]:
-                        has_parent = 'parent' in self.gamedata_json[key]
-                        print(f"  {key}: has_parent={has_parent}")
-                
+                    
         except Exception as e:
             print(f"Error loading database ROMs: {e}")
             import traceback
@@ -2739,7 +2629,8 @@ class MAMEControlConfig(ctk.CTk):
         try:
             if self.rom_source_mode == "database":
                 # Load all parent ROMs from gamedata.json
-                self.load_database_roms()
+                if not hasattr(self, 'database_roms') or not self.database_roms:
+                    self.load_database_roms()
                 # Use database ROMs as available ROMs
                 self.available_roms = self.database_roms.copy()
                 print(f"Loaded {len(self.available_roms)} database ROMs")
@@ -6483,7 +6374,7 @@ class MAMEControlConfig(ctk.CTk):
             self.save_settings()
         
     def save_settings(self):
-        """Save current settings to the standard settings file - UPDATED with ROM source mode"""
+        """Save current settings - EXCLUDE rom_source_mode so toggle isn't saved"""
         settings = {
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
             "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
@@ -6491,17 +6382,15 @@ class MAMEControlConfig(ctk.CTk):
             "show_button_names": getattr(self, 'show_button_names', True),
             "input_mode": getattr(self, 'input_mode', 'xinput'),
             "xinput_only_mode": getattr(self, 'xinput_only_mode', True),
-            "rom_source_mode": getattr(self, 'rom_source_mode', 'physical')  # NEW SETTING
+            "show_directional_alternatives": getattr(self, 'show_directional_alternatives', True)
+            # EXCLUDED: "rom_source_mode" - don't save toggle state
         }
         
-        print(f"Debug - saving settings: {settings}")
+        print(f"Debug - saving settings (toggle state not saved): {settings}")
         
         try:
             if hasattr(self, 'settings_path'):
-                # Ensure settings directory exists
                 os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
-                
-                # Save settings
                 with open(self.settings_path, 'w') as f:
                     json.dump(settings, f, indent=2)
                 print(f"Settings saved to: {self.settings_path}")
@@ -6513,8 +6402,9 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error saving settings: {e}")
             return False
 
+    # 3. FORCE physical mode in load_settings - IGNORE any saved rom_source_mode:
     def load_settings(self):
-        """Load settings from JSON file in settings directory - UPDATED with directional display"""
+        """Load settings - ALWAYS force physical ROM mode on startup"""
         # Set sensible defaults
         self.preferred_preview_screen = 1
         self.visible_control_types = ["BUTTON"]
@@ -6522,8 +6412,7 @@ class MAMEControlConfig(ctk.CTk):
         self.show_button_names = True
         self.input_mode = 'xinput'
         self.xinput_only_mode = True
-        self.rom_source_mode = 'physical'
-        self.show_directional_alternatives = True  # NEW SETTING
+        self.rom_source_mode = 'physical'  # ALWAYS FORCE PHYSICAL ON STARTUP
         
         # Load custom settings if available
         if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
@@ -6531,81 +6420,7 @@ class MAMEControlConfig(ctk.CTk):
                 with open(self.settings_path, 'r') as f:
                     settings = json.load(f)
                     
-                # Load screen preference
-                if 'preferred_preview_screen' in settings:
-                    self.preferred_preview_screen = settings['preferred_preview_screen']
-                    
-                # Load visibility settings
-                if 'visible_control_types' in settings:
-                    if isinstance(settings['visible_control_types'], list):
-                        self.visible_control_types = settings['visible_control_types']
-                    
-                    # Make sure BUTTON is always included
-                    if "BUTTON" not in self.visible_control_types:
-                        self.visible_control_types.append("BUTTON")
-
-                # Load hide preview buttons setting
-                if 'hide_preview_buttons' in settings:
-                    self.hide_preview_buttons = bool(settings.get('hide_preview_buttons', False))
-                    
-                    # Update toggle if it exists
-                    if hasattr(self, 'hide_buttons_toggle'):
-                        if self.hide_preview_buttons:
-                            self.hide_buttons_toggle.select()
-                        else:
-                            self.hide_buttons_toggle.deselect()
-                    
-                # Load show button names setting
-                if 'show_button_names' in settings:
-                    self.show_button_names = bool(settings.get('show_button_names', True))
-                    
-                # Load input mode setting (Now supports 'joycode', 'xinput', 'dinput', or 'keycode')
-                if 'input_mode' in settings:
-                    self.input_mode = settings.get('input_mode', 'xinput')
-                    # Ensure valid value
-                    if self.input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
-                        self.input_mode = 'xinput'
-                    
-                # Load XInput Only Mode setting
-                if 'xinput_only_mode' in settings:
-                    self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
-                    
-                # NEW: Load directional alternatives setting
-                if 'show_directional_alternatives' in settings:
-                    self.show_directional_alternatives = bool(settings.get('show_directional_alternatives', True))
-                    
-            except Exception as e:
-                print(f"Error loading settings: {e}")
-        else:
-            # Create settings file with defaults
-            self.save_settings()
-                    
-        return {
-            'preferred_preview_screen': self.preferred_preview_screen,
-            'visible_control_types': self.visible_control_types,
-            'hide_preview_buttons': self.hide_preview_buttons,
-            'show_button_names': self.show_button_names,
-            'input_mode': self.input_mode
-        }
-
-    def load_settings(self):
-        """Load settings from JSON file in settings directory - UPDATED with ROM source mode"""
-        # Set sensible defaults
-        self.preferred_preview_screen = 1
-        self.visible_control_types = ["BUTTON"]
-        self.hide_preview_buttons = False
-        self.show_button_names = True
-        self.input_mode = 'xinput'
-        self.xinput_only_mode = True
-        self.rom_source_mode = 'physical'  # NEW DEFAULT
-        
-        # Load custom settings if available
-        if hasattr(self, 'settings_path') and os.path.exists(self.settings_path):
-            try:
-                with open(self.settings_path, 'r') as f:
-                    settings = json.load(f)
-                    
-                # Load existing settings...
+                # Load all settings EXCEPT rom_source_mode
                 if 'preferred_preview_screen' in settings:
                     self.preferred_preview_screen = settings['preferred_preview_screen']
                     
@@ -6630,12 +6445,10 @@ class MAMEControlConfig(ctk.CTk):
                 if 'xinput_only_mode' in settings:
                     self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
                 
-                # NEW: Load ROM source mode setting
-                if 'rom_source_mode' in settings:
-                    self.rom_source_mode = settings.get('rom_source_mode', 'physical')
-                    if self.rom_source_mode not in ['physical', 'database']:
-                        self.rom_source_mode = 'physical'
-                    
+                # IGNORE any saved rom_source_mode - always force physical
+                self.rom_source_mode = 'physical'
+                print("Forced ROM source mode to 'physical' on startup (toggle state not saved)")
+                
             except Exception as e:
                 print(f"Error loading settings: {e}")
         else:
@@ -6648,41 +6461,102 @@ class MAMEControlConfig(ctk.CTk):
             'hide_preview_buttons': self.hide_preview_buttons,
             'show_button_names': self.show_button_names,
             'input_mode': self.input_mode,
-            'rom_source_mode': self.rom_source_mode  # NEW
+            'rom_source_mode': self.rom_source_mode  # Will always be 'physical'
         }
-    
-    def save_settings(self):
-        """Save current settings to the standard settings file - UPDATED with directional display"""
-        settings = {
-            "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
-            "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
-            "hide_preview_buttons": getattr(self, 'hide_preview_buttons', False),
-            "show_button_names": getattr(self, 'show_button_names', True),
-            "input_mode": getattr(self, 'input_mode', 'xinput'),
-            "xinput_only_mode": getattr(self, 'xinput_only_mode', True),
-            "rom_source_mode": getattr(self, 'rom_source_mode', 'physical'),
-            "show_directional_alternatives": getattr(self, 'show_directional_alternatives', True)  # NEW
-        }
-        
-        print(f"Debug - saving settings: {settings}")
-        
+
+    # 4. ALWAYS start physical in _load_secondary_data but load database ROMs too:
+    def _load_secondary_data(self):
+        """Load secondary data - ALWAYS start physical but prep database ROMs for toggle"""
         try:
-            if hasattr(self, 'settings_path'):
-                # Ensure settings directory exists
-                os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
-                
-                # Save settings
-                with open(self.settings_path, 'w') as f:
-                    json.dump(settings, f, indent=2)
-                print(f"Settings saved to: {self.settings_path}")
-                return True
+            self.update_splash_message("Loading default controls...")
+            
+            # Load default config
+            self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
+            print(f"Loaded {len(self.default_controls)} default controls")
+            
+            self.update_splash_message("Loading custom configurations...")
+            
+            # Load custom configs  
+            self.custom_configs = load_custom_configs(self.mame_dir)
+            print(f"Loaded {len(self.custom_configs)} custom configs")
+            
+            self.update_splash_message("Checking database...")
+            
+            # Ensure gamedata.json is loaded
+            if not hasattr(self, 'gamedata_json') or not self.gamedata_json:
+                print("Loading gamedata.json for database operations...")
+                from mame_data_utils import load_gamedata_json
+                self.gamedata_json, self.parent_lookup, self.clone_parents = load_gamedata_json(self.gamedata_path)
+            
+            # Database check and rebuild logic (unchanged)
+            needs_rebuild = False
+            
+            if not os.path.exists(self.db_path):
+                print("Database file doesn't exist, will create new one")
+                needs_rebuild = True
             else:
-                print("Error: settings_path not available")
-                return False
+                try:
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM games")
+                    game_count = cursor.fetchone()[0]
+                    conn.close()
+                    
+                    if game_count == 0:
+                        print("Database exists but is empty, rebuilding...")
+                        needs_rebuild = True
+                    else:
+                        print(f"Database found with {game_count} games")
+                        if check_db_update_needed(self.gamedata_path, self.db_path):
+                            print("gamedata.json is newer than database, rebuilding...")
+                            needs_rebuild = True
+                        else:
+                            print("Database is up to date, no rebuild needed")
+                            
+                except sqlite3.Error as e:
+                    print(f"Database appears corrupted ({e}), rebuilding...")
+                    needs_rebuild = True
+            
+            if needs_rebuild:
+                self.update_splash_message("Building database...")
+                print(f"Building database with {len(self.gamedata_json)} game entries...")
+                
+                if self.gamedata_json:
+                    from mame_data_utils import build_gamedata_db
+                    success = build_gamedata_db(self.gamedata_json, self.db_path)
+                    if success:
+                        print("✅ Database build completed successfully")
+                    else:
+                        print("❌ Database build failed")
+                else:
+                    print("❌ ERROR: No gamedata available for database building!")
+            
+            # STARTUP STRATEGY: Always start with physical ROMs
+            self.update_splash_message("Loading ROM sources...")
+            
+            # Load physical ROMs (for startup)
+            print("Loading physical ROMs for startup...")
+            self.available_roms = scan_roms_directory(self.mame_dir)
+            
+            # Also load database ROMs in background (for toggle)
+            print("Loading database ROMs in background for toggle...")
+            if self.gamedata_json:
+                self.load_database_roms()
+            
+            # Force physical mode on startup
+            self.rom_source_mode = 'physical'
+            print(f"✅ STARTUP: Always using physical mode - {len(self.available_roms)} ROMs")
+            print(f"✅ READY FOR TOGGLE: Database has {len(getattr(self, 'database_roms', []))} ROMs available")
+            
+            # Move to finish loading
+            self.after(100, self._finish_loading)
+            
         except Exception as e:
-            print(f"Error saving settings: {e}")
-            return False
-    
+            print(f"Error in secondary data loading: {e}")
+            import traceback
+            traceback.print_exc()
+            self.after(500, self._finish_loading)
+
     def format_control_name(self, control_name: str) -> str:
         """Convert MAME control names to friendly names based on input type"""
         # Split control name into parts (e.g., 'P1_BUTTON1' -> ['P1', 'BUTTON1'])
@@ -7461,19 +7335,18 @@ class MAMEControlConfig(ctk.CTk):
         return result
 
     def update_stats_label(self):
-        """Update the statistics label with corrected categorization - UPDATED for ROM source mode"""
+        """Update the statistics label - SIMPLIFIED without ROM source mode"""
         try:
             total_roms = len(self.available_roms)
             
-            # Add mode indicator to stats
-            mode_text = "Database" if self.rom_source_mode == "database" else "Physical"
+            # REMOVED: mode_text = "Database" if self.rom_source_mode == "database" else "Physical"
             
             # Categorize all ROMs properly
             with_controls = 0
             missing_controls = 0
             generic_controls = 0
             custom_controls = 0
-            mixed_controls = 0  # NEW
+            mixed_controls = 0
             with_cfg_files = 0
             clone_roms = 0
             
@@ -7493,7 +7366,7 @@ class MAMEControlConfig(ctk.CTk):
                     elif categories['has_custom_controls']:
                         custom_controls += 1
                     
-                    # NEW: Check for mixed controls
+                    # Check for mixed controls
                     if self.has_mixed_controls(rom):
                         mixed_controls += 1
                 else:
@@ -7502,25 +7375,21 @@ class MAMEControlConfig(ctk.CTk):
                 if categories['has_cfg_file']:
                     with_cfg_files += 1
             
-            # Format the stats with mode indicator and mixed controls
+            # SIMPLIFIED stats format (no mode indicator)
             stats = (
-                f"Mode: {mode_text}\n"
                 f"ROMs: {total_roms}\n"
                 f"With Controls: {with_controls} ({with_controls/max(total_roms, 1)*100:.1f}%)\n"
                 f"Missing Controls: {missing_controls}\n"
                 f"Custom Actions: {custom_controls}\n"
                 f"Generic Controls: {generic_controls}\n"
-                f"Mixed Controls: {mixed_controls}\n"  # NEW LINE
+                f"Mixed Controls: {mixed_controls}\n"
+                f"Clone ROMs: {clone_roms}\n"
             )
-            
-            # Only show clone count in physical mode (database mode shows parents only)
-            if self.rom_source_mode == "physical":
-                stats += f"Clone ROMs: {clone_roms}\n"
             
             self.stats_label.configure(text=stats)
             
-            # Debug output
-            print(f"Stats ({mode_text}): Total={total_roms}, WithControls={with_controls}, "
+            # Debug output (simplified)
+            print(f"Stats: Total={total_roms}, WithControls={with_controls}, "
                 f"Missing={missing_controls}, Custom={custom_controls}, "
                 f"Generic={generic_controls}, Mixed={mixed_controls}, CFG={with_cfg_files}, Clones={clone_roms}")
             
