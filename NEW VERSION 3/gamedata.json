@@ -15378,7 +15378,8 @@
       },
       "P1_BUTTON2": {
         "tag": ":IN0",
-        "mask": "128"
+        "mask": "128",
+        "name": "Choose Die"
       },
       "COIN2": {
         "tag": ":IN0",
@@ -15390,7 +15391,8 @@
       },
       "P1_BUTTON1": {
         "tag": ":IN0",
-        "mask": "64"
+        "mask": "64",
+        "name": "Throw"
       },
       "COIN1": {
         "tag": ":IN0",
@@ -15398,11 +15400,13 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
@@ -15418,7 +15422,8 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_UP": {
         "tag": ":IN1",
@@ -15426,7 +15431,8 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_BUTTON2": {
         "tag": ":IN2",
@@ -15436,7 +15442,8 @@
         "tag": ":IN2",
         "mask": "1"
       }
-    }
+    },
+    "alternating": false
   },
   "abcop": {
     "description": "A.B. Cop (World) (FD1094 317-0169b)",
@@ -22027,19 +22034,23 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":60",
-        "mask": "8192"
+        "mask": "8192",
+        "name": "Right"
       },
       "P1_BUTTON3": {
         "tag": ":60",
-        "mask": "256"
+        "mask": "256",
+        "name": "Throw"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":60",
-        "mask": "4096"
+        "mask": "4096",
+        "name": "Left"
       },
       "P1_BUTTON2": {
         "tag": ":60",
-        "mask": "16384"
+        "mask": "16384",
+        "name": "Kick"
       },
       "START1": {
         "tag": ":60",
@@ -22047,15 +22058,18 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":60",
-        "mask": "2048"
+        "mask": "2048",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":60",
-        "mask": "32768"
+        "mask": "32768",
+        "name": "Punch"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":60",
-        "mask": "1024"
+        "mask": "1024",
+        "name": "Up"
       },
       "START2": {
         "tag": ":80",
@@ -22089,7 +22103,8 @@
         "tag": ":80",
         "mask": "1024"
       }
-    }
+    },
+    "alternating": false
   },
   "tsamurai": {
     "description": "Samurai Nihon-Ichi (rev 1)",
@@ -55741,7 +55756,7 @@
   "opaopa": {
     "description": "Opa Opa (MC-8123, 317-0042)",
     "playercount": "2",
-    "buttons": "2",
+    "buttons": "1",
     "sticks": "1",
     "clones": {
       "opaopan": {
@@ -55767,27 +55782,28 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":e1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_BUTTON1": {
         "tag": ":e1",
-        "mask": "16"
-      },
-      "P1_BUTTON2": {
-        "tag": ":e1",
-        "mask": "32"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":e1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":e1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":e1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":e2",
@@ -55813,7 +55829,8 @@
         "tag": ":e2",
         "mask": "2"
       }
-    }
+    },
+    "alternating": false
   },
   "crysking": {
     "description": "The Crystal of Kings",
@@ -75196,7 +75213,7 @@
   "ninjemak": {
     "description": "Ninja Emaki (US)",
     "playercount": "2",
-    "buttons": "3",
+    "buttons": "2",
     "sticks": "1",
     "clones": {
       "youma": {
@@ -75215,31 +75232,33 @@
     "controls": {
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_BUTTON2": {
         "tag": ":P1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Select Magic"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_BUTTON1": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "4"
-      },
-      "P1_BUTTON3": {
-        "tag": ":P1",
-        "mask": "128"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_BUTTON2": {
         "tag": ":P2",
@@ -75285,7 +75304,8 @@
         "tag": ":SYSTEM",
         "mask": "8"
       }
-    }
+    },
+    "alternating": false
   },
   "lgtnfght": {
     "description": "Lightning Fighters (World)",
@@ -84181,19 +84201,23 @@
     "controls": {
       "P1_BUTTON1": {
         "tag": ":P1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "START1": {
         "tag": ":P1",
@@ -84205,7 +84229,8 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P2_BUTTON1": {
         "tag": ":P2",
@@ -84235,7 +84260,8 @@
         "tag": ":P2",
         "mask": "8"
       }
-    }
+    },
+    "alternating": false
   },
   "todruaga": {
     "description": "The Tower of Druaga (New Ver.)",
@@ -86543,7 +86569,8 @@
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN1",
@@ -86551,7 +86578,8 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":IN1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":IN1",
@@ -86563,11 +86591,13 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":IN1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P2_JOYSTICK_RIGHT": {
         "tag": ":IN1",
@@ -86579,9 +86609,11 @@
       },
       "P1_BUTTON1": {
         "tag": ":IN1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       }
-    }
+    },
+    "alternating": false
   },
   "kchamp": {
     "description": "Karate Champ (US)",
@@ -116276,27 +116308,33 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":PAD1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":PAD1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Left"
       },
       "P1_BUTTON2": {
         "tag": ":PAD1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Slow Time"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":PAD1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Right"
       },
       "P1_BUTTON1": {
         "tag": ":PAD1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Fire"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":PAD1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Up"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":PAD2",
@@ -116322,7 +116360,8 @@
         "tag": ":PAD2",
         "mask": "16"
       }
-    }
+    },
+    "alternating": false
   },
   "crater": {
     "description": "Crater Raider",
@@ -120297,35 +120336,43 @@
       },
       "P1_BUTTON1": {
         "tag": ":edge:joy:JOY1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Acceleration"
       },
       "P1_BUTTON4": {
         "tag": ":edge:joy:JOY1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Not Used"
       },
       "P1_BUTTON3": {
         "tag": ":edge:joy:JOY1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Not Used"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":edge:joy:JOY1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_BUTTON2": {
         "tag": ":edge:joy:JOY1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Brakes"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":edge:joy:JOY1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":edge:joy:JOY1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":edge:joy:JOY1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":edge:joy:JOY2",
@@ -120367,7 +120414,8 @@
         "tag": ":edge:joy:START",
         "mask": "4"
       }
-    }
+    },
+    "alternating": false
   },
   "yiear": {
     "description": "Yie Ar Kung-Fu (program code I)",
@@ -137660,35 +137708,43 @@
       },
       "P1_BUTTON1": {
         "tag": ":edge:joy:JOY1",
-        "mask": "16"
+        "mask": "16",
+        "name": "Accelerate"
       },
       "P1_BUTTON4": {
         "tag": ":edge:joy:JOY1",
-        "mask": "128"
+        "mask": "128",
+        "name": "Flashing Light"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":edge:joy:JOY1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_BUTTON2": {
         "tag": ":edge:joy:JOY1",
-        "mask": "32"
+        "mask": "32",
+        "name": "Brake"
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":edge:joy:JOY1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":edge:joy:JOY1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P1_BUTTON3": {
         "tag": ":edge:joy:JOY1",
-        "mask": "64"
+        "mask": "64",
+        "name": "Horn"
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":edge:joy:JOY1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P2_BUTTON1": {
         "tag": ":edge:joy:JOY2",
@@ -137730,7 +137786,8 @@
         "tag": ":edge:joy:START",
         "mask": "1"
       }
-    }
+    },
+    "alternating": false
   },
   "joyjoy": {
     "description": "Puzzled / Joy Joy Kid (NGM-021 ~ NGH-021)",
@@ -149922,17 +149979,22 @@
       },
       "P1_BUTTON1": {
         "tag": ":IN1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Fire"
       },
       "P1_LIGHTGUN_X": {
         "tag": ":LIGHTX",
-        "mask": "255"
+        "mask": "255",
+        "name": "Light Gun X-Axis"
       },
       "P1_LIGHTGUN_Y": {
         "tag": ":LIGHTY",
-        "mask": "255"
+        "mask": "255",
+        "name": "Light Gun Y-Axis"
       }
-    }
+    },
+    "sticks": "0",
+    "alternating": false
   },
   "twsoc96": {
     "description": "Tecmo World Soccer '96",
