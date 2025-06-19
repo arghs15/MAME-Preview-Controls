@@ -47,7 +47,7 @@ class PreviewWindow(QMainWindow):
         self.rom_name = rom_name
         self.game_data = game_data
         self.initialize_conversion_maps()
-
+        
         # Initialize input mode - ADD THIS
         self.use_xinput = game_data.get('input_mode') == 'xinput' if game_data else True
         print(f"Input mode for {rom_name}: {'XInput' if self.use_xinput else 'DirectInput'}")
@@ -7154,7 +7154,7 @@ class PreviewWindow(QMainWindow):
             print(f"Error saving directional mode settings: {e}")
     
     def create_control_labels(self, clean_mode=False):
-        """Create control labels with directional mode support"""
+        """Create control labels with directional mode support and enhanced debugging for custom mappings"""
         if not self.game_data or 'players' not in self.game_data:
             return
                         
@@ -7183,44 +7183,51 @@ class PreviewWindow(QMainWindow):
                 action_text = control['value']
                 print(f"Control: {control_name}, Value: {action_text}, Mapping: {control.get('mapping', 'NONE')}")
                 
-                # Special debug for P1_PEDAL2
-                if control_name == "P1_PEDAL2":
-                    print(f"*** Found P1_PEDAL2 ***")
+                # Special debug for P1_BUTTON3 (or any custom controls)
+                if control_name == "P1_BUTTON3" or control.get('is_custom', False):
+                    print(f"*** DEBUGGING CUSTOM CONTROL: {control_name} ***")
                     print(f"Action: {action_text}")
                     print(f"Mapping: {control.get('mapping', 'NONE')}")
                     print(f"Is Custom: {control.get('is_custom', False)}")
                     print(f"Mapping source: {control.get('mapping_source', 'UNKNOWN')}")
+                    print(f"CFG Mapping: {control.get('cfg_mapping', False)}")
+                    print(f"Input Mode: {control.get('input_mode', 'UNKNOWN')}")
+                    print(f"Target Button: {control.get('target_button', 'UNKNOWN')}")
                     
-                    # Check if default controls exist and contain this control
-                    has_defaults = hasattr(self, 'default_controls')
-                    in_defaults = has_defaults and control_name in self.default_controls
-                    print(f"Has default_controls: {has_defaults}")
-                    print(f"P1_PEDAL2 in default_controls: {in_defaults}")
-                    if in_defaults:
-                        print(f"Default mapping: {self.default_controls[control_name]}")
-                        
             # Create a label for each control
             grid_x, grid_y = 0, 0
             for control in player.get('labels', []):
                 control_name = control['name']
                 action_text = control['value']
                 
-                # Get button prefix based on control type
+                # Get button prefix based on control type with enhanced debugging
                 button_prefix = ""
-                if 'mapping' in control and control['mapping'] and control['mapping'] != "NONE":  # ADD != "NONE" CHECK
+                if 'mapping' in control and control['mapping'] and control['mapping'] != "NONE":
                     # Try to get prefix from ANY mapping (custom OR default)
                     button_prefix = self.get_button_prefix_from_mapping(control['mapping'])
-                    print(f"Got prefix '{button_prefix}' for {control_name} with mapping '{control['mapping']}'")
+                    
+                    # Enhanced debugging for custom controls
+                    if control_name == "P1_BUTTON3" or control.get('is_custom', False):
+                        print(f"Generated prefix from mapping '{control['mapping']}': '{button_prefix}'")
                     
                     # If no prefix found and we have a DirectInput mapping, try to extract it
                     if not button_prefix and 'DINPUT_' in control['mapping']:
                         button_num = control['mapping'].replace('DINPUT_1_BUTTON', '')
                         if button_num.isdigit():
                             button_prefix = f"B{button_num}"
+                            if control_name == "P1_BUTTON3":
+                                print(f"Fallback DINPUT prefix: '{button_prefix}'")
                 else:
                     # Use fallback if no mapping exists OR mapping is "NONE"
                     if hasattr(self, 'get_button_prefix'):
                         button_prefix = self.get_button_prefix(control_name)
+                        if control_name == "P1_BUTTON3":
+                            print(f"Fallback prefix from control name: '{button_prefix}'")
+                
+                # Final debug output for custom controls
+                if control_name == "P1_BUTTON3" or control.get('is_custom', False):
+                    print(f"FINAL PREFIX for {control_name}: '{button_prefix}'")
+                    print("=== END CUSTOM CONTROL DEBUG ===\n")
                 
                 # Determine visibility based on directional mode and control type
                 is_visible = True
@@ -7618,9 +7625,15 @@ class PreviewWindow(QMainWindow):
         all_mappings = {**xinput_to_prefix, **dinput_to_prefix, **joycode_to_prefix, 
                         **keyboard_to_prefix, **directional_to_prefix}
         
-        # NEW CODE: Handle multiple button assignments with ||| separator
-        if "|||" in mapping:
-            parts = [part.strip() for part in mapping.split("|||")]
+        # Handle multiple button assignments with BOTH ||| and space separators
+        if "|||" in mapping or " " in mapping:
+            # Determine which separator to use
+            if "|||" in mapping:
+                parts = [part.strip() for part in mapping.split("|||")]
+            else:
+                # Handle space-separated mappings (like JOYCODE_1_BUTTON1 JOYCODE_1_BUTTON2)
+                parts = [part.strip() for part in mapping.split(" ") if part.strip()]
+            
             prefixes = []
             
             for part in parts:
@@ -7646,25 +7659,36 @@ class PreviewWindow(QMainWindow):
                     except:
                         pass
             
-            # Special handling for common directional pairs
-            if len(prefixes) == 2:
-                # Left/Right pair
-                if "←" in prefixes and "→" in prefixes:
-                    return "←/→"  # Directional arrows
-                # Up/Down pair
+            # Enhanced handling for common combinations
+            if len(prefixes) >= 2:
+                # Sort prefixes for consistent display
+                prefixes.sort()
+                
+                # Special cases for common button combinations
+                if set(prefixes) == {"A", "B"}:
+                    return "A+B"  # Your specific case!
+                elif set(prefixes) == {"X", "Y"}:
+                    return "X+Y"
+                elif set(prefixes) == {"LB", "RB"}:
+                    return "LB+RB"
+                elif set(prefixes) == {"LT", "RT"}:
+                    return "LT+RT"
+                # Handle directional pairs (keep your existing logic)
+                elif "←" in prefixes and "→" in prefixes:
+                    return "←/→"
                 elif "↑" in prefixes and "↓" in prefixes:
-                    return "↑/↓"  # Directional arrows
-                # D-pad pairs
+                    return "↑/↓"
                 elif "D←" in prefixes and "D→" in prefixes:
                     return "D←/→"
                 elif "D↑" in prefixes and "D↓" in prefixes:
                     return "D↑/↓"
-            
-            # Default case for other combinations
-            if prefixes:
-                return "/".join(prefixes)
-            
-            return ""  # No valid prefixes found
+                else:
+                    # For other combinations, use + for simultaneous presses
+                    return "+".join(prefixes)
+            elif len(prefixes) == 1:
+                return prefixes[0]
+            else:
+                return ""  # No valid prefixes found
         
         # Check for direct match in standard mappings
         if mapping in all_mappings:
