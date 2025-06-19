@@ -641,36 +641,6 @@ class PreviewWindow(QMainWindow):
         
         print(f"STARTUP: Initialized with directional mode '{self.directional_mode}'")
 
-    def load_bezel_settings_with_directional(self):
-        """Load bezel and directional mode settings from file in settings directory"""
-        settings = {
-            "bezel_visible": False,
-            "joystick_visible": True,  # Default to visible 
-            "auto_show_directionals_for_directional_only": True,
-            "directional_mode": "show_all",  # Add this
-            "hide_specialized_with_directional": False  # Add this
-        }
-        
-        try:
-            # Check new location first
-            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
-            
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
-                    loaded_settings = json.load(f)
-                    settings.update(loaded_settings)
-                    print(f"Loaded bezel/directional settings from {settings_file}: {settings}")
-        except Exception as e:
-            print(f"Error loading bezel/directional settings: {e}")
-        
-        # Set the directional mode variables
-        self.directional_mode = settings.get("directional_mode", "show_all")
-        self.joystick_visible = settings.get("joystick_visible", True)
-        self.hide_specialized_with_directional = settings.get("hide_specialized_with_directional", False)
-        self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
-
-        return settings
-
     def load_directional_mode_settings(self):
         """Load directional mode settings from bezel_settings.json (updated for 4 modes)"""
         try:
@@ -4382,39 +4352,6 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             return False
     
-    def center_logo(self):
-        """Center the logo horizontally in the canvas while preserving Y position"""
-        if not hasattr(self, 'logo_label') or not self.logo_label:
-            print("No logo to center")
-            return False
-
-        # Get canvas and logo dimensions
-        canvas_width = self.canvas.width()
-        logo_width = self.logo_label.width()
-        
-        # Get current Y position
-        current_pos = self.logo_label.pos()
-        current_y = current_pos.y()
-
-        # Calculate center X position
-        x = (canvas_width - logo_width) // 2
-
-        # Move logo to new X position, keeping current Y
-        self.logo_label.move(x, current_y)
-
-        # Update settings to enable horizontal centering
-        self.logo_settings["keep_horizontally_centered"] = True
-        self.logo_settings["custom_position"] = True
-        self.logo_settings["x_position"] = x
-        self.logo_settings["y_position"] = current_y
-
-        # Save to file immediately to persist across ROM changes
-        if hasattr(self, 'save_logo_settings'):
-            self.save_logo_settings(is_global=True)
-
-        print(f"Logo horizontally centered at X={x}, Y remains {current_y}")
-        return True
-    
     def load_logo_settings(self):
         """Load logo settings from file with new path handling and button text update"""
         settings = {
@@ -4866,105 +4803,6 @@ class PreviewWindow(QMainWindow):
         
         print(f"No logo found for {rom_name}")
         return None
-    
-    def update_logo_display(self):
-        """Update the logo display based on current settings with persistent horizontal centering"""
-        if not hasattr(self, 'logo_label') or not self.logo_label:
-            print("No logo label to update")
-            return
-            
-        # Make sure we have the original pixmap
-        if not hasattr(self, 'original_logo_pixmap') or not self.original_logo_pixmap or self.original_logo_pixmap.isNull():
-            # If we don't have original, use current pixmap as original
-            self.original_logo_pixmap = self.logo_label.pixmap()
-            if not self.original_logo_pixmap or self.original_logo_pixmap.isNull():
-                print("No logo pixmap available to resize")
-                return
-        
-        # Get current canvas dimensions 
-        canvas_width = self.canvas.width()
-        canvas_height = self.canvas.height()
-        
-        # Get size percentages from settings
-        width_percent = self.logo_settings.get("width_percentage", 15) / 100
-        height_percent = self.logo_settings.get("height_percentage", 15) / 100
-        
-        # Calculate pixel dimensions based on percentages
-        target_width = int(canvas_width * width_percent)
-        target_height = int(canvas_height * height_percent)
-        
-        print(f"Logo target size: {target_width}x{target_height} pixels ({width_percent*100:.1f}%, {height_percent*100:.1f}%)")
-        
-        # Get original size for reference
-        orig_width = self.original_logo_pixmap.width()
-        orig_height = self.original_logo_pixmap.height()
-        
-        # Handle aspect ratio if needed
-        if self.logo_settings.get("maintain_aspect", True):
-            orig_ratio = orig_width / orig_height if orig_height > 0 else 1
-            
-            # Calculate dimensions preserving aspect ratio
-            if (target_width / target_height) > orig_ratio:
-                # Height is limiting factor
-                final_height = target_height
-                final_width = int(final_height * orig_ratio)
-            else:
-                # Width is limiting factor
-                final_width = target_width
-                final_height = int(final_width / orig_ratio)
-        else:
-            # Use target dimensions directly
-            final_width = target_width
-            final_height = target_height
-        
-        # Apply minimum size constraints
-        final_width = max(30, final_width)
-        final_height = max(20, final_height)
-        
-        # Scale the original pixmap to the calculated size
-        scaled_pixmap = self.original_logo_pixmap.scaled(
-            final_width, 
-            final_height, 
-            Qt.KeepAspectRatio if self.logo_settings.get("maintain_aspect", True) else Qt.IgnoreAspectRatio, 
-            Qt.SmoothTransformation
-        )
-        
-        # Set the pixmap on the label
-        self.logo_label.setPixmap(scaled_pixmap)
-        
-        # Resize the label to match pixmap
-        self.logo_label.resize(scaled_pixmap.width(), scaled_pixmap.height())
-        
-        # Check if horizontal centering is enabled
-        is_horizontally_centered = self.logo_settings.get("keep_horizontally_centered", False)
-        
-        # Get current position
-        current_y = self.logo_settings.get("y_position", 20)
-        
-        if is_horizontally_centered:
-            # Calculate horizontal center position
-            x = (canvas_width - scaled_pixmap.width()) // 2
-            y = current_y  # Keep current Y position
-            
-            # Update X position in settings
-            self.logo_settings["x_position"] = x
-            
-            print(f"Logo horizontally centered at X={x}, Y={y}")
-        elif self.logo_settings.get("custom_position", False):
-            # Use custom position
-            x = self.logo_settings.get("x_position", 20)
-            y = self.logo_settings.get("y_position", 20)
-            print(f"Using custom logo position: ({x}, {y})")
-        else:
-            # Default position if no special handling
-            x = 20
-            y = 20
-            print(f"Using default logo position: (20, 20)")
-        
-        # Move to position
-        self.logo_label.move(x, y)
-        
-        print(f"Logo display updated: {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
         
     def delete_rom_specific_settings(self):
         """Delete ROM-specific settings files and refresh preview with global settings"""
