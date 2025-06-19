@@ -76,16 +76,20 @@ set preview_result=%errorlevel%
 echo.
 if %preview_result%==0 (
     echo [SUCCESS] Preview completed successfully
-) else (
-    echo [ERROR] Preview failed or was closed
-    echo.
-    echo Common issues:
-    echo   - Game name not found in database/cache
-    echo   - Missing cache file (try running precache first)
-    echo   - Invalid ROM name
-    echo.
-    echo Try running: python mame_controls_main.py --precache --game %game_name%
+    goto end_messages
 )
+
+echo [ERROR] Preview failed or was closed
+echo.
+echo Common issues:
+echo   - Game name not found in database/cache
+echo   - Missing cache file - try running precache first
+echo   - Invalid ROM name
+echo.
+echo Try running: python mame_controls_main.py --precache --game %game_name%
+echo.
+
+:end_messages
 
 echo.
 echo Press any key to exit...
