@@ -2132,7 +2132,7 @@ class PreviewWindow(QMainWindow):
         self.logo_button.setToolTip(
             f"Show/hide the game logo\n"
             f"Files in preview\\logos\\{self.rom_name}.png override standard locations\n"
-            f"Priority: preview\\logos > collections\\medium_artwork\\logo\{self.rom_name}.png"
+            f"Priority: preview\\logos > collections\\medium_artwork\\logo\\{self.rom_name}.png"
         )
         self.top_row.addWidget(self.logo_button)
         
@@ -7138,34 +7138,54 @@ class PreviewWindow(QMainWindow):
             print(f"Error saving directional mode settings: {e}")
     
     def create_control_labels(self, clean_mode=False):
-        """Create control labels with directional mode support and enhanced debugging for custom mappings"""
+        """Create control labels with directional mode support and batch optimization"""
         if not self.game_data or 'players' not in self.game_data:
             return
-                        
-        # CRITICAL FIX: Make sure we have properly loaded fonts
+                
+        print("=== BATCH CREATING CONTROL LABELS ===")
+        
+        # Pre-calculate EVERYTHING once at the top
         if not hasattr(self, 'current_font') or self.current_font is None:
             print("Font not initialized before creating labels - forcing font loading")
             self.load_and_register_fonts()
         
-        # Load saved positions
-        saved_positions = {}
-        if hasattr(self, 'load_saved_positions'):
-            try:
-                saved_positions = self.load_saved_positions()
-            except Exception as e:
-                print(f"Error loading saved positions: {e}")
+        # Cache all the expensive lookups
+        saved_positions = self.load_saved_positions() if hasattr(self, 'load_saved_positions') else {}
+        current_font = self.current_font
+        directional_mode = getattr(self, 'directional_mode', 'show_all')
+        y_offset = self.text_settings.get("y_offset", -40)
+        show_button_prefix = self.text_settings.get("show_button_prefix", True)
+        use_uppercase = self.text_settings.get("use_uppercase", False)
+        use_prefix_gradient = self.text_settings.get("use_prefix_gradient", False)
+        use_action_gradient = self.text_settings.get("use_action_gradient", False)
         
-        # Process controls
+        # Count controls first for better progress tracking
+        total_controls = 0
+        for player in self.game_data.get('players', []):
+            if player['number'] == 1:
+                total_controls += len(player.get('labels', []))
+        
+        print(f"Batch processing {total_controls} controls with pre-calculated settings")
+        
+        # Process controls with batch optimization
+        control_count = 0
         for player in self.game_data.get('players', []):
             if player['number'] != 1:  # Only show Player 1 controls
                 continue
-                            
-            # Debug ALL controls to see what's being processed
-            print(f"\n*** Processing controls for {self.rom_name} ***")
+                                
+            print(f"\n*** Batch processing controls for {self.rom_name} ***")
+            
+            # Create all controls for this player in one batch
             for control in player.get('labels', []):
+                control_count += 1
                 control_name = control['name']
                 action_text = control['value']
-                print(f"Control: {control_name}, Value: {action_text}, Mapping: {control.get('mapping', 'NONE')}")
+                
+                # Only print debug for custom controls to reduce log spam
+                if control.get('is_custom', False) or control_name == "P1_BUTTON3":
+                    # Only print debug for problematic controls
+                    if control_count <= 2 or control.get('is_custom', False):
+                        print(f"Control: {control_name}, Value: {action_text}, Mapping: {control.get('mapping', 'NONE')}")
                 
                 # Special debug for P1_BUTTON3 (or any custom controls)
                 if control_name == "P1_BUTTON3" or control.get('is_custom', False):
@@ -7301,31 +7321,10 @@ class PreviewWindow(QMainWindow):
                         label = ColoredDraggableLabel(display_text, self.canvas, settings=self.text_settings)
                     
                     # CRITICAL FIX: Apply font with priority order and debug info
-                    font_applied = False
-                    
-                    # 1. First try current_font (most specific)
-                    if hasattr(self, 'current_font') and self.current_font:
-                        label.setFont(self.current_font)
-                        print(f"Applied current_font to {control_name}: {self.current_font.family()}")
-                        font_applied = True
-                    
-                    # 2. Next try initialized_font
-                    elif hasattr(self, 'initialized_font') and self.initialized_font:
-                        label.setFont(self.initialized_font)
-                        print(f"Applied initialized_font to {control_name}: {self.initialized_font.family()}")
-                        font_applied = True
-                    
-                    # 3. If neither is available, create a new font with identical specs
-                    # to what would have been created by load_and_register_fonts
-                    if not font_applied:
-                        from PyQt5.QtGui import QFont
-                        font_family = self.text_settings.get("font_family", "Arial")
-                        font_size = self.text_settings.get("font_size", 28)
-                        font = QFont(font_family, font_size)
-                        font.setBold(self.text_settings.get("bold_strength", 2) > 0)
-                        font.setStyleStrategy(QFont.PreferMatch)  # CRITICAL: Ensure exact matching
-                        label.setFont(font)
-                        print(f"Created new font for {control_name}: {font.family()} (fallback)")
+                    # OPTIMIZED: Use pre-calculated font (much faster)
+                    label.setFont(current_font)
+                    if control_count <= 3:  # Only log first few controls
+                        print(f"Applied current_font to {control_name}: {current_font.family()}")
                     
                     # Position the label
                     label.move(x, y)
@@ -7417,7 +7416,9 @@ class PreviewWindow(QMainWindow):
         
         # Force a canvas update
         self.canvas.update()
-        print(f"Created {len(self.control_labels)} control labels with directional mode support")
+        print(f"=== BATCH CREATION COMPLETE ===")
+        print(f"Created {len(self.control_labels)} control labels in optimized batch mode")
+        print(f"Directional mode: {directional_mode}, Font: {current_font.family()}")
 
     def get_button_prefix_from_mapping(self, mapping):
         """Get the button prefix based on mapping string, including multiple button assignments"""
