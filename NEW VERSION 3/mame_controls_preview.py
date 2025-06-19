@@ -37,45 +37,57 @@ def get_mame_parent_dir(app_path=None):
 class PreviewWindow(QMainWindow):
     """Window for displaying game controls preview"""
     def __init__(self, rom_name, game_data, mame_dir, parent=None, hide_buttons=False, clean_mode=False, font_registry=None):
-        """Enhanced initialization with better parameter handling"""
+        """Enhanced initialization with correct parameter handling and order"""
+        
+        # Start timing
+        import time
+        self._init_start_time = time.time()
+        
+        def checkpoint(name):
+            """Record a timing checkpoint"""
+            current_time = time.time()
+            elapsed = current_time - self._init_start_time
+            print(f"⏱️  Checkpoint '{name}': {elapsed:.3f}s")
+        
         # Make sure we call super().__init__ with the correct parent parameter
-        # The parent must be a QWidget or None, not a string
-        super().__init__(parent)  # Ensure parent is passed correctly
+        super().__init__(parent)
+        checkpoint("super_init")
 
-        # Path handling
-        self.setVisible(False)  # Start invisible
+        # Path handling - Start invisible
+        self.setVisible(False)
         self.rom_name = rom_name
         self.game_data = game_data
+        checkpoint("basic_setup")
+        
+        # Initialize conversion maps
         self.initialize_conversion_maps()
-
+        
+        # Initialize flags and settings
         self._fonts_loaded = False
         self._initializing = True
-        self.debug_mode = False  # Set to True only for debugging
-
-        # Initialize input mode - ADD THIS
+        self.debug_mode = False
+        
+        # Initialize input mode
         self.use_xinput = game_data.get('input_mode') == 'xinput' if game_data else True
         print(f"Input mode for {rom_name}: {'XInput' if self.use_xinput else 'DirectInput'}")
+        checkpoint("conversion_maps")
 
-        # Set up path handling
+        # Set up directory structure
         if hasattr(self, 'setup_directory_structure'):
-            # Use the new directory structure setup method if available
             self.setup_directory_structure()
         else:
             # Legacy path handling
             self.app_dir = get_application_path()
             
-            # If mame_dir is in preview folder, adjust to parent
             if isinstance(mame_dir, str) and os.path.basename(mame_dir).lower() == "preview":
                 self.mame_dir = os.path.dirname(mame_dir)
             else:
                 self.mame_dir = mame_dir
                 
-            # Define key directories
             self.preview_dir = os.path.join(self.mame_dir, "preview")
             self.settings_dir = os.path.join(self.preview_dir, "settings")
             self.fonts_dir = os.path.join(self.preview_dir, "fonts")
             
-            # Create directories if they don't exist
             os.makedirs(self.settings_dir, exist_ok=True)
             os.makedirs(self.fonts_dir, exist_ok=True)
         
@@ -83,7 +95,9 @@ class PreviewWindow(QMainWindow):
         print(f"App directory: {self.app_dir if hasattr(self, 'app_dir') else 'Not set'}")
         print(f"MAME directory: {self.mame_dir}")
         print(f"Preview directory: {self.preview_dir if hasattr(self, 'preview_dir') else 'Not set'}")
+        checkpoint("directory_setup")
         
+        # Initialize control storage
         self.control_labels = {}
         self.bg_label = None
         
@@ -91,7 +105,6 @@ class PreviewWindow(QMainWindow):
         self.hide_buttons = hide_buttons
         self.clean_mode = clean_mode
         
-        # Print debugging info
         print(f"Initializing PreviewWindow for ROM: {rom_name}")
         print(f"Clean mode: {clean_mode}, Hide buttons: {hide_buttons}")
 
@@ -99,19 +112,68 @@ class PreviewWindow(QMainWindow):
         self.parent = parent
         
         try:
-            # Load settings
-            self.text_settings = self.load_text_settings()
-            self.logo_settings = self.load_logo_settings()
+            # 🔥 CRITICAL: Load settings in correct order
             
-            # Load bezel and directional settings
-            bezel_settings = self.load_bezel_settings_with_directional()
-            self.bezel_visible = bezel_settings.get("bezel_visible", False)
+            # 1. Load text settings FIRST (required for font loading)
+            try:
+                self.text_settings = self.load_text_settings()
+                print("✅ Text settings loaded successfully")
+            except Exception as e:
+                print(f"⚠️  Error loading text settings: {e}")
+                # Provide fallback defaults
+                self.text_settings = {
+                    "font_family": "Arial",
+                    "font_size": 28,
+                    "bold_strength": 2,
+                    "use_uppercase": False,
+                    "y_offset": -40,
+                    "show_button_prefix": True,
+                    "prefix_color": "#FFC107",
+                    "action_color": "#FFFFFF",
+                    "use_prefix_gradient": False,
+                    "use_action_gradient": False,
+                    "prefix_gradient_start": "#FFC107",
+                    "prefix_gradient_end": "#FF5722",
+                    "action_gradient_start": "#2196F3",
+                    "action_gradient_end": "#4CAF50"
+                }
+            checkpoint("text_settings")
+            
+            # 2. Load logo settings
+            try:
+                self.logo_settings = self.load_logo_settings()
+            except Exception as e:
+                print(f"⚠️  Error loading logo settings: {e}")
+                self.logo_settings = {
+                    "logo_visible": True,
+                    "custom_position": True,
+                    "x_position": 20,
+                    "y_position": 20,
+                    "width_percentage": 15,
+                    "height_percentage": 15,
+                    "maintain_aspect": True,
+                    "keep_horizontally_centered": False
+                }
+            checkpoint("logo_settings")
+            
+            # 3. Load bezel and directional settings
+            try:
+                bezel_settings = self.load_bezel_settings_with_directional()
+                self.bezel_visible = bezel_settings.get("bezel_visible", False)
+            except Exception as e:
+                print(f"⚠️  Error loading bezel settings: {e}")
+                self.bezel_visible = False
+                # Set defaults
+                self.directional_mode = "show_all"
+                self.joystick_visible = True
+                self.hide_specialized_with_directional = False
+                self.auto_show_directionals_for_directional_only = True
+            checkpoint("bezel_settings")
 
-            # NEW: Pre-analyze the game for directional-only status
+            # 4. Pre-analyze the game for directional-only status
             directional_count = 0
             button_count = 0
             
-            # Scan game data to identify control types
             # Analyze game controls to determine if it's standard-directional-only
             self.analyze_game_controls_improved()
 
@@ -125,7 +187,6 @@ class PreviewWindow(QMainWindow):
             self.joystick_visible = bezel_settings.get("joystick_visible", True)
             
             # IMPORTANT: Pre-determine whether directional controls should be visible
-            # This prevents the brief flash of visibility for directional-only games
             self.should_show_directional = self.joystick_visible
             if self.is_directional_only_game and self.auto_show_directionals_for_directional_only:
                 self.should_show_directional = True
@@ -133,7 +194,7 @@ class PreviewWindow(QMainWindow):
             else:
                 print(f"Using standard joystick visibility: {self.joystick_visible}")
             
-            # Initialize texts_visible BEFORE creating controls (fix for the error)
+            # Initialize texts_visible BEFORE creating controls
             self.texts_visible = True
 
             # Check if button prefix setting is initialized
@@ -142,9 +203,18 @@ class PreviewWindow(QMainWindow):
                 print("Initialized button prefix setting to default (True)")
             else:
                 print(f"Loaded button prefix setting: {self.text_settings['show_button_prefix']}")
+            checkpoint("game_analysis")
 
-            # CRITICAL: Force font loading BEFORE creating labels
-            self.load_and_register_fonts()
+            # 5. CRITICAL: Force font loading BEFORE creating labels (now text_settings exists)
+            try:
+                self.load_and_register_fonts()
+                print("✅ Fonts loaded successfully")
+            except Exception as e:
+                print(f"⚠️  Error loading fonts: {e}")
+                # Create a basic fallback font
+                from PyQt5.QtGui import QFont
+                self.current_font = QFont("Arial", 28)
+            checkpoint("font_loading")
             
             # Initialize logo_visible from settings
             self.logo_visible = self.logo_settings.get("logo_visible", True)
@@ -172,39 +242,39 @@ class PreviewWindow(QMainWindow):
             self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
             self.main_layout.addWidget(self.canvas, 1)
+            checkpoint("ui_setup")
 
             # Load background
             self.load_background_image_fullscreen()
 
             # Create control labels - WITH clean mode parameter
             self.create_control_labels(clean_mode=self.clean_mode)
+            checkpoint("control_labels")
 
             # Make sure the font is properly applied
             self.apply_text_settings()
             
             # Initialize alignment grid system
             self.alignment_grid_visible = False
-            self.grid_x_start = 200       # Default first column X-position
-            self.grid_x_step = 300        # Default X-spacing between columns
-            self.grid_y_start = 100       # Default first row Y-position
-            self.grid_y_step = 60         # Default Y-spacing between rows
-            self.grid_columns = 3         # Number of columns in grid
-            self.grid_rows = 8            # Number of rows in grid
-            self.grid_lines = []          # Empty list to store grid line objects
+            self.grid_x_start = 200
+            self.grid_x_step = 300
+            self.grid_y_start = 100
+            self.grid_y_step = 60
+            self.grid_columns = 3
+            self.grid_rows = 8
+            self.grid_lines = []
 
-            # Then, if you have a load_grid_settings method, call it after initializing defaults:
+            # Load grid settings if available
             try:
                 if hasattr(self, 'load_grid_settings'):
                     self.load_grid_settings()
             except Exception as e:
                 print(f"Error loading grid settings: {e}")
-                # Keep using defaults
+            checkpoint("grid_setup")
             
             # Add logo if enabled
             if self.logo_visible:
                 self.add_logo()
-                
-                # NEW: Add a small delay then force logo resize to ensure it applies correctly
                 QTimer.singleShot(100, self.force_logo_resize)
             
             # Create button frame as a FLOATING OVERLAY
@@ -222,6 +292,7 @@ class PreviewWindow(QMainWindow):
             self.current_screen = self.load_screen_setting_from_config()
             self.move_to_screen(self.current_screen)
             self.initializing_screen = False
+            checkpoint("screen_setup")
             
             # Bind ESC key to close
             self.keyPressEvent = self.handle_key_press
@@ -231,35 +302,27 @@ class PreviewWindow(QMainWindow):
             self.integrate_bezel_support()
             self.canvas.resizeEvent = self.on_canvas_resize_with_background
         
-            # Add this line to initialize bezel state after a short delay
+            # Add bezel state initialization after a short delay
             QTimer.singleShot(500, self.ensure_bezel_state)
             
             print("PreviewWindow initialization complete")
+            checkpoint("bezel_integration")
             
             # Initialize directional mode from saved settings AFTER creating button frame
-            self.init_directional_mode_on_startup()
-            
-            QTimer.singleShot(300, self.force_resize_all_labels)
-            QTimer.singleShot(1000, self.detect_screen_after_startup)
-            # Add this line at the end of __init__, just before self.setVisible(True)
-            self.enhance_preview_window_init()
+            if not hasattr(self, '_directional_mode_initialized'):
+                self.init_directional_mode_on_startup()
             
             # Make sure we have a transparent background
             transparent_bg_path = self.initialize_transparent_background()
             if transparent_bg_path:
-                # Ensure the background is loaded
                 self.load_background_image_fullscreen(force_default=transparent_bg_path)
             
             self.initialize_controller_close()
+            checkpoint("controller_setup")
             
             # CRITICAL: Enforce layer order AFTER everything is created but BEFORE showing
             self.enforce_layer_order()
             
-            # Find this section (near the end of __init__):
-            QTimer.singleShot(100, self.enforce_layer_order)
-            QTimer.singleShot(200, self.enforce_layer_order)
-
-            # ADD THESE LINES RIGHT HERE:
             # Initialize no buttons notification support
             self.no_buttons_label = None
             self.no_buttons_visible = False
@@ -277,14 +340,22 @@ class PreviewWindow(QMainWindow):
 
             # Update No Buttons visibility after a delay
             QTimer.singleShot(400, self.update_no_buttons_visibility)
+            checkpoint("no_buttons_setup")
 
-            self.setVisible(True)  # Now show the window
+            # Set visibility and finalize
+            self.setVisible(True)
 
             print(f"Window size: {self.width()}x{self.height()}")
             print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
             
+            # Finalize initialization
             self._initializing = False
-            QTimer.singleShot(500, self._finalize_initialization)  # Single consolidated timer
+            QTimer.singleShot(500, self._finalize_initialization)
+            checkpoint("final_setup")
+
+            # Calculate total time
+            total_time = time.time() - self._init_start_time
+            print(f"\n🚀 PreviewWindow initialized in {total_time:.3f} seconds")
 
         except Exception as e:
             print(f"Error in PreviewWindow initialization: {e}")
@@ -294,16 +365,55 @@ class PreviewWindow(QMainWindow):
             self.close()
 
     def _finalize_initialization(self):
-        """Consolidate all final initialization tasks"""
-        # Do all the final setup tasks at once
-        self.ensure_bezel_state()
-        self.force_resize_all_labels()
-        self.apply_text_settings()
-        self.enforce_layer_order()
-        self.update_no_buttons_visibility()
-        self.detect_screen_after_startup()
+        """Consolidate all final initialization tasks with guards"""
         
-        print("Final initialization tasks completed")
+        # Guard against multiple finalization
+        if hasattr(self, '_finalization_complete'):
+            print("Finalization already complete, skipping...")
+            return
+        
+        print("=== STARTING FINAL INITIALIZATION ===")
+        
+        # Track what we actually do
+        tasks_performed = []
+        
+        # Only run each task if needed
+        if not hasattr(self, '_bezel_state_ensured'):
+            self.ensure_bezel_state()
+            self._bezel_state_ensured = True
+            tasks_performed.append("bezel_state")
+        
+        if not hasattr(self, '_labels_force_resized'):
+            self.force_resize_all_labels()
+            self._labels_force_resized = True
+            tasks_performed.append("force_resize")
+        
+        if not hasattr(self, '_text_settings_applied'):
+            self.apply_text_settings()
+            self._text_settings_applied = True
+            tasks_performed.append("text_settings")
+        
+        # Layer order can be enforced multiple times safely, but limit it
+        if not hasattr(self, '_layer_order_enforced'):
+            self.enforce_layer_order()
+            self._layer_order_enforced = True
+            tasks_performed.append("layer_order")
+        
+        if not hasattr(self, '_no_buttons_updated'):
+            self.update_no_buttons_visibility()
+            self._no_buttons_updated = True
+            tasks_performed.append("no_buttons")
+        
+        if not hasattr(self, '_screen_detected'):
+            self.detect_screen_after_startup()
+            self._screen_detected = True
+            tasks_performed.append("screen_detect")
+        
+        # Set completion flag
+        self._finalization_complete = True
+        
+        print(f"=== FINALIZATION COMPLETE ===")
+        print(f"Tasks performed: {', '.join(tasks_performed) if tasks_performed else 'none (already done)'}")
     
     def create_no_buttons_notification(self):
         """Create the 'No Buttons Used' notification label"""
@@ -508,7 +618,14 @@ class PreviewWindow(QMainWindow):
         print(f"No Buttons notification position updated: {normalized_pos}")
     
     def init_directional_mode_on_startup(self):
-        """Initialize directional mode from saved settings on startup"""
+        """Initialize directional mode from saved settings on startup (with guard)"""
+        
+        # Guard against multiple initialization
+        if hasattr(self, '_directional_mode_initialized'):
+            print("Directional mode already initialized, skipping...")
+            return
+        
+        print("Initializing directional mode (first time)")
         
         # First load the directional mode settings
         self.load_directional_mode_settings()
@@ -518,6 +635,9 @@ class PreviewWindow(QMainWindow):
         
         # Update the button text to match the current mode
         self.update_directional_mode_button_text()
+        
+        # Set the guard flag
+        self._directional_mode_initialized = True
         
         print(f"STARTUP: Initialized with directional mode '{self.directional_mode}'")
 
@@ -4186,53 +4306,37 @@ class PreviewWindow(QMainWindow):
     
     def load_bezel_settings(self):
         """Load bezel settings with caching"""
+        # Return cached result if available
         if hasattr(self, '_cached_bezel_settings'):
+            print("Using cached bezel settings")
             return self._cached_bezel_settings
+        
+        print("Loading bezel settings (first time)")
         """Load bezel and joystick visibility settings from file in settings directory"""
         settings = {
-            "bezel_visible": False,  # Default to hidden
-            "joystick_visible": False,  # Default to hidden 
-            "auto_show_directionals_for_directional_only": True  # Default to enabled
+            "bezel_visible": False,
+            "joystick_visible": False,
+            "auto_show_directionals_for_directional_only": True
         }
         
         try:
-            # Check new location first
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
             
-            # If not found, check legacy locations
-            if not os.path.exists(settings_file):
-                legacy_paths = [
-                    os.path.join(self.preview_dir, "global_bezel.json"),
-                    os.path.join(self.preview_dir, f"{self.rom_name}_bezel.json")
-                ]
-                
-                for legacy_path in legacy_paths:
-                    if os.path.exists(legacy_path):
-                        # Load from legacy location
-                        with open(legacy_path, 'r') as f:
-                            loaded_settings = json.load(f)
-                        
-                        # Migrate to new location
-                        os.makedirs(os.path.dirname(settings_file), exist_ok=True)
-                        with open(settings_file, 'w') as f:
-                            json.dump(loaded_settings, f)
-                        
-                        print(f"Migrated bezel settings from {legacy_path} to {settings_file}")
-                        settings.update(loaded_settings)
-                        return settings
-            
-            # Regular loading from new location
             if os.path.exists(settings_file):
                 with open(settings_file, 'r') as f:
                     loaded_settings = json.load(f)
                     settings.update(loaded_settings)
-                    print(f"Loaded bezel/joystick settings from {settings_file}: {settings}")
+                    print(f"Loaded bezel/joystick settings from {settings_file}")
+            
+            # Cache the result
+            self._cached_bezel_settings = settings
+            print(f"Cached bezel settings for future use")
+            
         except Exception as e:
             print(f"Error loading bezel/joystick settings: {e}")
+            # Cache the defaults even on error
+            self._cached_bezel_settings = settings
         
-        self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
-
-        self._cached_bezel_settings = settings
         return settings
 
     # ALSO FIX: Your save_bezel_settings method is overwriting directional settings
@@ -5464,37 +5568,50 @@ class PreviewWindow(QMainWindow):
             except:
                 print("Failed to create emergency fallback background")
 
-    # ALSO ADD: Simple resize handler for debugging
     def on_canvas_resize_with_background(self, event):
-        """Simplified resize handler for debugging"""
+        """Debounced canvas resize handler"""
+        # Cancel any pending resize operation
+        if hasattr(self, '_canvas_resize_timer'):
+            self._canvas_resize_timer.stop()
+        
+        # Store the event for the actual resize
+        self._pending_resize_event = event
+        
+        # Create new timer for debounced resize
+        self._canvas_resize_timer = QTimer()
+        self._canvas_resize_timer.setSingleShot(True)
+        self._canvas_resize_timer.timeout.connect(self._do_canvas_resize)
+        self._canvas_resize_timer.start(50)  # 50ms debounce
+
+    def _do_canvas_resize(self):
+        """Actually perform the canvas resize"""
         try:
-            print(f"\n--- Canvas resize event: {self.canvas.width()}x{self.canvas.height()} ---")
+            event = getattr(self, '_pending_resize_event', None)
+            if not event:
+                return
+                
+            print(f"--- Canvas resize event: {self.canvas.width()}x{self.canvas.height()} (debounced) ---")
             
-            # Only handle background resizing for now
+            # Your existing resize logic here
             if hasattr(self, 'original_background_pixmap') and not self.original_background_pixmap.isNull():
                 print("DEBUG: Resizing background...")
                 
                 canvas_w = self.canvas.width()
                 canvas_h = self.canvas.height()
                 
-                # Scale to fill canvas
                 scaled_pixmap = self.original_background_pixmap.scaled(
-                    canvas_w, 
-                    canvas_h, 
+                    canvas_w, canvas_h, 
                     Qt.IgnoreAspectRatio,
                     Qt.SmoothTransformation
                 )
                 
-                # Update background
                 if hasattr(self, 'bg_label') and self.bg_label:
                     self.bg_label.setPixmap(scaled_pixmap)
                     self.bg_label.setGeometry(0, 0, canvas_w, canvas_h)
-                    print(f"DEBUG: Background resized to {canvas_w}x{canvas_h}")
-            
-            # Skip other resize handling for now to isolate the background issue
+                    print(f"DEBUG: Background resized to {canvas_w}x{canvas_h} (debounced)")
             
         except Exception as e:
-            print(f"ERROR in resize handler: {e}")
+            print(f"ERROR in debounced resize handler: {e}")
 
     def get_game_mappings(self):
         """Extract mappings from game data, supporting both gamedata.json and cache formats"""
