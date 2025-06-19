@@ -47,7 +47,11 @@ class PreviewWindow(QMainWindow):
         self.rom_name = rom_name
         self.game_data = game_data
         self.initialize_conversion_maps()
-        
+
+        self._fonts_loaded = False
+        self._initializing = True
+        self.debug_mode = False  # Set to True only for debugging
+
         # Initialize input mode - ADD THIS
         self.use_xinput = game_data.get('input_mode') == 'xinput' if game_data else True
         print(f"Input mode for {rom_name}: {'XInput' if self.use_xinput else 'DirectInput'}")
@@ -279,6 +283,9 @@ class PreviewWindow(QMainWindow):
             print(f"Window size: {self.width()}x{self.height()}")
             print(f"Canvas size: {self.canvas.width()}x{self.canvas.height()}")
             
+            self._initializing = False
+            QTimer.singleShot(500, self._finalize_initialization)  # Single consolidated timer
+
         except Exception as e:
             print(f"Error in PreviewWindow initialization: {e}")
             import traceback
@@ -286,6 +293,18 @@ class PreviewWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Error initializing preview: {e}")
             self.close()
 
+    def _finalize_initialization(self):
+        """Consolidate all final initialization tasks"""
+        # Do all the final setup tasks at once
+        self.ensure_bezel_state()
+        self.force_resize_all_labels()
+        self.apply_text_settings()
+        self.enforce_layer_order()
+        self.update_no_buttons_visibility()
+        self.detect_screen_after_startup()
+        
+        print("Final initialization tasks completed")
+    
     def create_no_buttons_notification(self):
         """Create the 'No Buttons Used' notification label"""
         
@@ -1705,11 +1724,16 @@ class PreviewWindow(QMainWindow):
         
         return show_prefixes
     
-    # Fix 3: Enhanced load_and_register_fonts with better debugging
+    # 1. FONT LOADING (happening multiple times)
+    # Fix: Add a font loading guard
     def load_and_register_fonts(self):
         """Load and register fonts from settings at startup with improved error detection"""
         from PyQt5.QtGui import QFontDatabase, QFont, QFontInfo
         
+        if hasattr(self, '_fonts_loaded') and self._fonts_loaded:
+            print("Fonts already loaded, skipping...")
+            return self.current_font
+    
         print("\n=== LOADING FONTS ===")
         # Get requested font from settings
         font_family = self.text_settings.get("font_family", "Arial")
@@ -1781,7 +1805,10 @@ class PreviewWindow(QMainWindow):
         # Apply the font to existing controls if any
         self.apply_current_font_to_controls()
         
-        return self.current_font  # Return the created font for reference
+        # Set the guard flag
+        self._fonts_loaded = True
+        print("=== FONT LOADING COMPLETE ===\n")
+        return self.current_font
 
     def apply_current_font_to_controls(self):
         """Apply the current font to all control labels and properly resize them"""
@@ -2338,12 +2365,24 @@ class PreviewWindow(QMainWindow):
         if hasattr(self, 'bezel_button'):
             self.bezel_button.setText("Hide Bezel" if self.bezel_visible else "Show Bezel")
     
+    # 3. FORCE RESIZE ALL LABELS (happening 5+ times)
+    # Fix: Add debouncing
     def force_resize_all_labels(self):
+        """Force resize with debouncing"""
+        if hasattr(self, '_resize_timer'):
+            self._resize_timer.stop()
+        
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self._do_force_resize_all_labels)
+        self._resize_timer.start(100)  # 100ms debounce
+    
+    def _do_force_resize_all_labels(self):
         """Force all control labels to resize according to their content with extra padding for different fonts"""
         if not hasattr(self, 'control_labels'):
             return
                     
-        print("Force resizing all control labels")
+        print("Force resizing all control labels (debounced)")
         for control_name, control_data in self.control_labels.items():
             if 'label' in control_data and control_data['label']:
                 label = control_data['label']
@@ -2519,7 +2558,20 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             self.bezel_visible = False
 
+    # 2. LAYER ORDER ENFORCEMENT (happening 6+ times)
+    # Fix: Add debouncing and reduce redundant calls
     def enforce_layer_order(self):
+        """Enforce layer order with debouncing"""
+        # Debounce rapid calls
+        if hasattr(self, '_enforce_timer'):
+            self._enforce_timer.stop()
+        
+        self._enforce_timer = QTimer()
+        self._enforce_timer.setSingleShot(True)
+        self._enforce_timer.timeout.connect(self._do_enforce_layer_order)
+        self._enforce_timer.start(50)  # 50ms debounce
+    
+    def _do_enforce_layer_order(self):
         """
         Enforce the correct stacking order for all elements with logo on top:
         1. Background (bottom)
@@ -2527,7 +2579,7 @@ class PreviewWindow(QMainWindow):
         3. Controls (above bezel)
         4. Logo (top - must be interactive)
         """
-        print("\n--- Enforcing strict layer order with logo on top ---")
+        print("\n--- Enforcing layer order (debounced) ---")
         
         # Step 1: Send background to the absolute bottom
         if hasattr(self, 'bg_label') and self.bg_label:
@@ -2572,7 +2624,7 @@ class PreviewWindow(QMainWindow):
         print("Layer order enforcement complete: Background -> Bezel -> Controls -> Logo (top)")
 
     def toggle_bezel_improved(self):
-        """Toggle bezel visibility and save the setting globally"""
+        """Toggle bezel visibility and save ONLY bezel setting"""
         if not self.has_bezel:
             print("No bezel available to toggle")
             return
@@ -2595,11 +2647,38 @@ class PreviewWindow(QMainWindow):
         # CRITICAL: Enforce correct layer order with logo on top
         self.enforce_layer_order()
         
-        # ALWAYS save as global settings
-        self.save_bezel_settings(is_global=True)
+        # FIXED: Save ONLY bezel visibility, don't touch directional settings
+        self.save_bezel_visibility_only()
         self.show_toast_notification("Bezel visibility saved")
         print(f"Saved bezel visibility ({self.bezel_visible}) to GLOBAL settings")
 
+    # NEW METHOD: Save only bezel visibility without affecting directional settings
+    def save_bezel_visibility_only(self):
+        """Save ONLY bezel visibility without affecting other settings"""
+        try:
+            # Load existing settings first to preserve them
+            settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
+            existing_settings = {}
+            
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    existing_settings = json.load(f)
+            
+            # Update ONLY the bezel visibility
+            existing_settings["bezel_visible"] = self.bezel_visible
+            
+            # Write back to file, preserving all other settings
+            os.makedirs(self.settings_dir, exist_ok=True)
+            with open(settings_file, 'w') as f:
+                json.dump(existing_settings, f)
+            
+            print(f"Saved ONLY bezel visibility: {self.bezel_visible}")
+            return True
+            
+        except Exception as e:
+            print(f"Error saving bezel visibility: {e}")
+            return False
+    
     # Improved method to raise controls above bezel
     def raise_controls_above_bezel(self):
         """Ensure all controls are above the bezel with proper debug info"""
@@ -4106,6 +4185,9 @@ class PreviewWindow(QMainWindow):
         return settings
     
     def load_bezel_settings(self):
+        """Load bezel settings with caching"""
+        if hasattr(self, '_cached_bezel_settings'):
+            return self._cached_bezel_settings
         """Load bezel and joystick visibility settings from file in settings directory"""
         settings = {
             "bezel_visible": False,  # Default to hidden
@@ -4150,11 +4232,12 @@ class PreviewWindow(QMainWindow):
         
         self.auto_show_directionals_for_directional_only = settings.get("auto_show_directionals_for_directional_only", True)
 
+        self._cached_bezel_settings = settings
         return settings
 
-    # Add method to save bezel settings
+    # ALSO FIX: Your save_bezel_settings method is overwriting directional settings
     def save_bezel_settings(self, is_global=True):
-        """Save bezel and joystick visibility settings to file in settings directory"""
+        """Save bezel and directional settings - FIXED VERSION"""
         try:
             # Create settings directory if it doesn't exist
             os.makedirs(self.settings_dir, exist_ok=True)
@@ -4162,22 +4245,35 @@ class PreviewWindow(QMainWindow):
             # Settings file path - always global in new structure
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
             
-            # Create settings object - UNCOMMENT the joystick_visible line!
-            settings = {
-                "bezel_visible": self.bezel_visible,
-                "joystick_visible": getattr(self, 'joystick_visible', True),  # ← UNCOMMENT THIS LINE!
-                "auto_show_directionals_for_directional_only": getattr(self, 'auto_show_directionals_for_directional_only', True)
+            # Load existing settings first to avoid overwriting
+            existing_settings = {}
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    existing_settings = json.load(f)
+            
+            # Create settings object with current values
+            new_settings = {
+                "bezel_visible": getattr(self, 'bezel_visible', False),
+                "joystick_visible": getattr(self, 'joystick_visible', True),
+                "auto_show_directionals_for_directional_only": getattr(self, 'auto_show_directionals_for_directional_only', True),
+                "directional_mode": getattr(self, 'directional_mode', 'show_all'),
+                "hide_specialized_with_directional": getattr(self, 'hide_specialized_with_directional', False)
             }
+            
+            # Merge with existing settings (existing takes precedence for unset values)
+            for key, value in existing_settings.items():
+                if key not in new_settings:
+                    new_settings[key] = value
             
             # Save settings
             with open(settings_file, 'w') as f:
-                json.dump(settings, f)
+                json.dump(new_settings, f)
                 
-            print(f"Saved bezel/joystick settings to {settings_file}: {settings}")
-                
+            print(f"Saved bezel/directional settings to {settings_file}: {new_settings}")
             return True
+            
         except Exception as e:
-            print(f"Error saving bezel/joystick settings: {e}")
+            print(f"Error saving bezel/directional settings: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -4536,91 +4632,7 @@ class PreviewWindow(QMainWindow):
                 self.logo_label.setCursor(Qt.SizeFDiagCursor)
             else:
                 self.logo_label.setCursor(Qt.OpenHandCursor)
-                
-    # Add a method that forces the logo to resize according to settings
-    def force_logo_resize(self):
-        """Force logo to resize according to current settings with improved center handling"""
-        if not hasattr(self, 'logo_label') or not self.logo_label:
-            print("No logo label to resize")
-            return False
-            
-        if not hasattr(self, 'original_logo_pixmap') or self.original_logo_pixmap.isNull():
-            # Try to load the logo image again
-            logo_path = self.find_logo_path(self.rom_name)
-            if not logo_path:
-                print("Cannot force resize - no logo image found")
-                return False
-                
-            self.original_logo_pixmap = QPixmap(logo_path)
-            if self.original_logo_pixmap.isNull():
-                print("Cannot force resize - failed to load logo image")
-                return False
-        
-        # Get canvas and logo dimensions
-        canvas_width = self.canvas.width()
-        canvas_height = self.canvas.height()
-        
-        # Calculate target size
-        width_percent = float(self.logo_settings.get("width_percentage", 15))
-        height_percent = float(self.logo_settings.get("height_percentage", 15))
-        
-        target_width = int((width_percent / 100) * canvas_width)
-        target_height = int((height_percent / 100) * canvas_height)
-        
-        print(f"Force-resizing logo to {target_width}x{target_height} pixels " +
-            f"({width_percent:.1f}%, {height_percent:.1f}%)")
-        
-        # Scale the pixmap to the target size
-        if self.logo_settings.get("maintain_aspect", True):
-            scaled_pixmap = self.original_logo_pixmap.scaled(
-                target_width, 
-                target_height, 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
-            )
-        else:
-            scaled_pixmap = self.original_logo_pixmap.scaled(
-                target_width, 
-                target_height, 
-                Qt.IgnoreAspectRatio, 
-                Qt.SmoothTransformation
-            )
-        
-        # Apply the scaled pixmap
-        self.logo_label.setPixmap(scaled_pixmap)
-        
-        # Ensure label size matches pixmap size
-        self.logo_label.resize(scaled_pixmap.width(), scaled_pixmap.height())
-        
-        # Check for center position override
-        is_centered = self.logo_settings.get("logo_position", "") == "center"
-        
-        # Position the logo
-        if is_centered:
-            # Center the logo regardless of custom position flag
-            x = (canvas_width - scaled_pixmap.width()) // 2
-            y = (canvas_height - scaled_pixmap.height()) // 2
-            self.logo_label.move(x, y)
-            
-            # Update stored position
-            self.logo_settings["x_position"] = x
-            self.logo_settings["y_position"] = y
-            print(f"Logo centered at ({x}, {y}) after resize")
-        elif self.logo_settings.get("custom_position", False):
-            # Use custom position if not centered
-            x = self.logo_settings.get("x_position", 20)
-            y = self.logo_settings.get("y_position", 20)
-            self.logo_label.move(x, y)
-            print(f"Logo positioned at custom ({x}, {y}) after resize")
-        else:
-            # Use preset position
-            position = self.logo_settings.get("logo_position", "top-left")
-            self.position_logo(position)
-            print(f"Logo positioned at {position} after resize")
-        
-        print(f"Logo resized to {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
-        return True
-    
+
     def handle_logo_during_resize(self):
         """Update logo position during resize, maintaining horizontal centering"""
         if not hasattr(self, 'logo_label') or not self.logo_label or not self.logo_label.isVisible():
@@ -5311,137 +5323,9 @@ class PreviewWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             return None
-    
-    def load_background_image_fullscreen(self, force_default=None):
-        """Load the background image for the game with mapping support and improved path handling"""
-        try:
-            image_path = None
-            
-            # If force_default is provided, use it directly
-            if force_default and os.path.exists(force_default):
-                image_path = force_default
-                print(f"Using forced default background: {image_path}")
-            else:
-                # Build priority list for background images
-                possible_paths = []
-                
-                # Priority 1: ROM-specific images in preview/images directory
-                possible_paths.extend([
-                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.png"),
-                    os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
-                ])
-                
-                # Priority 2: Mapping-based images (if mappings exist)
-                mappings = self.get_game_mappings()
-                if mappings:
-                    print(f"Found mappings for {self.rom_name}: {mappings}")
-                    for mapping in mappings:
-                        possible_paths.extend([
-                            os.path.join(self.preview_dir, "images", f"{mapping}.png"),
-                            os.path.join(self.preview_dir, "images", f"{mapping}.jpg"),
-                        ])
-                
-                # Priority 3: ROM-specific images in preview root
-                possible_paths.extend([
-                    os.path.join(self.preview_dir, f"{self.rom_name}.png"),
-                    os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
-                ])
-                
-                # Priority 4: Default images
-                possible_paths.extend([
-                    os.path.join(self.preview_dir, "images", "default.png"),
-                    os.path.join(self.preview_dir, "images", "default.jpg"),
-                    os.path.join(self.preview_dir, "default.png"),
-                    os.path.join(self.preview_dir, "default.jpg"),
-                ])
-                
-                # Find the first existing image path
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        image_path = path
-                        print(f"Found background image: {image_path}")
-                        break
-                
-                # If no image found, create transparent default
-                if not image_path:
-                    image_path = self.initialize_transparent_background()
-                    
-            # Set background image if found or created
-            if image_path:
-                # Create background label with image
-                self.bg_label = QLabel(self.canvas)
-                
-                # Load the original pixmap without scaling yet
-                original_pixmap = QPixmap(image_path)
-                
-                if original_pixmap.isNull():
-                    print(f"Error: Could not load image from {image_path}")
-                    self.bg_label.setText("Error loading background image")
-                    self.bg_label.setStyleSheet("color: red; font-size: 18px;")
-                    self.bg_label.setAlignment(Qt.AlignCenter)
-                    return
-                
-                # Store the original pixmap for high-quality saving later
-                self.original_background_pixmap = original_pixmap
-                
-                # Create a high-quality scaled version to display
-                # Calculate aspect ratio preserving fit
-                canvas_w = self.canvas.width()
-                canvas_h = self.canvas.height()
-                
-                # Calculate the scaled size that fills the canvas while preserving aspect ratio
-                scaled_pixmap = original_pixmap.scaled(
-                    canvas_w, 
-                    canvas_h, 
-                    Qt.KeepAspectRatio,  # Preserve aspect ratio
-                    Qt.SmoothTransformation  # High quality scaling
-                )
-                
-                # Store the properly scaled pixmap
-                self.background_pixmap = scaled_pixmap
-                
-                # Set it on the label
-                self.bg_label.setPixmap(scaled_pixmap)
-                
-                # Position the background image in the center
-                x = (canvas_w - scaled_pixmap.width()) // 2
-                y = (canvas_h - scaled_pixmap.height()) // 2
-                self.bg_label.setGeometry(x, y, scaled_pixmap.width(), scaled_pixmap.height())
-                
-                # Store the background position for control positioning
-                self.bg_pos = (x, y)
-                self.bg_size = (scaled_pixmap.width(), scaled_pixmap.height())
-                
-                # Make sure the background is below everything
-                self.bg_label.lower()
-                
-                print(f"Background loaded: {scaled_pixmap.width()}x{scaled_pixmap.height()}, positioned at ({x},{y})")
-                
-                # Update when window resizes
-                self.canvas.resizeEvent = self.on_canvas_resize_with_background
-            else:
-                # Fallback to a transparent background
-                print("Could not create or find a background image, using transparent background")
-                self.bg_label = QLabel(self.canvas)
-                self.bg_label.setStyleSheet("background-color: transparent;")
-                self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
-        except Exception as e:
-            print(f"Error loading background image: {e}")
-            import traceback
-            traceback.print_exc()
-            # Handle error by showing message on canvas
-            if hasattr(self, 'bg_label') and self.bg_label:
-                self.bg_label.setText(f"Error loading image: {str(e)}")
-                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
-                self.bg_label.setAlignment(Qt.AlignCenter)
-            else:
-                self.bg_label = QLabel(f"Error: {str(e)}", self.canvas)
-                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
-                self.bg_label.setAlignment(Qt.AlignCenter)
-                self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
 
     def load_background_image_fullscreen(self, force_default=None):
-        """Load the background image for the game with mapping support and improved path handling"""
+        """Load background image with detailed debugging"""
         try:
             image_path = None
             
@@ -5459,28 +5343,10 @@ class PreviewWindow(QMainWindow):
                     os.path.join(self.preview_dir, "images", f"{self.rom_name}.jpg"),
                 ])
                 
-                # Priority 2: Mapping-based images (if mappings exist)
-                mappings = self.get_game_mappings()
-                if mappings:
-                    print(f"Found mappings for {self.rom_name}: {mappings}")
-                    for mapping in mappings:
-                        possible_paths.extend([
-                            os.path.join(self.preview_dir, "images", f"{mapping}.png"),
-                            os.path.join(self.preview_dir, "images", f"{mapping}.jpg"),
-                        ])
-                
-                # Priority 3: ROM-specific images in preview root
-                possible_paths.extend([
-                    os.path.join(self.preview_dir, f"{self.rom_name}.png"),
-                    os.path.join(self.preview_dir, f"{self.rom_name}.jpg"),
-                ])
-                
-                # Priority 4: Default images
+                # Priority 2: Default images
                 possible_paths.extend([
                     os.path.join(self.preview_dir, "images", "default.png"),
                     os.path.join(self.preview_dir, "images", "default.jpg"),
-                    os.path.join(self.preview_dir, "default.png"),
-                    os.path.join(self.preview_dir, "default.jpg"),
                 ])
                 
                 # Find the first existing image path
@@ -5493,80 +5359,142 @@ class PreviewWindow(QMainWindow):
                 # If no image found, create transparent default
                 if not image_path:
                     image_path = self.initialize_transparent_background()
+                    print(f"Created transparent background: {image_path}")
                     
+            # DEBUG: Print what we're about to load
+            print(f"DEBUG: About to load background from: {image_path}")
+            print(f"DEBUG: File exists: {os.path.exists(image_path) if image_path else False}")
+            
             # Set background image if found or created
-            if image_path:
-                # Create background label with image
+            if image_path and os.path.exists(image_path):
+                # Clean up existing background
+                if hasattr(self, 'bg_label') and self.bg_label:
+                    print("DEBUG: Cleaning up existing background")
+                    self.bg_label.deleteLater()
+                    
+                # Create new background label
+                print("DEBUG: Creating new background label")
                 self.bg_label = QLabel(self.canvas)
                 
-                # Load the original pixmap without scaling yet
+                # Load the original pixmap
+                print(f"DEBUG: Loading pixmap from {image_path}")
                 original_pixmap = QPixmap(image_path)
                 
                 if original_pixmap.isNull():
-                    print(f"Error: Could not load image from {image_path}")
+                    print(f"ERROR: Could not load pixmap from {image_path}")
                     self.bg_label.setText("Error loading background image")
                     self.bg_label.setStyleSheet("color: red; font-size: 18px;")
                     self.bg_label.setAlignment(Qt.AlignCenter)
+                    self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
                     return
                 
-                # Store the original pixmap for high-quality saving later
+                print(f"DEBUG: Original pixmap size: {original_pixmap.width()}x{original_pixmap.height()}")
+                
+                # Store the original pixmap
                 self.original_background_pixmap = original_pixmap
                 
-                # Create a high-quality scaled version to display
-                # Calculate aspect ratio preserving fit
+                # Get current canvas dimensions
                 canvas_w = self.canvas.width()
                 canvas_h = self.canvas.height()
+                print(f"DEBUG: Canvas size: {canvas_w}x{canvas_h}")
                 
-                # Calculate the scaled size that fills the canvas while preserving aspect ratio
+                # SIMPLIFIED LOGIC: Always scale to fill canvas for now
                 scaled_pixmap = original_pixmap.scaled(
                     canvas_w, 
                     canvas_h, 
-                    Qt.KeepAspectRatio,  # Preserve aspect ratio
-                    Qt.SmoothTransformation  # High quality scaling
+                    Qt.IgnoreAspectRatio,  # Fill entire canvas
+                    Qt.SmoothTransformation
                 )
                 
-                # Store the properly scaled pixmap
+                print(f"DEBUG: Scaled pixmap size: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
+                
+                # Always position at origin for now
+                x, y = 0, 0
+                
+                # Store the scaled pixmap
                 self.background_pixmap = scaled_pixmap
                 
-                # Set it on the label
+                # Set pixmap on label
+                print("DEBUG: Setting pixmap on label")
                 self.bg_label.setPixmap(scaled_pixmap)
                 
-                # Position the background image in the center
-                x = (canvas_w - scaled_pixmap.width()) // 2
-                y = (canvas_h - scaled_pixmap.height()) // 2
+                # Position the background
+                print(f"DEBUG: Positioning background at ({x},{y}) with size {scaled_pixmap.width()}x{scaled_pixmap.height()}")
                 self.bg_label.setGeometry(x, y, scaled_pixmap.width(), scaled_pixmap.height())
                 
-                # Store the background position for control positioning
+                # Store position info
                 self.bg_pos = (x, y)
                 self.bg_size = (scaled_pixmap.width(), scaled_pixmap.height())
                 
-                # Make sure the background is below everything
+                # Make sure background is below everything
+                print("DEBUG: Lowering background to bottom layer")
                 self.bg_label.lower()
                 
-                print(f"Background loaded: {scaled_pixmap.width()}x{scaled_pixmap.height()}, positioned at ({x},{y})")
+                # Make sure it's visible
+                print("DEBUG: Making background visible")
+                self.bg_label.setVisible(True)
+                self.bg_label.show()
                 
-                # Update when window resizes
+                print(f"SUCCESS: Background loaded: {scaled_pixmap.width()}x{scaled_pixmap.height()}, positioned at ({x},{y})")
+                
+                # Update resize handler
                 self.canvas.resizeEvent = self.on_canvas_resize_with_background
+                
             else:
-                # Fallback to a transparent background
-                print("Could not create or find a background image, using transparent background")
+                print("ERROR: No background image path found or file doesn't exist")
+                # Create a fallback colored background for debugging
                 self.bg_label = QLabel(self.canvas)
-                self.bg_label.setStyleSheet("background-color: transparent;")
+                self.bg_label.setStyleSheet("background-color: #1a1a1a;")  # Dark gray for debugging
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
+                self.bg_label.show()
+                print("DEBUG: Created fallback colored background")
+                
         except Exception as e:
-            print(f"Error loading background image: {e}")
+            print(f"EXCEPTION in load_background_image_fullscreen: {e}")
             import traceback
             traceback.print_exc()
-            # Handle error by showing message on canvas
-            if hasattr(self, 'bg_label') and self.bg_label:
-                self.bg_label.setText(f"Error loading image: {str(e)}")
-                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
-                self.bg_label.setAlignment(Qt.AlignCenter)
-            else:
-                self.bg_label = QLabel(f"Error: {str(e)}", self.canvas)
-                self.bg_label.setStyleSheet("color: red; font-size: 18px;")
+            
+            # Emergency fallback
+            try:
+                self.bg_label = QLabel("Background Load Error", self.canvas)
+                self.bg_label.setStyleSheet("color: red; font-size: 18px; background-color: black;")
                 self.bg_label.setAlignment(Qt.AlignCenter)
                 self.bg_label.setGeometry(0, 0, self.canvas.width(), self.canvas.height())
+                self.bg_label.show()
+            except:
+                print("Failed to create emergency fallback background")
+
+    # ALSO ADD: Simple resize handler for debugging
+    def on_canvas_resize_with_background(self, event):
+        """Simplified resize handler for debugging"""
+        try:
+            print(f"\n--- Canvas resize event: {self.canvas.width()}x{self.canvas.height()} ---")
+            
+            # Only handle background resizing for now
+            if hasattr(self, 'original_background_pixmap') and not self.original_background_pixmap.isNull():
+                print("DEBUG: Resizing background...")
+                
+                canvas_w = self.canvas.width()
+                canvas_h = self.canvas.height()
+                
+                # Scale to fill canvas
+                scaled_pixmap = self.original_background_pixmap.scaled(
+                    canvas_w, 
+                    canvas_h, 
+                    Qt.IgnoreAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                
+                # Update background
+                if hasattr(self, 'bg_label') and self.bg_label:
+                    self.bg_label.setPixmap(scaled_pixmap)
+                    self.bg_label.setGeometry(0, 0, canvas_w, canvas_h)
+                    print(f"DEBUG: Background resized to {canvas_w}x{canvas_h}")
+            
+            # Skip other resize handling for now to isolate the background issue
+            
+        except Exception as e:
+            print(f"ERROR in resize handler: {e}")
 
     def get_game_mappings(self):
         """Extract mappings from game data, supporting both gamedata.json and cache formats"""
@@ -5755,7 +5683,19 @@ class PreviewWindow(QMainWindow):
         print(f"Logo horizontally centered at X={x}, Y remains {current_y}")
         return True
 
+    # 4. LOGO FORCE RESIZE (happening 3 times)
+    # Fix: Add similar debouncing
     def force_logo_resize(self):
+        """Force logo resize with debouncing"""
+        if hasattr(self, '_logo_resize_timer'):
+            self._logo_resize_timer.stop()
+        
+        self._logo_resize_timer = QTimer()
+        self._logo_resize_timer.setSingleShot(True)
+        self._logo_resize_timer.timeout.connect(self._do_force_logo_resize)
+        self._logo_resize_timer.start(100)
+    
+    def _do_force_logo_resize(self):
         """Force logo to resize according to current settings with persistent horizontal centering"""
         if not hasattr(self, 'logo_label') or not self.logo_label:
             print("No logo label to resize")
@@ -5832,96 +5772,8 @@ class PreviewWindow(QMainWindow):
             self.logo_label.move(x, y)
             print(f"Logo positioned at custom ({x}, {y}) after resize")
         
-        print(f"Logo resized to {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels")
+        print(f"Logo resized to {scaled_pixmap.width()}x{scaled_pixmap.height()} pixels (debounced)")
         return True
-
-    # 5. Update the on_canvas_resize_with_background method to maintain centering
-    def on_canvas_resize_with_background(self, event):
-        """Handle canvas resize while maintaining proper layer stacking and logo centering"""
-        try:
-            print("\n--- Canvas resize with bezel and logo handling ---")
-            
-            # Recalculate the background image position and scaling
-            if hasattr(self, 'original_background_pixmap') and not self.original_background_pixmap.isNull():
-                # Get the original unscaled pixmap
-                original_pixmap = self.original_background_pixmap
-                
-                # Create a high-quality scaled version to fill the canvas
-                canvas_w = self.canvas.width()
-                canvas_h = self.canvas.height()
-                
-                # Scale with high quality while preserving aspect ratio
-                scaled_pixmap = original_pixmap.scaled(
-                    canvas_w, 
-                    canvas_h, 
-                    Qt.KeepAspectRatio,  # Preserve aspect ratio
-                    Qt.SmoothTransformation  # High quality scaling
-                )
-                
-                # Update the stored pixmap
-                self.background_pixmap = scaled_pixmap
-                
-                # Update the bg_label with the newly scaled pixmap
-                if hasattr(self, 'bg_label') and self.bg_label:
-                    self.bg_label.setPixmap(scaled_pixmap)
-                    
-                    # Center the background
-                    x = (canvas_w - scaled_pixmap.width()) // 2
-                    y = (canvas_h - scaled_pixmap.height()) // 2
-                    self.bg_label.setGeometry(x, y, scaled_pixmap.width(), scaled_pixmap.height())
-                    
-                    # Store the background position for control positioning
-                    self.bg_pos = (x, y)
-                    self.bg_size = (scaled_pixmap.width(), scaled_pixmap.height())
-                    
-                    # Make sure the background is below everything
-                    self.bg_label.lower()
-                    
-                    print(f"Background resized: {scaled_pixmap.width()}x{scaled_pixmap.height()}, positioned at ({x},{y})")
-            
-            # Also update bezel if it's visible
-            if hasattr(self, 'bezel_visible') and self.bezel_visible and hasattr(self, 'bezel_label') and self.bezel_label:
-                # Resize the bezel to match the new canvas size
-                if hasattr(self, 'original_bezel_pixmap') and not self.original_bezel_pixmap.isNull():
-                    canvas_w = self.canvas.width()
-                    canvas_h = self.canvas.height()
-                    
-                    bezel_pixmap = self.original_bezel_pixmap.scaled(
-                        canvas_w,
-                        canvas_h,
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    )
-                    
-                    self.bezel_pixmap = bezel_pixmap
-                    self.bezel_label.setPixmap(bezel_pixmap)
-                    
-                    # Position bezel in center
-                    x = (canvas_w - bezel_pixmap.width()) // 2
-                    y = (canvas_h - bezel_pixmap.height()) // 2
-                    self.bezel_label.setGeometry(x, y, bezel_pixmap.width(), bezel_pixmap.height())
-                    
-                    print(f"Bezel resized: {bezel_pixmap.width()}x{bezel_pixmap.height()}, positioned at ({x},{y})")
-            
-            # Update logo positioning
-            self.handle_logo_during_resize()
-
-            # Redraw grid if it's currently visible
-            if hasattr(self, 'alignment_grid_visible') and self.alignment_grid_visible:
-                self.show_alignment_grid()
-                    
-            # Fix layering again after resize
-            QTimer.singleShot(100, self.raise_controls_above_bezel)
-            
-            # Add at the end - force resize all labels
-            QTimer.singleShot(100, self.force_resize_all_labels)
-
-            self.enforce_layer_order()
-                
-        except Exception as e:
-            print(f"Error in canvas resize: {e}")
-            import traceback
-            traceback.print_exc()
     
     # 4. Fix load_text_settings to check settings_dir first, then migrate from preview_dir
     def load_text_settings(self):
@@ -6590,7 +6442,16 @@ class PreviewWindow(QMainWindow):
         print(f"Returning {len(positions)} total positions")
         return positions
     
+    # 5. LOAD SAVED POSITIONS (happening 3 times)
+    # Fix: Cache the results
     def load_saved_positions(self):
+        """Load saved positions with caching"""
+        # Return cached result if available
+        if hasattr(self, '_cached_positions'):
+            print("Using cached positions")
+            return self._cached_positions
+        
+        print("\n=== Loading saved positions (first time) ===")
         """Enhanced load_saved_positions that includes mapping-based positions with proper priority"""
         positions = {}
         rom_positions = {}
@@ -6681,6 +6542,7 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
         
         print(f"Returning {len(positions)} total positions")
+        self._cached_positions = positions
         return positions
     
     # Replace your existing toggle_texts method with this one
@@ -7126,29 +6988,34 @@ class PreviewWindow(QMainWindow):
         
         print(f"BUTTON: Updated button text for mode '{mode}' -> '{self.directional_mode_button.text()}'")
 
+    # FIX: Update save_directional_mode_settings to preserve bezel_visible
     def save_directional_mode_settings(self):
-        """Save directional mode settings to bezel_settings.json (updated for 4 modes)"""
+        """Save directional mode settings without affecting bezel visibility"""
         try:
-            # Load existing settings
+            # Load existing settings first
             settings_file = os.path.join(self.settings_dir, "bezel_settings.json")
-            settings = {}
+            existing_settings = {}
             
             if os.path.exists(settings_file):
                 with open(settings_file, 'r') as f:
-                    settings = json.load(f)
+                    existing_settings = json.load(f)
             
-            # Update with current mode settings
-            settings['joystick_visible'] = self.joystick_visible
-            settings['hide_specialized_with_directional'] = getattr(self, 'hide_specialized_with_directional', False)
-            settings['directional_mode'] = getattr(self, 'directional_mode', 'show_all')  # Save mode for reference
+            # Update ONLY directional mode settings, preserve bezel_visible
+            existing_settings['joystick_visible'] = getattr(self, 'joystick_visible', True)
+            existing_settings['hide_specialized_with_directional'] = getattr(self, 'hide_specialized_with_directional', False)
+            existing_settings['directional_mode'] = getattr(self, 'directional_mode', 'show_all')
+            existing_settings['auto_show_directionals_for_directional_only'] = getattr(self, 'auto_show_directionals_for_directional_only', True)
+            
+            # DO NOT touch bezel_visible here - let it keep its existing value
             
             # Save back to file
             os.makedirs(self.settings_dir, exist_ok=True)
             with open(settings_file, 'w') as f:
-                json.dump(settings, f)
+                json.dump(existing_settings, f)
             
             print(f"SAVE: Saved directional mode '{self.directional_mode}' settings")
             print(f"SAVE: joystick_visible={self.joystick_visible}, hide_specialized={getattr(self, 'hide_specialized_with_directional', False)}")
+            print(f"SAVE: Preserved existing bezel_visible setting")
             
         except Exception as e:
             print(f"Error saving directional mode settings: {e}")
@@ -7736,6 +7603,19 @@ class PreviewWindow(QMainWindow):
         # Import QTimer at the beginning of the method
         from PyQt5.QtCore import QTimer
         
+        # ADD THIS: Create a hash of current settings to detect actual changes
+        import hashlib
+        settings_hash = hashlib.md5(str(self.text_settings).encode()).hexdigest()
+        
+        # ADD THIS: Check if settings actually changed
+        if (hasattr(self, '_last_settings_hash') and 
+            self._last_settings_hash == settings_hash and 
+            not uppercase_changed):
+            print("Text settings unchanged, skipping apply")
+            return
+        
+        print("Applying text settings (changes detected)")
+        
         # Extract settings
         font_family = self.text_settings.get("font_family", "Arial")
         font_size = self.text_settings.get("font_size", 28)
@@ -8014,6 +7894,9 @@ class PreviewWindow(QMainWindow):
                 print(f"Error scheduling font verification: {e}")
 
         print("Text settings applied to all controls with better font handling")
+        
+        # ADD THIS: Store the hash ONLY after successful completion
+        self._last_settings_hash = settings_hash
 
     def verify_font_application(self, control_name=None):
         """Verify that fonts are being correctly applied to labels"""
