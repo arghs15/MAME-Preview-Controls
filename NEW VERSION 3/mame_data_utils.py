@@ -2160,15 +2160,30 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput') -> str:
 # DATA PROCESSING METHODS
 # ============================================================================
 
-# 4. Update update_game_data_with_custom_mappings to preserve mappings
 def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict, 
                                         default_controls: Dict, original_default_controls: Dict,
                                         input_mode: str = 'xinput') -> Dict:
     """
-    Update game_data with custom mappings - UPDATED to preserve mappings
+    Update game_data with custom mappings - UPDATED to preserve mappings and FIXED for keycode mode
     """
     if not cfg_controls and not default_controls:
         return game_data
+    
+    # Helper function to extract keycode only for keycode mode
+    def filter_mapping_for_mode(mapping: str, mode: str) -> str:
+        if mode == 'keycode' and mapping:
+            # Extract only the keycode portion from OR statements
+            if " OR " in mapping:
+                parts = [p.strip() for p in mapping.split(" OR ")]
+                for part in parts:
+                    if "KEYCODE_" in part:
+                        return part
+                return "NONE"  # No keycode found
+            elif "KEYCODE_" in mapping:
+                return mapping
+            else:
+                return "NONE"  # No keycode in single mapping
+        return mapping  # Return as-is for other modes
     
     # Pre-process all mappings in one pass
     all_mappings = {}
@@ -2179,12 +2194,11 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
         for control, mapping in default_controls.items():
             processed_mapping = mapping
             if input_mode == 'keycode' and original_default_controls and control in original_default_controls:
+                # Use original mapping and filter for keycode
                 original_mapping = original_default_controls[control]
-                keycode = extract_keycode_from_mapping(original_mapping)
-                if keycode:
-                    processed_mapping = original_mapping
+                processed_mapping = filter_mapping_for_mode(original_mapping, input_mode)
             else:
-                processed_mapping = convert_mapping(mapping, input_mode)
+                processed_mapping = filter_mapping_for_mode(convert_mapping(mapping, input_mode), input_mode)
             
             all_mappings[control] = {
                 'mapping': processed_mapping, 
@@ -2193,12 +2207,11 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
     
     # Override with ROM-specific mappings
     for control, mapping in cfg_controls.items():
-        processed_mapping = mapping
-        if input_mode == 'keycode':
-            keycode = extract_keycode_from_mapping(mapping)
-            if not keycode and control in all_mappings:
-                # Use default if ROM CFG has no keycode
-                continue
+        processed_mapping = filter_mapping_for_mode(mapping, input_mode)
+        
+        # Skip if keycode mode and no keycode found
+        if input_mode == 'keycode' and processed_mapping == "NONE":
+            continue
         
         all_mappings[control] = {
             'mapping': processed_mapping, 
