@@ -2375,8 +2375,9 @@ class MAMEControlConfig(ctk.CTk):
         self.current_view = "all"
 
     def toggle_friendly_names(self):
-        """Toggle between friendly names and raw mapping display"""
-        self.show_friendly_names = not self.show_friendly_names
+        """Toggle between friendly names and raw mapping display - FIXED"""
+        # FIXED: Get the toggle state directly instead of inverting it
+        self.show_friendly_names = self.friendly_names_toggle.get()
         
         print(f"DEBUG: Toggled friendly names to: {self.show_friendly_names}")
         
