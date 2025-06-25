@@ -1507,42 +1507,73 @@ def convert_single_mapping(mapping: str, to_mode: str) -> str:
     # If already in the right format or if no conversion found, return as is
     return mapping
 
-# Specific conversion functions
 def joycode_to_xinput(mapping: str) -> str:
-    """Convert JOYCODE to XInput format"""
+    """Convert JOYCODE to XInput format - UPDATED for latest MAME mappings"""
     xinput_mappings = {
+        # Updated button mappings (MAME now uses SELECT/START instead of BUTTON8/9)
         'JOYCODE_1_BUTTON1': 'XINPUT_1_A',
         'JOYCODE_1_BUTTON2': 'XINPUT_1_B',
         'JOYCODE_1_BUTTON3': 'XINPUT_1_X',
         'JOYCODE_1_BUTTON4': 'XINPUT_1_Y',
         'JOYCODE_1_BUTTON5': 'XINPUT_1_SHOULDER_L',
         'JOYCODE_1_BUTTON6': 'XINPUT_1_SHOULDER_R',
-        'JOYCODE_1_BUTTON7': 'XINPUT_1_START',
-        'JOYCODE_1_BUTTON8': 'XINPUT_1_BACK',
+        'JOYCODE_1_BUTTON7': 'XINPUT_1_TRIGGER_L',  # Was BUTTON7, now often SLIDER1
+        'JOYCODE_1_BUTTON8': 'XINPUT_1_TRIGGER_R',  # Was BUTTON8, now often SLIDER2
+        
+        # NEW: Modern MAME button names
+        'JOYCODE_1_SELECT': 'XINPUT_1_BACK',      # NEW: Replaces BUTTON8
+        'JOYCODE_1_START': 'XINPUT_1_START',      # NEW: Replaces BUTTON9
         'JOYCODE_1_BUTTON9': 'XINPUT_1_THUMB_L',
         'JOYCODE_1_BUTTON10': 'XINPUT_1_THUMB_R',
+        
+        # UPDATED: Hat/D-pad mappings (HAT1 instead of DPAD)
+        'JOYCODE_1_HAT1UP': 'XINPUT_1_DPAD_UP',         # NEW: Replaces HATUP
+        'JOYCODE_1_HAT1DOWN': 'XINPUT_1_DPAD_DOWN',     # NEW: Replaces HATDOWN
+        'JOYCODE_1_HAT1LEFT': 'XINPUT_1_DPAD_LEFT',     # NEW: Replaces HATLEFT
+        'JOYCODE_1_HAT1RIGHT': 'XINPUT_1_DPAD_RIGHT',   # NEW: Replaces HATRIGHT
+        
+        # Legacy D-pad mappings (for backward compatibility)
         'JOYCODE_1_HATUP': 'XINPUT_1_DPAD_UP',
         'JOYCODE_1_HATDOWN': 'XINPUT_1_DPAD_DOWN',
         'JOYCODE_1_HATLEFT': 'XINPUT_1_DPAD_LEFT',
         'JOYCODE_1_HATRIGHT': 'XINPUT_1_DPAD_RIGHT',
-        # Player 2 mappings
+        
+        # UPDATED: Slider/Trigger mappings
+        'JOYCODE_1_SLIDER1': 'XINPUT_1_TRIGGER_L',           # Often used for LT
+        'JOYCODE_1_SLIDER2': 'XINPUT_1_TRIGGER_R',           # Often used for RT
+        'JOYCODE_1_SLIDER1_NEG_SWITCH': 'XINPUT_1_TRIGGER_L',
+        'JOYCODE_1_SLIDER2_NEG_SWITCH': 'XINPUT_1_TRIGGER_R',
+        'JOYCODE_1_SLIDER2_POS_SWITCH': 'XINPUT_1_TRIGGER_R',
+        
+        # Legacy Z-axis mappings (for backward compatibility)
+        'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L',  # Old name
+        'JOYCODE_1_ZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_R',  # Old name
+        
+        # Player 2 mappings with same updates
         'JOYCODE_2_BUTTON1': 'XINPUT_2_A',
         'JOYCODE_2_BUTTON2': 'XINPUT_2_B',
         'JOYCODE_2_BUTTON3': 'XINPUT_2_X',
         'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',
         'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',
         'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',
-        'JOYCODE_2_BUTTON7': 'XINPUT_2_START',
-        'JOYCODE_2_BUTTON8': 'XINPUT_2_BACK',
+        'JOYCODE_2_SELECT': 'XINPUT_2_BACK',      # NEW
+        'JOYCODE_2_START': 'XINPUT_2_START',      # NEW
         'JOYCODE_2_BUTTON9': 'XINPUT_2_THUMB_L',
         'JOYCODE_2_BUTTON10': 'XINPUT_2_THUMB_R',
+        
+        # Player 2 D-pad (new HAT1 names)
+        'JOYCODE_2_HAT1UP': 'XINPUT_2_DPAD_UP',
+        'JOYCODE_2_HAT1DOWN': 'XINPUT_2_DPAD_DOWN',
+        'JOYCODE_2_HAT1LEFT': 'XINPUT_2_DPAD_LEFT',
+        'JOYCODE_2_HAT1RIGHT': 'XINPUT_2_DPAD_RIGHT',
     }
     
     return xinput_mappings.get(mapping, mapping)
 
 def joycode_to_dinput(mapping: str) -> str:
-    """Convert JOYCODE to DInput format"""
+    """Convert JOYCODE to DInput format - UPDATED for latest MAME mappings"""
     dinput_mappings = {
+        # Standard button mappings (0-based for DInput)
         'JOYCODE_1_BUTTON1': 'DINPUT_1_BUTTON0',
         'JOYCODE_1_BUTTON2': 'DINPUT_1_BUTTON1',
         'JOYCODE_1_BUTTON3': 'DINPUT_1_BUTTON2',
@@ -1553,7 +1584,35 @@ def joycode_to_dinput(mapping: str) -> str:
         'JOYCODE_1_BUTTON8': 'DINPUT_1_BUTTON7',
         'JOYCODE_1_BUTTON9': 'DINPUT_1_BUTTON8',
         'JOYCODE_1_BUTTON10': 'DINPUT_1_BUTTON9',
-        # Player 2 mappings
+        
+        # NEW: Modern MAME button names
+        'JOYCODE_1_SELECT': 'DINPUT_1_BUTTON7',    # NEW: Maps to button 7 (0-based)
+        'JOYCODE_1_START': 'DINPUT_1_BUTTON8',     # NEW: Maps to button 8 (0-based)
+        
+        # UPDATED: HAT1 mappings (new in latest MAME)
+        'JOYCODE_1_HAT1UP': 'DINPUT_1_POV_UP',       # NEW: Replaces HATUP
+        'JOYCODE_1_HAT1DOWN': 'DINPUT_1_POV_DOWN',   # NEW: Replaces HATDOWN  
+        'JOYCODE_1_HAT1LEFT': 'DINPUT_1_POV_LEFT',   # NEW: Replaces HATLEFT
+        'JOYCODE_1_HAT1RIGHT': 'DINPUT_1_POV_RIGHT', # NEW: Replaces HATRIGHT
+        
+        # Legacy HAT mappings (for backward compatibility)
+        'JOYCODE_1_HATUP': 'DINPUT_1_POV_UP',
+        'JOYCODE_1_HATDOWN': 'DINPUT_1_POV_DOWN',
+        'JOYCODE_1_HATLEFT': 'DINPUT_1_POV_LEFT',
+        'JOYCODE_1_HATRIGHT': 'DINPUT_1_POV_RIGHT',
+        
+        # UPDATED: Slider mappings (SLIDER2 instead of ZAXIS)
+        'JOYCODE_1_SLIDER1': 'DINPUT_1_SLIDER0',           # Often used for triggers
+        'JOYCODE_1_SLIDER2': 'DINPUT_1_SLIDER1',           # NEW: Replaces ZAXIS
+        'JOYCODE_1_SLIDER1_NEG_SWITCH': 'DINPUT_1_SLIDER0_NEG',
+        'JOYCODE_1_SLIDER2_NEG_SWITCH': 'DINPUT_1_SLIDER1_NEG',  # NEW
+        'JOYCODE_1_SLIDER2_POS_SWITCH': 'DINPUT_1_SLIDER1_POS',  # NEW
+        
+        # Legacy Z-axis mappings (for backward compatibility)
+        'JOYCODE_1_ZAXIS_NEG_SWITCH': 'DINPUT_1_ZAXIS_NEG',  # Old name
+        'JOYCODE_1_ZAXIS_POS_SWITCH': 'DINPUT_1_ZAXIS_POS',  # Old name
+        
+        # Player 2 mappings with same updates
         'JOYCODE_2_BUTTON1': 'DINPUT_2_BUTTON0',
         'JOYCODE_2_BUTTON2': 'DINPUT_2_BUTTON1',
         'JOYCODE_2_BUTTON3': 'DINPUT_2_BUTTON2',
@@ -1564,23 +1623,64 @@ def joycode_to_dinput(mapping: str) -> str:
         'JOYCODE_2_BUTTON8': 'DINPUT_2_BUTTON7',
         'JOYCODE_2_BUTTON9': 'DINPUT_2_BUTTON8',
         'JOYCODE_2_BUTTON10': 'DINPUT_2_BUTTON9',
+        
+        # Player 2 NEW button names
+        'JOYCODE_2_SELECT': 'DINPUT_2_BUTTON7',    # NEW
+        'JOYCODE_2_START': 'DINPUT_2_BUTTON8',     # NEW
+        
+        # Player 2 HAT1 mappings
+        'JOYCODE_2_HAT1UP': 'DINPUT_2_POV_UP',     # NEW
+        'JOYCODE_2_HAT1DOWN': 'DINPUT_2_POV_DOWN', # NEW
+        'JOYCODE_2_HAT1LEFT': 'DINPUT_2_POV_LEFT', # NEW
+        'JOYCODE_2_HAT1RIGHT': 'DINPUT_2_POV_RIGHT', # NEW
     }
     
     return dinput_mappings.get(mapping, mapping)
 
 def xinput_to_joycode(mapping: str) -> str:
-    """Convert XInput to JOYCODE format"""
+    """Convert XInput to JOYCODE format - UPDATED for latest MAME mappings"""
     reverse_mappings = {
+        # Standard button mappings
         'XINPUT_1_A': 'JOYCODE_1_BUTTON1',
         'XINPUT_1_B': 'JOYCODE_1_BUTTON2',
         'XINPUT_1_X': 'JOYCODE_1_BUTTON3',
         'XINPUT_1_Y': 'JOYCODE_1_BUTTON4',
         'XINPUT_1_SHOULDER_L': 'JOYCODE_1_BUTTON5',
         'XINPUT_1_SHOULDER_R': 'JOYCODE_1_BUTTON6',
-        'XINPUT_1_START': 'JOYCODE_1_BUTTON7',
-        'XINPUT_1_BACK': 'JOYCODE_1_BUTTON8',
+        
+        # UPDATED: Prefer new MAME names for SELECT/START
+        'XINPUT_1_BACK': 'JOYCODE_1_SELECT',      # NEW: Use SELECT instead of BUTTON8
+        'XINPUT_1_START': 'JOYCODE_1_START',      # NEW: Use START instead of BUTTON9
         'XINPUT_1_THUMB_L': 'JOYCODE_1_BUTTON9',
         'XINPUT_1_THUMB_R': 'JOYCODE_1_BUTTON10',
+        
+        # UPDATED: Prefer new HAT1 names for D-pad
+        'XINPUT_1_DPAD_UP': 'JOYCODE_1_HAT1UP',       # NEW: Use HAT1UP instead of HATUP
+        'XINPUT_1_DPAD_DOWN': 'JOYCODE_1_HAT1DOWN',   # NEW: Use HAT1DOWN instead of HATDOWN
+        'XINPUT_1_DPAD_LEFT': 'JOYCODE_1_HAT1LEFT',   # NEW: Use HAT1LEFT instead of HATLEFT
+        'XINPUT_1_DPAD_RIGHT': 'JOYCODE_1_HAT1RIGHT', # NEW: Use HAT1RIGHT instead of HATRIGHT
+        
+        # UPDATED: Prefer SLIDER2 for triggers
+        'XINPUT_1_TRIGGER_L': 'JOYCODE_1_SLIDER1',     # Often mapped to SLIDER1
+        'XINPUT_1_TRIGGER_R': 'JOYCODE_1_SLIDER2',     # NEW: Use SLIDER2 instead of ZAXIS
+        
+        # Player 2 mappings
+        'XINPUT_2_A': 'JOYCODE_2_BUTTON1',
+        'XINPUT_2_B': 'JOYCODE_2_BUTTON2',
+        'XINPUT_2_X': 'JOYCODE_2_BUTTON3',
+        'XINPUT_2_Y': 'JOYCODE_2_BUTTON4',
+        'XINPUT_2_SHOULDER_L': 'JOYCODE_2_BUTTON5',
+        'XINPUT_2_SHOULDER_R': 'JOYCODE_2_BUTTON6',
+        'XINPUT_2_BACK': 'JOYCODE_2_SELECT',      # NEW
+        'XINPUT_2_START': 'JOYCODE_2_START',      # NEW
+        'XINPUT_2_THUMB_L': 'JOYCODE_2_BUTTON9',
+        'XINPUT_2_THUMB_R': 'JOYCODE_2_BUTTON10',
+        
+        # Player 2 D-pad
+        'XINPUT_2_DPAD_UP': 'JOYCODE_2_HAT1UP',       # NEW
+        'XINPUT_2_DPAD_DOWN': 'JOYCODE_2_HAT1DOWN',   # NEW
+        'XINPUT_2_DPAD_LEFT': 'JOYCODE_2_HAT1LEFT',   # NEW
+        'XINPUT_2_DPAD_RIGHT': 'JOYCODE_2_HAT1RIGHT', # NEW
     }
     
     return reverse_mappings.get(mapping, mapping)
@@ -1603,8 +1703,9 @@ def xinput_to_dinput(mapping: str) -> str:
     return mapping_dict.get(mapping, mapping)
 
 def dinput_to_joycode(mapping: str) -> str:
-    """Convert DInput to JOYCODE format"""
+    """Convert DInput to JOYCODE format - UPDATED for latest MAME mappings"""
     reverse_mappings = {
+        # Standard button mappings (convert from 0-based to 1-based)
         'DINPUT_1_BUTTON0': 'JOYCODE_1_BUTTON1',
         'DINPUT_1_BUTTON1': 'JOYCODE_1_BUTTON2',
         'DINPUT_1_BUTTON2': 'JOYCODE_1_BUTTON3',
@@ -1612,9 +1713,42 @@ def dinput_to_joycode(mapping: str) -> str:
         'DINPUT_1_BUTTON4': 'JOYCODE_1_BUTTON5',
         'DINPUT_1_BUTTON5': 'JOYCODE_1_BUTTON6',
         'DINPUT_1_BUTTON6': 'JOYCODE_1_BUTTON7',
-        'DINPUT_1_BUTTON7': 'JOYCODE_1_BUTTON8',
+        
+        # UPDATED: Prefer new MAME names
+        'DINPUT_1_BUTTON7': 'JOYCODE_1_SELECT',    # NEW: Use SELECT name
+        'DINPUT_1_BUTTON8': 'JOYCODE_1_START',     # NEW: Use START name
         'DINPUT_1_BUTTON8': 'JOYCODE_1_BUTTON9',
         'DINPUT_1_BUTTON9': 'JOYCODE_1_BUTTON10',
+        
+        # UPDATED: Prefer new HAT1 names
+        'DINPUT_1_POV_UP': 'JOYCODE_1_HAT1UP',       # NEW
+        'DINPUT_1_POV_DOWN': 'JOYCODE_1_HAT1DOWN',   # NEW
+        'DINPUT_1_POV_LEFT': 'JOYCODE_1_HAT1LEFT',   # NEW
+        'DINPUT_1_POV_RIGHT': 'JOYCODE_1_HAT1RIGHT', # NEW
+        
+        # UPDATED: Prefer SLIDER2 names
+        'DINPUT_1_SLIDER0': 'JOYCODE_1_SLIDER1',
+        'DINPUT_1_SLIDER1': 'JOYCODE_1_SLIDER2',     # NEW: Map to SLIDER2
+        'DINPUT_1_SLIDER0_NEG': 'JOYCODE_1_SLIDER1_NEG_SWITCH',
+        'DINPUT_1_SLIDER1_NEG': 'JOYCODE_1_SLIDER2_NEG_SWITCH', # NEW
+        'DINPUT_1_SLIDER1_POS': 'JOYCODE_1_SLIDER2_POS_SWITCH', # NEW
+        
+        # Player 2 mappings
+        'DINPUT_2_BUTTON0': 'JOYCODE_2_BUTTON1',
+        'DINPUT_2_BUTTON1': 'JOYCODE_2_BUTTON2',
+        'DINPUT_2_BUTTON2': 'JOYCODE_2_BUTTON3',
+        'DINPUT_2_BUTTON3': 'JOYCODE_2_BUTTON4',
+        'DINPUT_2_BUTTON4': 'JOYCODE_2_BUTTON5',
+        'DINPUT_2_BUTTON5': 'JOYCODE_2_BUTTON6',
+        'DINPUT_2_BUTTON6': 'JOYCODE_2_BUTTON7',
+        'DINPUT_2_BUTTON7': 'JOYCODE_2_SELECT',    # NEW
+        'DINPUT_2_BUTTON8': 'JOYCODE_2_START',     # NEW
+        
+        # Player 2 POV/HAT
+        'DINPUT_2_POV_UP': 'JOYCODE_2_HAT1UP',     # NEW
+        'DINPUT_2_POV_DOWN': 'JOYCODE_2_HAT1DOWN', # NEW
+        'DINPUT_2_POV_LEFT': 'JOYCODE_2_HAT1LEFT', # NEW
+        'DINPUT_2_POV_RIGHT': 'JOYCODE_2_HAT1RIGHT', # NEW
     }
     
     return reverse_mappings.get(mapping, mapping)
@@ -2046,19 +2180,47 @@ def get_friendly_dinput_name(mapping: str) -> str:
     return f"DInput {player_num} {action}"
 
 def format_joycode_display(mapping: str) -> str:
-    """Format JOYCODE mapping string for display."""
+    """Format JOYCODE mapping string for display - UPDATED for latest MAME mappings."""
     if not mapping or not "JOYCODE" in mapping:
         return mapping
-        
-    # Basic display for JOYCODE
-    if "YAXIS_UP" in mapping or "DPADUP" in mapping:
+    
+    # Handle modern MAME button names
+    if "SELECT" in mapping:
+        return "Joy Select"
+    elif "START" in mapping:
+        return "Joy Start"
+    
+    # Handle modern HAT1 mappings
+    elif "HAT1UP" in mapping:
+        return "Joy D-Pad Up"
+    elif "HAT1DOWN" in mapping:
+        return "Joy D-Pad Down"
+    elif "HAT1LEFT" in mapping:
+        return "Joy D-Pad Left"
+    elif "HAT1RIGHT" in mapping:
+        return "Joy D-Pad Right"
+    
+    # Handle modern SLIDER2 mappings
+    elif "SLIDER2_NEG" in mapping:
+        return "Joy RT"  # Right Trigger
+    elif "SLIDER2_POS" in mapping:
+        return "Joy RT"  # Right Trigger
+    elif "SLIDER2" in mapping:
+        return "Joy RT"  # Right Trigger
+    elif "SLIDER1" in mapping:
+        return "Joy LT"  # Left Trigger
+    
+    # Legacy HAT mappings (for backward compatibility)
+    elif "YAXIS_UP" in mapping or "DPADUP" in mapping or "HATUP" in mapping:
         return "Joy Up"
-    elif "YAXIS_DOWN" in mapping or "DPADDOWN" in mapping:
+    elif "YAXIS_DOWN" in mapping or "DPADDOWN" in mapping or "HATDOWN" in mapping:
         return "Joy Down"
-    elif "XAXIS_LEFT" in mapping or "DPADLEFT" in mapping:
+    elif "XAXIS_LEFT" in mapping or "DPADLEFT" in mapping or "HATLEFT" in mapping:
         return "Joy Left"
-    elif "XAXIS_RIGHT" in mapping or "DPADRIGHT" in mapping:
+    elif "XAXIS_RIGHT" in mapping or "DPADRIGHT" in mapping or "HATRIGHT" in mapping:
         return "Joy Right"
+    
+    # Right stick mappings
     elif "RYAXIS_NEG" in mapping:
         return "Joy R-Up"
     elif "RYAXIS_POS" in mapping:
@@ -2067,6 +2229,12 @@ def format_joycode_display(mapping: str) -> str:
         return "Joy R-Left"
     elif "RXAXIS_POS" in mapping:
         return "Joy R-Right"
+    
+    # Legacy Z-axis mappings (for backward compatibility)
+    elif "ZAXIS_NEG" in mapping:
+        return "Joy LT"  # Left Trigger (legacy)
+    elif "ZAXIS_POS" in mapping:
+        return "Joy RT"  # Right Trigger (legacy)
     
     # Standard joystick button formatting
     parts = mapping.split('_')
