@@ -2352,12 +2352,270 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput', friendly_na
 # DATA PROCESSING METHODS
 # ============================================================================
 
+def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
+    """
+    Get MAME's default control mappings when no cfg files exist
+    These mirror what MAME automatically assigns through its input APIs
+    """
+    
+    if input_mode == 'xinput':
+        return {
+            # Player 1 Standard Buttons
+            'P1_BUTTON1': 'XINPUT_1_A',
+            'P1_BUTTON2': 'XINPUT_1_B', 
+            'P1_BUTTON3': 'XINPUT_1_X',
+            'P1_BUTTON4': 'XINPUT_1_Y',
+            'P1_BUTTON5': 'XINPUT_1_SHOULDER_L',
+            'P1_BUTTON6': 'XINPUT_1_SHOULDER_R',
+            'P1_BUTTON7': 'XINPUT_1_TRIGGER_L',
+            'P1_BUTTON8': 'XINPUT_1_TRIGGER_R',
+            'P1_BUTTON9': 'XINPUT_1_THUMB_L',
+            'P1_BUTTON10': 'XINPUT_1_THUMB_R',
+            
+            # Player 1 Directional Controls
+            'P1_JOYSTICK_UP': 'XINPUT_1_DPAD_UP',
+            'P1_JOYSTICK_DOWN': 'XINPUT_1_DPAD_DOWN',
+            'P1_JOYSTICK_LEFT': 'XINPUT_1_DPAD_LEFT',
+            'P1_JOYSTICK_RIGHT': 'XINPUT_1_DPAD_RIGHT',
+            'P1_JOYSTICKLEFT_UP': 'XINPUT_1_LEFTY_NEG',
+            'P1_JOYSTICKLEFT_DOWN': 'XINPUT_1_LEFTY_POS',
+            'P1_JOYSTICKLEFT_LEFT': 'XINPUT_1_LEFTX_NEG',
+            'P1_JOYSTICKLEFT_RIGHT': 'XINPUT_1_LEFTX_POS',
+            'P1_JOYSTICKRIGHT_UP': 'XINPUT_1_RIGHTY_NEG',
+            'P1_JOYSTICKRIGHT_DOWN': 'XINPUT_1_RIGHTY_POS',
+            'P1_JOYSTICKRIGHT_LEFT': 'XINPUT_1_RIGHTX_NEG',
+            'P1_JOYSTICKRIGHT_RIGHT': 'XINPUT_1_RIGHTX_POS',
+            
+            # Player 1 System Controls
+            'P1_START': 'XINPUT_1_START',
+            'P1_SELECT': 'XINPUT_1_BACK',
+            
+            # Player 1 D-Pad (explicit)
+            'P1_DPAD_UP': 'XINPUT_1_DPAD_UP',
+            'P1_DPAD_DOWN': 'XINPUT_1_DPAD_DOWN',
+            'P1_DPAD_LEFT': 'XINPUT_1_DPAD_LEFT',
+            'P1_DPAD_RIGHT': 'XINPUT_1_DPAD_RIGHT',
+            
+            # Player 1 Specialized Controls (common defaults)
+            'P1_PEDAL': 'XINPUT_1_TRIGGER_R',
+            'P1_PEDAL2': 'XINPUT_1_TRIGGER_L',
+            'P1_AD_STICK_X': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_AD_STICK_Y': 'XINPUT_1_LEFTY_NEG ||| XINPUT_1_LEFTY_POS',
+            'P1_AD_STICK_Z': 'XINPUT_1_TRIGGER_L ||| XINPUT_1_TRIGGER_R',
+            'P1_DIAL': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_DIAL_V': 'XINPUT_1_LEFTY_NEG ||| XINPUT_1_LEFTY_POS',
+            'P1_PADDLE': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_TRACKBALL_X': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_TRACKBALL_Y': 'XINPUT_1_LEFTY_NEG ||| XINPUT_1_LEFTY_POS',
+            'P1_MOUSE_X': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_MOUSE_Y': 'XINPUT_1_LEFTY_NEG ||| XINPUT_1_LEFTY_POS',
+            'P1_LIGHTGUN_X': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_LIGHTGUN_Y': 'XINPUT_1_LEFTY_NEG ||| XINPUT_1_LEFTY_POS',
+            'P1_POSITIONAL': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            'P1_STEER': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
+            
+            # Player 2 Controls (mirror P1)
+            'P2_BUTTON1': 'XINPUT_2_A',
+            'P2_BUTTON2': 'XINPUT_2_B',
+            'P2_BUTTON3': 'XINPUT_2_X', 
+            'P2_BUTTON4': 'XINPUT_2_Y',
+            'P2_BUTTON5': 'XINPUT_2_SHOULDER_L',
+            'P2_BUTTON6': 'XINPUT_2_SHOULDER_R',
+            'P2_BUTTON7': 'XINPUT_2_TRIGGER_L',
+            'P2_BUTTON8': 'XINPUT_2_TRIGGER_R',
+            'P2_BUTTON9': 'XINPUT_2_THUMB_L',
+            'P2_BUTTON10': 'XINPUT_2_THUMB_R',
+            'P2_JOYSTICK_UP': 'XINPUT_2_DPAD_UP',
+            'P2_JOYSTICK_DOWN': 'XINPUT_2_DPAD_DOWN',
+            'P2_JOYSTICK_LEFT': 'XINPUT_2_DPAD_LEFT',
+            'P2_JOYSTICK_RIGHT': 'XINPUT_2_DPAD_RIGHT',
+            'P2_START': 'XINPUT_2_START',
+            'P2_SELECT': 'XINPUT_2_BACK',
+        }
+    
+    elif input_mode == 'dinput':
+        return {
+            # Player 1 Standard Buttons (0-based for DInput)
+            'P1_BUTTON1': 'DINPUT_1_BUTTON0',
+            'P1_BUTTON2': 'DINPUT_1_BUTTON1',
+            'P1_BUTTON3': 'DINPUT_1_BUTTON2',
+            'P1_BUTTON4': 'DINPUT_1_BUTTON3',
+            'P1_BUTTON5': 'DINPUT_1_BUTTON4',
+            'P1_BUTTON6': 'DINPUT_1_BUTTON5',
+            'P1_BUTTON7': 'DINPUT_1_BUTTON6',
+            'P1_BUTTON8': 'DINPUT_1_BUTTON7',
+            'P1_BUTTON9': 'DINPUT_1_BUTTON8',
+            'P1_BUTTON10': 'DINPUT_1_BUTTON9',
+            
+            # Player 1 Directional Controls
+            'P1_JOYSTICK_UP': 'DINPUT_1_POV_UP',
+            'P1_JOYSTICK_DOWN': 'DINPUT_1_POV_DOWN',
+            'P1_JOYSTICK_LEFT': 'DINPUT_1_POV_LEFT',
+            'P1_JOYSTICK_RIGHT': 'DINPUT_1_POV_RIGHT',
+            'P1_JOYSTICKLEFT_UP': 'DINPUT_1_YAXIS_NEG',
+            'P1_JOYSTICKLEFT_DOWN': 'DINPUT_1_YAXIS_POS',
+            'P1_JOYSTICKLEFT_LEFT': 'DINPUT_1_XAXIS_NEG',
+            'P1_JOYSTICKLEFT_RIGHT': 'DINPUT_1_XAXIS_POS',
+            'P1_JOYSTICKRIGHT_UP': 'DINPUT_1_RYAXIS_NEG',
+            'P1_JOYSTICKRIGHT_DOWN': 'DINPUT_1_RYAXIS_POS',
+            'P1_JOYSTICKRIGHT_LEFT': 'DINPUT_1_RXAXIS_NEG',
+            'P1_JOYSTICKRIGHT_RIGHT': 'DINPUT_1_RXAXIS_POS',
+            
+            # Player 1 System Controls
+            'P1_START': 'DINPUT_1_BUTTON8',
+            'P1_SELECT': 'DINPUT_1_BUTTON9',
+            
+            # Player 1 Specialized Controls
+            'P1_PEDAL': 'DINPUT_1_ZAXIS_POS',
+            'P1_PEDAL2': 'DINPUT_1_ZAXIS_NEG',
+            'P1_AD_STICK_X': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
+            'P1_AD_STICK_Y': 'DINPUT_1_YAXIS_NEG ||| DINPUT_1_YAXIS_POS',
+            'P1_DIAL': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
+            'P1_PADDLE': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
+            'P1_TRACKBALL_X': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
+            'P1_TRACKBALL_Y': 'DINPUT_1_YAXIS_NEG ||| DINPUT_1_YAXIS_POS',
+            
+            # Player 2 Controls (mirror P1)
+            'P2_BUTTON1': 'DINPUT_2_BUTTON0',
+            'P2_BUTTON2': 'DINPUT_2_BUTTON1',
+            'P2_BUTTON3': 'DINPUT_2_BUTTON2',
+            'P2_BUTTON4': 'DINPUT_2_BUTTON3',
+            'P2_BUTTON5': 'DINPUT_2_BUTTON4',
+            'P2_BUTTON6': 'DINPUT_2_BUTTON5',
+            'P2_JOYSTICK_UP': 'DINPUT_2_POV_UP',
+            'P2_JOYSTICK_DOWN': 'DINPUT_2_POV_DOWN',
+            'P2_JOYSTICK_LEFT': 'DINPUT_2_POV_LEFT',
+            'P2_JOYSTICK_RIGHT': 'DINPUT_2_POV_RIGHT',
+            'P2_START': 'DINPUT_2_BUTTON8',
+            'P2_SELECT': 'DINPUT_2_BUTTON9',
+        }
+    
+    elif input_mode == 'keycode':
+        return {
+            # Player 1 Standard Buttons (common keyboard defaults)
+            'P1_BUTTON1': 'KEYCODE_LCONTROL',  # Ctrl = Fire/Primary
+            'P1_BUTTON2': 'KEYCODE_LALT',      # Alt = Jump/Secondary  
+            'P1_BUTTON3': 'KEYCODE_SPACE',     # Space = Action
+            'P1_BUTTON4': 'KEYCODE_LSHIFT',    # Shift = Run/Modifier
+            'P1_BUTTON5': 'KEYCODE_Z',         # Z = Button 5
+            'P1_BUTTON6': 'KEYCODE_X',         # X = Button 6
+            'P1_BUTTON7': 'KEYCODE_C',         # C = Button 7
+            'P1_BUTTON8': 'KEYCODE_V',         # V = Button 8
+            'P1_BUTTON9': 'KEYCODE_B',         # B = Button 9
+            'P1_BUTTON10': 'KEYCODE_N',        # N = Button 10
+            
+            # Player 1 Directional Controls (Arrow Keys)
+            'P1_JOYSTICK_UP': 'KEYCODE_UP',
+            'P1_JOYSTICK_DOWN': 'KEYCODE_DOWN',
+            'P1_JOYSTICK_LEFT': 'KEYCODE_LEFT',
+            'P1_JOYSTICK_RIGHT': 'KEYCODE_RIGHT',
+            'P1_JOYSTICKLEFT_UP': 'KEYCODE_UP',
+            'P1_JOYSTICKLEFT_DOWN': 'KEYCODE_DOWN',
+            'P1_JOYSTICKLEFT_LEFT': 'KEYCODE_LEFT',
+            'P1_JOYSTICKLEFT_RIGHT': 'KEYCODE_RIGHT',
+            
+            # Player 1 System Controls
+            'P1_START': 'KEYCODE_1',           # 1 = Start/Coin
+            'P1_SELECT': 'KEYCODE_5',          # 5 = Coin
+            
+            # Player 1 Specialized Controls (use same directional keys)
+            'P1_AD_STICK_X': 'KEYCODE_LEFT ||| KEYCODE_RIGHT',
+            'P1_AD_STICK_Y': 'KEYCODE_UP ||| KEYCODE_DOWN',
+            'P1_DIAL': 'KEYCODE_LEFT ||| KEYCODE_RIGHT',
+            'P1_PADDLE': 'KEYCODE_LEFT ||| KEYCODE_RIGHT',
+            'P1_TRACKBALL_X': 'KEYCODE_LEFT ||| KEYCODE_RIGHT',
+            'P1_TRACKBALL_Y': 'KEYCODE_UP ||| KEYCODE_DOWN',
+            'P1_PEDAL': 'KEYCODE_LCONTROL',
+            'P1_PEDAL2': 'KEYCODE_LALT',
+            
+            # Player 2 Controls (WASD + different keys)
+            'P2_BUTTON1': 'KEYCODE_A',         # A = P2 Fire
+            'P2_BUTTON2': 'KEYCODE_S',         # S = P2 Secondary
+            'P2_BUTTON3': 'KEYCODE_Q',         # Q = P2 Button 3
+            'P2_BUTTON4': 'KEYCODE_W',         # W = P2 Button 4
+            'P2_BUTTON5': 'KEYCODE_E',         # E = P2 Button 5
+            'P2_BUTTON6': 'KEYCODE_D',         # D = P2 Button 6
+            'P2_JOYSTICK_UP': 'KEYCODE_R',     # R = P2 Up
+            'P2_JOYSTICK_DOWN': 'KEYCODE_F',   # F = P2 Down
+            'P2_JOYSTICK_LEFT': 'KEYCODE_D',   # D = P2 Left
+            'P2_JOYSTICK_RIGHT': 'KEYCODE_G',  # G = P2 Right
+            'P2_START': 'KEYCODE_2',           # 2 = P2 Start
+            'P2_SELECT': 'KEYCODE_6',          # 6 = P2 Coin
+        }
+    
+    else:  # joycode fallback
+        return {
+            # Player 1 Standard Buttons
+            'P1_BUTTON1': 'JOYCODE_1_BUTTON1',
+            'P1_BUTTON2': 'JOYCODE_1_BUTTON2',
+            'P1_BUTTON3': 'JOYCODE_1_BUTTON3',
+            'P1_BUTTON4': 'JOYCODE_1_BUTTON4',
+            'P1_BUTTON5': 'JOYCODE_1_BUTTON5',
+            'P1_BUTTON6': 'JOYCODE_1_BUTTON6',
+            'P1_BUTTON7': 'JOYCODE_1_BUTTON7',
+            'P1_BUTTON8': 'JOYCODE_1_BUTTON8',
+            
+            # Player 1 Directional Controls
+            'P1_JOYSTICK_UP': 'JOYCODE_1_HAT1UP',
+            'P1_JOYSTICK_DOWN': 'JOYCODE_1_HAT1DOWN',
+            'P1_JOYSTICK_LEFT': 'JOYCODE_1_HAT1LEFT',
+            'P1_JOYSTICK_RIGHT': 'JOYCODE_1_HAT1RIGHT',
+            
+            # Player 1 System Controls
+            'P1_START': 'JOYCODE_1_START',
+            'P1_SELECT': 'JOYCODE_1_SELECT',
+        }
+
+def apply_default_mame_mappings(game_data: Dict, input_mode: str = 'xinput', 
+                               friendly_names: bool = True) -> Dict:
+    """
+    Apply MAME's default mappings when no cfg files exist
+    This ensures controls always show proper button names instead of raw control names
+    """
+    if not game_data or 'players' not in game_data:
+        return game_data
+    
+    # Get the default mappings for current input mode
+    default_mappings = get_default_mame_mappings(input_mode)
+    
+    # Apply to each player's controls
+    for player in game_data.get('players', []):
+        for label in player.get('labels', []):
+            control_name = label['name']
+            
+            # Only apply if no existing mapping
+            if not label.get('mapping') and control_name in default_mappings:
+                default_mapping = default_mappings[control_name]
+                
+                # Apply the default mapping
+                label.update({
+                    'mapping': default_mapping,
+                    'mapping_source': f'MAME Default ({input_mode.upper()})',
+                    'is_custom': False,
+                    'is_default': True,
+                    'input_mode': input_mode
+                })
+                
+                # Process the target button display
+                _process_target_button_for_label(label, default_mapping, input_mode, friendly_names)
+                _set_display_name_for_label(label, input_mode, friendly_names)
+    
+    # Mark the game data as having default mappings applied
+    game_data['has_default_mappings'] = True
+    game_data['default_mapping_mode'] = input_mode
+    
+    return game_data
+
 def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict, 
                                         default_controls: Dict, original_default_controls: Dict,
                                         input_mode: str = 'xinput', friendly_names: bool = True) -> Dict:
     """
-    Update game_data with custom mappings - UPDATED to support friendly names toggle
+    Update game_data with custom mappings - ENHANCED with MAME default fallback
     """
+    # First apply MAME's built-in defaults as the base layer
+    game_data = apply_default_mame_mappings(game_data, input_mode, friendly_names)
+    
+    # If we have no custom controls or defaults, we're done - MAME defaults are applied
     if not cfg_controls and not default_controls:
         return game_data
     
@@ -2381,7 +2639,7 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
     all_mappings = {}
     romname = game_data.get('romname', '')
     
-    # Process default mappings efficiently
+    # Process default mappings efficiently (these override MAME defaults)
     if default_controls:
         for control, mapping in default_controls.items():
             processed_mapping = mapping
@@ -2397,7 +2655,7 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
                 'source': 'Default CFG'
             }
     
-    # Override with ROM-specific mappings
+    # Override with ROM-specific mappings (highest priority)
     for control, mapping in cfg_controls.items():
         processed_mapping = filter_mapping_for_mode(mapping, input_mode)
         
@@ -2410,7 +2668,7 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
             'source': f"ROM CFG ({romname}.cfg)"
         }
     
-    # Apply mappings to game data in single pass
+    # Apply custom mappings to game data (override defaults where they exist)
     for player in game_data.get('players', []):
         for label in player.get('labels', []):
             control_name = label['name']
@@ -2418,26 +2676,25 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
             if control_name in all_mappings:
                 mapping_info = all_mappings[control_name]
                 
-                # Apply all mapping data at once
+                # Apply all mapping data at once (this overrides MAME defaults)
                 label.update({
                     'mapping': mapping_info['mapping'],
                     'mapping_source': mapping_info['source'],
                     'is_custom': 'ROM CFG' in mapping_info['source'],
+                    'is_default': False,  # This is now a custom override
                     'cfg_mapping': True,
                     'input_mode': input_mode
                 })
                 
-                # Process target_button efficiently - PASS friendly_names parameter
+                # Process target_button efficiently
                 _process_target_button_for_label(label, mapping_info['mapping'], input_mode, friendly_names)
-            else:
-                label['is_custom'] = False
             
-            # Set display name - PASS friendly_names parameter
+            # Set display name for all controls
             _set_display_name_for_label(label, input_mode, friendly_names)
     
-    # PRESERVE MAPPINGS metadata in processed game data
+    # Update metadata
     game_data['input_mode'] = input_mode
-    game_data['friendly_names'] = friendly_names  # Store this for reference
+    game_data['friendly_names'] = friendly_names
     if cfg_controls:
         game_data['has_rom_cfg'] = True
         game_data['rom_cfg_file'] = f"{romname}.cfg"

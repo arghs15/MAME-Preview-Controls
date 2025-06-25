@@ -2375,21 +2375,28 @@ class MAMEControlConfig(ctk.CTk):
         self.current_view = "all"
 
     def toggle_friendly_names(self):
-        """Toggle between friendly names and raw mapping display - FIXED"""
-        # FIXED: Get the toggle state directly instead of inverting it
+        """Toggle between friendly names and raw mapping display - ENHANCED CACHE CLEARING"""
+        # Get the toggle state directly instead of inverting it
         self.show_friendly_names = self.friendly_names_toggle.get()
         
         print(f"DEBUG: Toggled friendly names to: {self.show_friendly_names}")
         
         # CRITICAL: Clear processed cache to force reprocessing with new setting
         if hasattr(self, 'processed_cache'):
+            cleared_count = len(self.processed_cache)
             self.processed_cache.clear()
-            print("DEBUG: Cleared processed cache for friendly names toggle")
+            print(f"DEBUG: Cleared processed cache ({cleared_count} entries) for friendly names toggle")
         
         # CRITICAL: Also clear ROM data cache to force fresh processing
         if hasattr(self, 'rom_data_cache'):
+            cleared_count = len(self.rom_data_cache)
             self.rom_data_cache.clear()
-            print("DEBUG: Cleared rom_data_cache for friendly names toggle")
+            print(f"DEBUG: Cleared rom_data_cache ({cleared_count} entries) for friendly names toggle")
+        
+        # Clear LRU cache if it exists
+        if hasattr(self.get_game_data, 'cache_clear'):
+            self.get_game_data.cache_clear()
+            print("DEBUG: Cleared LRU cache for friendly names toggle")
         
         # Save the setting
         self.save_settings()
@@ -3498,28 +3505,107 @@ class MAMEControlConfig(ctk.CTk):
             )
             add_button.pack(anchor="w", padx=15, pady=(5, 15))
     
+    def load_processed_cache_from_disk(self, rom_name):
+        """Load processed data from disk cache if it matches current settings"""
+        try:
+            if not hasattr(self, 'cache_dir') or not self.cache_dir:
+                return None
+                
+            cache_filename = f"{rom_name}_cache.json"
+            cache_path = os.path.join(self.cache_dir, cache_filename)
+            
+            if not os.path.exists(cache_path):
+                return None
+            
+            # Load the cache file
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            # Validate cache matches current settings
+            current_settings = {
+                'input_mode': self.input_mode,
+                'friendly_names': getattr(self, 'show_friendly_names', True),
+                'xinput_only_mode': getattr(self, 'xinput_only_mode', True)
+            }
+            
+            cached_settings = {
+                'input_mode': cache_data.get('input_mode'),
+                'friendly_names': cache_data.get('friendly_names', True),
+                'xinput_only_mode': cache_data.get('xinput_only_mode', True)
+            }
+            
+            # Check if settings match
+            if cached_settings == current_settings:
+                print(f"Loaded valid disk cache for {rom_name}")
+                return cache_data.get('game_data')
+            else:
+                print(f"Disk cache for {rom_name} is outdated (settings changed)")
+                # Optionally remove outdated cache
+                try:
+                    os.remove(cache_path)
+                    print(f"Removed outdated cache file for {rom_name}")
+                except:
+                    pass
+                return None
+            
+        except Exception as e:
+            print(f"Error loading disk cache for {rom_name}: {e}")
+            return None
+    
     def save_processed_cache_to_disk(self, rom_name, game_data):
-        """Save processed data to disk cache without blocking UI"""
+        """Save processed data to disk cache with clean ROM-based filename"""
         try:
             if not hasattr(self, 'cache_dir') or not self.cache_dir:
                 return
                 
-            cache_path = os.path.join(self.cache_dir, f"{rom_name}_cache.json")
+            # CLEAN filename - just ROM name
+            cache_filename = f"{rom_name}_cache.json"
+            cache_path = os.path.join(self.cache_dir, cache_filename)
             
             # Create cache directory if needed
             os.makedirs(self.cache_dir, exist_ok=True)
             
+            # ENHANCED: Store cache metadata in the JSON to track what settings were used
+            cache_data = {
+                'rom_name': rom_name,
+                'input_mode': self.input_mode,
+                'friendly_names': getattr(self, 'show_friendly_names', True),
+                'xinput_only_mode': getattr(self, 'xinput_only_mode', True),
+                'cached_timestamp': time.time(),
+                'game_data': game_data
+            }
+            
             # Save to disk
             with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(game_data, f, indent=2)
+                json.dump(cache_data, f, indent=2)
                 
-            print(f"Saved processed cache for {rom_name}")
+            print(f"Saved processed cache for {rom_name} (mode: {self.input_mode}, friendly: {getattr(self, 'show_friendly_names', True)})")
             
         except Exception as e:
             print(f"Warning: Could not save cache for {rom_name}: {e}")
     
+    def debug_cache_state(self):
+        """Debug method to check current cache state"""
+        print(f"\n=== CACHE DEBUG ===")
+        print(f"Current input mode: {getattr(self, 'input_mode', 'not set')}")
+        print(f"Current friendly_names: {getattr(self, 'show_friendly_names', 'not set')}")
+        print(f"Current game: {getattr(self, 'current_game', 'not set')}")
+        
+        if hasattr(self, 'processed_cache'):
+            print(f"Processed cache entries: {len(self.processed_cache)}")
+            for key in list(self.processed_cache.keys())[:5]:  # Show first 5
+                print(f"  Cache key: {key}")
+        else:
+            print("No processed cache")
+            
+        if hasattr(self, 'rom_data_cache'):
+            print(f"ROM data cache entries: {len(self.rom_data_cache)}")
+        else:
+            print("No ROM data cache")
+        print("===================\n")
+    
     def display_game_info(self, rom_name, processed_data=None):
-        """Display game information and controls - WITH PROGRESS INDICATION"""
+        """Display game information and controls - WITH PROPER CACHE VALIDATION"""
         try:     
             print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}, friendly_names={getattr(self, 'show_friendly_names', True)}")
             
@@ -3535,8 +3621,9 @@ class MAMEControlConfig(ctk.CTk):
             if not hasattr(self, 'processed_cache'):
                 self.processed_cache = {}
             
-            # UPDATED: Include friendly_names in cache key
+            # FIXED: Include input_mode AND friendly_names in cache key
             cache_key = f"{rom_name}_{self.input_mode}_{getattr(self, 'show_friendly_names', True)}"
+            print(f"Using cache key: {cache_key}")
             
             # Initialize cfg_controls for all code paths
             cfg_controls = {}
@@ -3546,49 +3633,58 @@ class MAMEControlConfig(ctk.CTk):
                 game_data = processed_data
                 self.processed_cache[cache_key] = processed_data
             elif cache_key in self.processed_cache:
-                print(f"Using cached processed data for {rom_name} (friendly_names={getattr(self, 'show_friendly_names', True)})")
+                print(f"Using in-memory cached data for {rom_name}")
                 game_data = self.processed_cache[cache_key]
             else:
-                print(f"Processing fresh data for {rom_name} with friendly_names={getattr(self, 'show_friendly_names', True)}")
-                
-                # Update splash during processing
-                if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
-                    self.update_splash_message(f"Processing {rom_name} data...")
-                
-                # Get raw game data ONCE
-                game_data = self.get_game_data(rom_name)
-                
-                if not game_data:
-                    self.display_no_control_data(rom_name)
-                    return
+                # Try loading from disk cache first
+                disk_cached_data = self.load_processed_cache_from_disk(rom_name)
+                if disk_cached_data:
+                    print(f"Using valid disk cached data for {rom_name}")
+                    game_data = disk_cached_data
+                    # Store in memory cache too
+                    self.processed_cache[cache_key] = disk_cached_data
+                else:
+                    print(f"Processing fresh data for {rom_name} with mode={self.input_mode}, friendly_names={getattr(self, 'show_friendly_names', True)}")
+                    
+                    # Update splash during processing
+                    if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
+                        self.update_splash_message(f"Processing {rom_name} data...")
+                    
+                    # Get raw game data ONCE
+                    game_data = self.get_game_data(rom_name)
+                    
+                    if not game_data:
+                        self.display_no_control_data(rom_name)
+                        return
 
-                # IMPORTANT: Apply custom mappings ONCE here
-                if rom_name in self.custom_configs:
-                    cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
-                    cfg_controls = {
-                        control: convert_mapping(mapping, self.input_mode)
-                        for control, mapping in cfg_controls.items()
-                    }
+                    # IMPORTANT: Apply custom mappings ONCE here
+                    if rom_name in self.custom_configs:
+                        cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
+                        cfg_controls = {
+                            control: convert_mapping(mapping, self.input_mode)
+                            for control, mapping in cfg_controls.items()
+                        }
 
-                # Apply all processing ONCE - PASS friendly_names parameter
-                game_data = update_game_data_with_custom_mappings(
-                    game_data, 
-                    cfg_controls, 
-                    getattr(self, 'default_controls', {}),
-                    getattr(self, 'original_default_controls', {}),
-                    self.input_mode,
-                    getattr(self, 'show_friendly_names', True)  # CRITICAL: Pass the toggle setting
-                )
+                    # Apply all processing ONCE - PASS friendly_names parameter
+                    game_data = update_game_data_with_custom_mappings(
+                        game_data, 
+                        cfg_controls, 
+                        getattr(self, 'default_controls', {}),
+                        getattr(self, 'original_default_controls', {}),
+                        self.input_mode,
+                        getattr(self, 'show_friendly_names', True)  # CRITICAL: Pass the toggle setting
+                    )
 
-                # Apply XInput filtering if enabled
-                if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
-                    game_data = filter_xinput_controls(game_data)
-                
-                # Cache the processed result with new cache key
-                self.processed_cache[cache_key] = game_data
-                
-                # Save to disk cache asynchronously
-                self.after_idle(lambda: self.save_processed_cache_to_disk(rom_name, game_data))
+                    # Apply XInput filtering if enabled
+                    if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+                        game_data = filter_xinput_controls(game_data)
+                    
+                    # Cache the processed result with the CORRECT cache key
+                    self.processed_cache[cache_key] = game_data
+                    print(f"Cached processed data with key: {cache_key}")
+                    
+                    # Save to disk cache asynchronously (with clean filename)
+                    self.after_idle(lambda: self.save_processed_cache_to_disk(rom_name, game_data))
 
             # For cached data, we need to regenerate cfg_controls if it exists
             if not cfg_controls and rom_name in self.custom_configs:
@@ -7298,35 +7394,50 @@ class MAMEControlConfig(ctk.CTk):
             return self.theme_colors["primary"]  # Default blue
     
     def toggle_input_mode(self):
-        """Handle toggling between input modes with FORCED cache clearing"""
+        """Handle toggling between input modes with CLEAN cache clearing"""
         if hasattr(self, 'input_mode_var'):
             old_mode = self.input_mode
             self.input_mode = self.input_mode_var.get()
             print(f"Input mode changed from {old_mode} to {self.input_mode}")
             
-            # CRITICAL: Clear ALL caches when mode changes
+            # CRITICAL: Clear in-memory caches when mode changes
             if hasattr(self, 'rom_data_cache'):
+                cleared_count = len(self.rom_data_cache)
                 self.rom_data_cache.clear()
-                print("Cleared rom_data_cache")
+                print(f"Cleared rom_data_cache ({cleared_count} entries)")
+                
             if hasattr(self, 'processed_cache'):
+                cleared_count = len(self.processed_cache)
                 self.processed_cache.clear()
-                print("Cleared processed_cache")
+                print(f"Cleared processed_cache ({cleared_count} entries)")
             
-            # ALSO clear any disk cache files for current game to force regeneration
-            if hasattr(self, 'current_game') and self.current_game:
-                cache_file = os.path.join(self.cache_dir, f"{self.current_game}_cache.json")
-                if os.path.exists(cache_file):
-                    try:
-                        os.remove(cache_file)
-                        print(f"Removed disk cache file for {self.current_game}")
-                    except Exception as e:
-                        print(f"Error removing cache file: {e}")
+            # ALSO clear the @lru_cache on get_game_data if it exists
+            if hasattr(self.get_game_data, 'cache_clear'):
+                self.get_game_data.cache_clear()
+                print("Cleared LRU cache on get_game_data method")
+            
+            # ALSO clear any disk cache files for ALL games to force regeneration
+            if hasattr(self, 'cache_dir') and self.cache_dir:
+                try:
+                    import os
+                    cache_files_removed = 0
+                    for filename in os.listdir(self.cache_dir):
+                        if filename.endswith('_cache.json'):
+                            try:
+                                os.remove(os.path.join(self.cache_dir, filename))
+                                cache_files_removed += 1
+                            except Exception as e:
+                                print(f"Error removing cache file {filename}: {e}")
+                    print(f"Removed {cache_files_removed} disk cache files")
+                except Exception as e:
+                    print(f"Error clearing disk cache: {e}")
             
             # Save the setting
             self.save_settings()
             
             # Refresh current game display if one is selected
             if self.current_game:
+                print(f"Refreshing display for {self.current_game} with new input mode {self.input_mode}")
                 # This will trigger fresh processing with new input mode
                 self.display_game_info(self.current_game)
                 
