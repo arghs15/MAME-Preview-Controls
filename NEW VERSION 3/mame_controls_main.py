@@ -533,6 +533,83 @@ def validate_arguments(args):
     
     return errors
 
+def validate_cache_file(cache_file: str, rom_name: str) -> bool:
+    """
+    Validate cache file - supports both old and new cache formats
+    Returns True if cache is valid, False if invalid/corrupt
+    """
+    try:
+        with open(cache_file, 'r') as f:
+            cache_data = json.load(f)
+        
+        # NEW FORMAT: Cache file has metadata wrapper with 'game_data' field
+        if isinstance(cache_data, dict) and 'game_data' in cache_data:
+            print(f"✅ Found NEW format cache for {rom_name}")
+            
+            # Validate the metadata wrapper structure
+            required_wrapper_fields = ['rom_name', 'game_data']
+            for field in required_wrapper_fields:
+                if field not in cache_data:
+                    print(f"❌ Missing required wrapper field: {field}")
+                    return False
+            
+            # Validate that rom_name matches
+            if cache_data.get('rom_name') != rom_name:
+                print(f"❌ ROM name mismatch: expected {rom_name}, got {cache_data.get('rom_name')}")
+                return False
+            
+            # Validate the actual game data
+            game_data = cache_data['game_data']
+            if not isinstance(game_data, dict):
+                print(f"❌ Invalid game_data structure in cache")
+                return False
+                
+            # Check for essential game data fields
+            required_game_fields = ['romname', 'players']
+            for field in required_game_fields:
+                if field not in game_data:
+                    print(f"❌ Missing required game data field: {field}")
+                    return False
+            
+            # Validate players structure
+            players = game_data.get('players', [])
+            if not isinstance(players, list):
+                print(f"❌ Invalid players structure")
+                return False
+            
+            print(f"✅ Valid NEW format cache for {rom_name}")
+            return True
+            
+        # OLD FORMAT: Cache file contains direct game data (PRE-ENHANCEMENT)
+        elif isinstance(cache_data, dict) and 'players' in cache_data:
+            print(f"🔄 Found OLD format cache for {rom_name}")
+            
+            # Validate old format structure
+            if 'romname' not in cache_data:
+                print(f"❌ Missing romname in old format cache")
+                return False
+            
+            # Check that players is a list
+            if not isinstance(cache_data.get('players'), list):
+                print(f"❌ Invalid players structure in old format cache")
+                return False
+            
+            print(f"✅ Valid OLD format cache for {rom_name} (will be migrated)")
+            return True
+            
+        # INVALID FORMAT: Neither format recognized
+        else:
+            print(f"❌ Unrecognized cache format for {rom_name}")
+            print(f"📋 Cache keys: {list(cache_data.keys()) if isinstance(cache_data, dict) else 'not a dict'}")
+            return False
+            
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON parsing error in cache file: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Error validating cache file: {e}")
+        return False
+
 # Replace the argument parsing section in main() with this:
 def main():
     """Main entry point for the application with improved path handling and comprehensive argument parsing"""
@@ -641,6 +718,27 @@ def main():
             os.makedirs(cache_dir, exist_ok=True)
             cache_file = os.path.join(cache_dir, f"{args.game}_cache.json")
             
+            # Check if we have an old format cache that needs migration
+            needs_migration = False
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, 'r') as f:
+                        existing_cache = json.load(f)
+                    
+                    # Check if it's old format (direct game data without wrapper)
+                    if isinstance(existing_cache, dict) and 'players' in existing_cache and 'game_data' not in existing_cache:
+                        print(f"🔄 Found OLD format cache for {args.game} - will migrate to new format")
+                        needs_migration = True
+                    elif isinstance(existing_cache, dict) and 'game_data' in existing_cache:
+                        print(f"✅ Found NEW format cache for {args.game} - will refresh with latest data")
+                    else:
+                        print(f"❓ Found unrecognized cache format for {args.game} - will rebuild")
+                        needs_migration = True
+                        
+                except Exception as e:
+                    print(f"⚠️  Error reading existing cache: {e} - will rebuild")
+                    needs_migration = True
+            
             try:
                 # Import data utilities directly
                 from mame_data_utils import (
@@ -649,26 +747,10 @@ def main():
                     filter_xinput_controls, get_game_data, get_game_data_from_db
                 )
                 
-                # Load input mode from settings
-                settings_path = os.path.join(settings_dir, "control_config_settings.json")
-                input_mode = 'xinput'  # Default
-                xinput_only_mode = True  # Default
+                # Load input mode and settings from settings file
+                input_mode, xinput_only_mode, friendly_names = load_input_mode_from_settings(preview_dir)
                 
-                try:
-                    if os.path.exists(settings_path):
-                        with open(settings_path, 'r') as f:
-                            settings = json.load(f)
-                        input_mode = settings.get('input_mode', 'xinput')
-                        xinput_only_mode = settings.get('xinput_only_mode', True)
-                        
-                        # Validate input mode
-                        if input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
-                            input_mode = 'xinput'
-                            
-                    print(f"🎮 Input mode: {input_mode}")
-                    print(f"🎯 XInput-only mode: {xinput_only_mode}")
-                except Exception as e:
-                    print(f"⚠️  Error loading settings, using defaults: {e}")
+                print(f"🎮 Cache settings: mode={input_mode}, xinput_only={xinput_only_mode}, friendly={friendly_names}")
                 
                 # Load game data based on --use-db flag
                 game_data = None
@@ -766,10 +848,21 @@ def main():
                     game_data = filter_xinput_controls(game_data)
                     print(f"🎯 Applied XInput-only filter")
                 
-                # Save the processed game data to cache
+                # Save the processed game data to NEW cache format
                 try:
+                    # Create cache in new format with metadata wrapper
+                    new_cache_data = {
+                        'rom_name': args.game,
+                        'input_mode': input_mode,
+                        'friendly_names': friendly_names,
+                        'xinput_only_mode': xinput_only_mode,
+                        'cached_timestamp': time.time(),
+                        'cache_version': '2.0',  # Mark as new format
+                        'game_data': game_data  # The actual game data
+                    }
+                    
                     with open(cache_file, 'w') as f:
-                        json.dump(game_data, f, indent=2)
+                        json.dump(new_cache_data, f, indent=2)
                     
                     load_time = time.time() - start_time
                     
@@ -781,7 +874,12 @@ def main():
                     print(f"📊 Source: {game_data.get('source', 'unknown')}")
                     print(f"🎛️  Input Mode: {input_mode}")
                     print(f"🎯 XInput-only: {xinput_only_mode}")
+                    print(f"🎨 Friendly Names: {friendly_names}")
                     print(f"📁 Cache File: {os.path.basename(cache_file)}")
+                    print(f"📋 Cache Version: 2.0 (NEW FORMAT)")
+                    
+                    if needs_migration:
+                        print(f"🔄 Successfully migrated from old cache format")
                     
                     if use_database and args.use_db:
                         print(f"🗃️  Database Mode: FORCED (bypassed cache)")
@@ -857,34 +955,24 @@ def main():
                     print("=" * 60)
                     return 1
                 
-                # Verify cache file is valid
-                try:
-                    import json
-                    with open(cache_file, 'r') as f:
-                        cache_data = json.load(f)
-                    if not (cache_data and isinstance(cache_data, dict) and 'romname' in cache_data):
-                        print()
-                        print("=" * 60)
-                        print(f"❌ ERROR: Cache file exists but contains invalid data")
-                        print(f"📁 Corrupt cache file: {cache_file}")
-                        print()
-                        print("💡 SOLUTION: Rebuild the cache:")
-                        print(f"   python {os.path.basename(sys.argv[0])} --precache --game {args.game}")
-                        print("=" * 60)
-                        return 1
-                    else:
-                        print(f"✅ Valid cache found for {args.game}")
-                except Exception as e:
+                # Verify cache file is valid using the new validator
+                if not validate_cache_file(cache_file, args.game):
                     print()
                     print("=" * 60)
-                    print(f"❌ ERROR: Cannot read cache file")
+                    print(f"❌ ERROR: Cache file exists but contains invalid data")
                     print(f"📁 Cache file: {cache_file}")
-                    print(f"🔥 Error: {e}")
                     print()
                     print("💡 SOLUTION: Rebuild the cache:")
                     print(f"   python {os.path.basename(sys.argv[0])} --precache --game {args.game}")
+                    if os.path.exists(db_path):
+                        print(f"   python {os.path.basename(sys.argv[0])} --preview-only --game {args.game} --use-db")
+                    print()
+                    print("ℹ️  This usually happens when the cache format has been updated.")
+                    print("   Rebuilding the cache will use the latest format with enhanced features.")
                     print("=" * 60)
                     return 1
+                else:
+                    print(f"✅ Valid cache found for {args.game}")
             
             # For --use-db mode, we need to build cache first, then show preview
             if args.use_db and args.preview_only:
@@ -1516,32 +1604,38 @@ def main():
                 pass
 
 def load_input_mode_from_settings(preview_dir):
-    """Load the current input mode from settings file"""
+    """Load the current input mode from settings file with enhanced error handling"""
     settings_dir = os.path.join(preview_dir, "settings")
     settings_path = os.path.join(settings_dir, "control_config_settings.json")
     
     # Default to xinput if no settings found
     default_input_mode = 'xinput'
+    default_xinput_only_mode = True
+    default_friendly_names = True
     
     try:
         if os.path.exists(settings_path):
             with open(settings_path, 'r') as f:
                 settings = json.load(f)
-            input_mode = settings.get('input_mode', default_input_mode)
             
-            # Validate the input mode
+            # Load input mode
+            input_mode = settings.get('input_mode', default_input_mode)
             if input_mode not in ['joycode', 'xinput', 'dinput', 'keycode']:
                 print(f"Invalid input mode '{input_mode}' in settings, using default: {default_input_mode}")
                 input_mode = default_input_mode
+            
+            # Load other settings that affect cache
+            xinput_only_mode = settings.get('xinput_only_mode', default_xinput_only_mode)
+            friendly_names = settings.get('friendly_names', default_friendly_names)
                 
-            print(f"Loaded input mode from settings: {input_mode}")
-            return input_mode
+            print(f"Loaded settings: mode={input_mode}, xinput_only={xinput_only_mode}, friendly={friendly_names}")
+            return input_mode, xinput_only_mode, friendly_names
         else:
-            print(f"No settings file found at {settings_path}, using default: {default_input_mode}")
-            return default_input_mode
+            print(f"No settings file found at {settings_path}, using defaults")
+            return default_input_mode, default_xinput_only_mode, default_friendly_names
     except Exception as e:
-        print(f"Error loading input mode from settings: {e}, using default: {default_input_mode}")
-        return default_input_mode
+        print(f"Error loading settings: {e}, using defaults")
+        return default_input_mode, default_xinput_only_mode, default_friendly_names
 
 def apply_input_mode_processing(game_data, input_mode, cfg_controls, mame_dir, rom_name):
     """Apply input mode processing to game data similar to main application"""
