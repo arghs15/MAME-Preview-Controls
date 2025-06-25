@@ -194,6 +194,7 @@ class MAMEControlConfig(ctk.CTk):
         self.ALLOW_REMOVE_GAME = False     # Set to True to enable "Remove Game" button
         self.SHOW_HIDE_BUTTONS_TOGGLE = False  # NEW: Set to False to hide the toggle
         self.CONTROLS_ONLY_EDIT = True     # NEW: Set to True to disable game property editing
+        self.show_friendly_names = True  # Default to friendly names
         # Add ROM source mode tracking
         self.rom_source_mode = "physical"  # ALWAYS DEFAULT TO PHYSICAL
         self.database_roms = set()  # Will hold all parent ROMs from gamedata
@@ -2373,8 +2374,43 @@ class MAMEControlConfig(ctk.CTk):
         self.sidebar_tabs["all"].set_active(True)
         self.current_view = "all"
 
+    def toggle_friendly_names(self):
+        """Toggle between friendly names and raw mapping display"""
+        self.show_friendly_names = not self.show_friendly_names
+        
+        print(f"DEBUG: Toggled friendly names to: {self.show_friendly_names}")
+        
+        # CRITICAL: Clear processed cache to force reprocessing with new setting
+        if hasattr(self, 'processed_cache'):
+            self.processed_cache.clear()
+            print("DEBUG: Cleared processed cache for friendly names toggle")
+        
+        # CRITICAL: Also clear ROM data cache to force fresh processing
+        if hasattr(self, 'rom_data_cache'):
+            self.rom_data_cache.clear()
+            print("DEBUG: Cleared rom_data_cache for friendly names toggle")
+        
+        # Save the setting
+        self.save_settings()
+        
+        # Refresh current game display if one is selected
+        if self.current_game:
+            print(f"DEBUG: Refreshing display for {self.current_game} with friendly_names={self.show_friendly_names}")
+            # Force fresh processing by NOT passing processed_data
+            self.display_game_info(self.current_game)
+            
+        # Update status message (with better error handling)
+        mode_text = "friendly names" if self.show_friendly_names else "raw mappings"
+        try:
+            if hasattr(self, 'update_status_message'):
+                self.update_status_message(f"Display mode changed to {mode_text}")
+            else:
+                print(f"Display mode changed to {mode_text}")
+        except Exception as e:
+            print(f"Could not update status: {e}, message was: Display mode changed to {mode_text}")
+    
     def create_top_bar(self):
-        """Create top bar with control buttons - NO ROM source toggle"""
+        """Create top bar with control buttons - INCLUDE FRIENDLY NAMES TOGGLE"""
         self.top_bar = ctk.CTkFrame(self.main_content, height=60, fg_color=self.theme_colors["card_bg"], corner_radius=0)
         self.top_bar.grid(row=0, column=0, sticky="ew")
         
@@ -2433,7 +2469,24 @@ class MAMEControlConfig(ctk.CTk):
         )
         self.preview_button.pack(side="right", padx=10)
         
-        # ROM Source Toggle - ALWAYS START OFF
+        # NEW: Friendly names toggle
+        self.friendly_names_toggle = ctk.CTkSwitch(
+            toggle_frame,
+            text="Friendly Names",
+            command=self.toggle_friendly_names,
+            button_color=self.theme_colors["primary"],
+            button_hover_color=self.theme_colors["secondary"]
+        )
+        
+        # Set initial state based on settings
+        if hasattr(self, 'show_friendly_names') and self.show_friendly_names:
+            self.friendly_names_toggle.select()
+        else:
+            self.friendly_names_toggle.deselect()
+        
+        self.friendly_names_toggle.pack(side="right", padx=10)
+        
+        # ROM Source Toggle
         self.rom_source_toggle = ctk.CTkSwitch(
             toggle_frame,
             text="Show All Games",
@@ -3467,7 +3520,7 @@ class MAMEControlConfig(ctk.CTk):
     def display_game_info(self, rom_name, processed_data=None):
         """Display game information and controls - WITH PROGRESS INDICATION"""
         try:     
-            print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}")
+            print(f"DEBUG display_game_info: Starting for {rom_name}, input_mode={self.input_mode}, friendly_names={getattr(self, 'show_friendly_names', True)}")
             
             # Update splash if it's still visible (for first ROM)
             if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
@@ -3481,7 +3534,8 @@ class MAMEControlConfig(ctk.CTk):
             if not hasattr(self, 'processed_cache'):
                 self.processed_cache = {}
             
-            cache_key = f"{rom_name}_{self.input_mode}"
+            # UPDATED: Include friendly_names in cache key
+            cache_key = f"{rom_name}_{self.input_mode}_{getattr(self, 'show_friendly_names', True)}"
             
             # Initialize cfg_controls for all code paths
             cfg_controls = {}
@@ -3491,10 +3545,10 @@ class MAMEControlConfig(ctk.CTk):
                 game_data = processed_data
                 self.processed_cache[cache_key] = processed_data
             elif cache_key in self.processed_cache:
-                print(f"Using cached processed data for {rom_name}")
+                print(f"Using cached processed data for {rom_name} (friendly_names={getattr(self, 'show_friendly_names', True)})")
                 game_data = self.processed_cache[cache_key]
             else:
-                print(f"Processing fresh data for {rom_name}")
+                print(f"Processing fresh data for {rom_name} with friendly_names={getattr(self, 'show_friendly_names', True)}")
                 
                 # Update splash during processing
                 if hasattr(self, 'splash_window') and getattr(self, 'splash_window', None):
@@ -3515,20 +3569,21 @@ class MAMEControlConfig(ctk.CTk):
                         for control, mapping in cfg_controls.items()
                     }
 
-                # Apply all processing ONCE
+                # Apply all processing ONCE - PASS friendly_names parameter
                 game_data = update_game_data_with_custom_mappings(
                     game_data, 
                     cfg_controls, 
                     getattr(self, 'default_controls', {}),
                     getattr(self, 'original_default_controls', {}),
-                    self.input_mode
+                    self.input_mode,
+                    getattr(self, 'show_friendly_names', True)  # CRITICAL: Pass the toggle setting
                 )
 
                 # Apply XInput filtering if enabled
                 if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
                     game_data = filter_xinput_controls(game_data)
                 
-                # Cache the processed result
+                # Cache the processed result with new cache key
                 self.processed_cache[cache_key] = game_data
                 
                 # Save to disk cache asynchronously
@@ -3548,7 +3603,7 @@ class MAMEControlConfig(ctk.CTk):
 
             # Now display using the processed data
             current_mode = getattr(self, 'input_mode', 'xinput' if self.use_xinput else 'joycode')
-            print(f"Display game info using input mode: {current_mode}")
+            print(f"Display game info using input mode: {current_mode}, friendly_names: {getattr(self, 'show_friendly_names', True)}")
 
             # Update game title
             source_text = f" ({game_data.get('source', 'unknown')})"
@@ -6374,7 +6429,7 @@ class MAMEControlConfig(ctk.CTk):
             self.save_settings()
         
     def save_settings(self):
-        """Save current settings - EXCLUDE rom_source_mode so toggle isn't saved"""
+        """Save current settings - INCLUDE friendly names setting"""
         settings = {
             "preferred_preview_screen": getattr(self, 'preferred_preview_screen', 1),
             "visible_control_types": getattr(self, 'visible_control_types', ["BUTTON", "JOYSTICK"]),
@@ -6382,8 +6437,8 @@ class MAMEControlConfig(ctk.CTk):
             "show_button_names": getattr(self, 'show_button_names', True),
             "input_mode": getattr(self, 'input_mode', 'xinput'),
             "xinput_only_mode": getattr(self, 'xinput_only_mode', True),
-            "show_directional_alternatives": getattr(self, 'show_directional_alternatives', True)
-            # EXCLUDED: "rom_source_mode" - don't save toggle state
+            "show_directional_alternatives": getattr(self, 'show_directional_alternatives', True),
+            "show_friendly_names": getattr(self, 'show_friendly_names', True)  # NEW
         }
         
         print(f"Debug - saving settings (toggle state not saved): {settings}")
@@ -6444,6 +6499,10 @@ class MAMEControlConfig(ctk.CTk):
                     
                 if 'xinput_only_mode' in settings:
                     self.xinput_only_mode = bool(settings.get('xinput_only_mode', True))
+                
+                # Load friendly names setting
+                if 'show_friendly_names' in settings:
+                    self.show_friendly_names = bool(settings.get('show_friendly_names', True))
                 
                 # IGNORE any saved rom_source_mode - always force physical
                 self.rom_source_mode = 'physical'
@@ -7886,12 +7945,13 @@ class MAMEControlConfig(ctk.CTk):
                         for control, mapping in cfg_controls.items()
                     }
                 
-                # Update game_data with custom mappings
+                # Update game_data with custom mappings - PASS friendly_names (always True for export)
                 game_data = update_game_data_with_custom_mappings(
                     game_data, cfg_controls, 
                     getattr(self, 'default_controls', {}),
                     getattr(self, 'original_default_controls', {}),
-                    self.input_mode
+                    self.input_mode,
+                    True  # Always use friendly names for export
                 )
                 print(f"Applied custom mapping from ROM CFG for {rom_name}")
             
@@ -8539,13 +8599,14 @@ class MAMEControlConfig(ctk.CTk):
                                     for control, mapping in cfg_controls.items()
                                 }
                             
-                            # Update game_data with custom mappings
+                            # Update game_data with custom mappings - PASS friendly_names (always True for batch export)
                             game_data = update_game_data_with_custom_mappings(
                                 game_data, 
                                 cfg_controls, 
                                 getattr(self, 'default_controls', {}),
                                 getattr(self, 'original_default_controls', {}),
-                                self.input_mode
+                                self.input_mode,
+                                True  # Always use friendly names for batch export
                             )
                             print(f"Applied custom mapping from ROM CFG for {rom_name}")
                         

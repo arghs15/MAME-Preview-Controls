@@ -1809,9 +1809,13 @@ def extract_keycode_from_mapping(mapping: str) -> str:
     
     return ""
 
-def format_keycode_display(mapping: str) -> str:
-    """Format KEYCODE mapping string for display"""
+def format_keycode_display(mapping: str, friendly_names: bool = True) -> str:
+    """Format KEYCODE mapping string for display - with friendly/raw toggle"""
     if not mapping or not mapping.startswith("KEYCODE_"):
+        return mapping
+    
+    # If friendly_names is False, return the raw mapping
+    if not friendly_names:
         return mapping
         
     key_name = mapping.replace("KEYCODE_", "")
@@ -2090,9 +2094,13 @@ def get_friendly_xinput_alternatives(xinput_mapping: str) -> str:
     
     return ' | '.join(friendly_parts)
 
-def get_friendly_xinput_name(mapping: str) -> str:
-    """Convert an XINPUT mapping code into a human-friendly button/stick name - ENHANCED"""
+def get_friendly_xinput_name(mapping: str, friendly_names: bool = True) -> str:
+    """Convert an XINPUT mapping code into a human-friendly button/stick name - with toggle"""
     if not mapping or not mapping.startswith('XINPUT_'):
+        return mapping
+    
+    # If friendly_names is False, return the raw mapping
+    if not friendly_names:
         return mapping
         
     parts = mapping.split('_', 2)
@@ -2115,7 +2123,6 @@ def get_friendly_xinput_name(mapping: str) -> str:
         "DPAD_DOWN": "D-Pad Down",
         "DPAD_LEFT": "D-Pad Left",
         "DPAD_RIGHT": "D-Pad Right",
-        # ENHANCED: Add the new axis mappings
         "LEFTX_NEG": "Left Stick Left",
         "LEFTX_POS": "Left Stick Right",
         "LEFTY_NEG": "Left Stick Up",
@@ -2123,13 +2130,19 @@ def get_friendly_xinput_name(mapping: str) -> str:
         "RIGHTX_NEG": "Right Stick Left",
         "RIGHTX_POS": "Right Stick Right",
         "RIGHTY_NEG": "Right Stick Up",
-        "RIGHTY_POS": "Right Stick Down"
+        "RIGHTY_POS": "Right Stick Down",
+        "START": "Start Button",
+        "BACK": "Back Button"
     }
     return friendly_map.get(action, action)
 
-def get_friendly_dinput_name(mapping: str) -> str:
-    """Convert a DINPUT mapping code into a human-friendly button/stick name - ENHANCED"""
+def get_friendly_dinput_name(mapping: str, friendly_names: bool = True) -> str:
+    """Convert a DINPUT mapping code into a human-friendly button/stick name - with toggle"""
     if not mapping or not mapping.startswith('DINPUT_'):
+        return mapping
+    
+    # If friendly_names is False, return the raw mapping
+    if not friendly_names:
         return mapping
         
     parts = mapping.split('_', 3)
@@ -2179,9 +2192,13 @@ def get_friendly_dinput_name(mapping: str) -> str:
     # Fallback
     return f"DInput {player_num} {action}"
 
-def format_joycode_display(mapping: str) -> str:
-    """Format JOYCODE mapping string for display - UPDATED for latest MAME mappings."""
+def format_joycode_display(mapping: str, friendly_names: bool = True) -> str:
+    """Format JOYCODE mapping string for display - with friendly/raw toggle."""
     if not mapping or not "JOYCODE" in mapping:
+        return mapping
+    
+    # If friendly_names is False, return the raw mapping
+    if not friendly_names:
         return mapping
     
     # Handle modern MAME button names
@@ -2251,8 +2268,12 @@ def format_joycode_display(mapping: str) -> str:
             
     return mapping
 
-def format_mapping_display(mapping: str, input_mode: str = 'xinput') -> str:
-    """Format the mapping string for display using friendly names for the current input mode."""
+def format_mapping_display(mapping: str, input_mode: str = 'xinput', friendly_names: bool = True) -> str:
+    """Format the mapping string for display using friendly names for the current input mode - with toggle."""
+    
+    # If friendly_names is False, return the raw mapping
+    if not friendly_names:
+        return mapping
     
     # Handle OR statements by finding matching parts
     if " OR " in mapping:
@@ -2284,42 +2305,45 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput') -> str:
     # Format based on the current input mode
     if input_mode == 'keycode':
         if mapping.startswith("KEYCODE"):
-            return format_keycode_display(mapping)
+            return format_keycode_display(mapping, friendly_names)
         else:
-            return "No Key Assigned"
+            return "No Key Assigned" if friendly_names else mapping
     
     # Format based on the current input mode
     if input_mode == 'xinput':
         if mapping.startswith("XINPUT"):
-            return get_friendly_xinput_name(mapping)
+            return get_friendly_xinput_name(mapping, friendly_names)
         else:
             # Try to convert to XInput
             converted = convert_mapping(mapping, 'xinput')
             if converted.startswith("XINPUT"):
-                return get_friendly_xinput_name(converted)
+                return get_friendly_xinput_name(converted, friendly_names)
     
     elif input_mode == 'dinput':
         if mapping.startswith("DINPUT"):
-            return get_friendly_dinput_name(mapping)
+            return get_friendly_dinput_name(mapping, friendly_names)
         else:
             # Try to convert to DInput
             converted = convert_mapping(mapping, 'dinput')
             if converted.startswith("DINPUT"):
-                return get_friendly_dinput_name(converted)
+                return get_friendly_dinput_name(converted, friendly_names)
     
     elif input_mode == 'joycode':
         if "JOYCODE" in mapping:
-            return format_joycode_display(mapping)
+            return format_joycode_display(mapping, friendly_names)
         else:
             # Try to convert to JOYCODE
             converted = convert_mapping(mapping, 'joycode')
             if "JOYCODE" in converted:
-                return format_joycode_display(converted)
+                return format_joycode_display(converted, friendly_names)
     
     # For keyboard mappings, convert to "Key X" format
     if mapping.startswith("KEYCODE"):
-        key_name = mapping.replace("KEYCODE_", "")
-        return f"Key {key_name}"
+        if friendly_names:
+            key_name = mapping.replace("KEYCODE_", "")
+            return f"Key {key_name}"
+        else:
+            return mapping
 
     # Fallback to original mapping if no conversion was possible
     return mapping
@@ -2330,9 +2354,9 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput') -> str:
 
 def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict, 
                                         default_controls: Dict, original_default_controls: Dict,
-                                        input_mode: str = 'xinput') -> Dict:
+                                        input_mode: str = 'xinput', friendly_names: bool = True) -> Dict:
     """
-    Update game_data with custom mappings - UPDATED to preserve mappings and FIXED for keycode mode
+    Update game_data with custom mappings - UPDATED to support friendly names toggle
     """
     if not cfg_controls and not default_controls:
         return game_data
@@ -2403,24 +2427,22 @@ def update_game_data_with_custom_mappings(game_data: Dict, cfg_controls: Dict,
                     'input_mode': input_mode
                 })
                 
-                # Process target_button efficiently
-                _process_target_button_for_label(label, mapping_info['mapping'], input_mode)
+                # Process target_button efficiently - PASS friendly_names parameter
+                _process_target_button_for_label(label, mapping_info['mapping'], input_mode, friendly_names)
             else:
                 label['is_custom'] = False
             
-            # Set display name
-            _set_display_name_for_label(label, input_mode)
+            # Set display name - PASS friendly_names parameter
+            _set_display_name_for_label(label, input_mode, friendly_names)
     
     # PRESERVE MAPPINGS metadata in processed game data
     game_data['input_mode'] = input_mode
+    game_data['friendly_names'] = friendly_names  # Store this for reference
     if cfg_controls:
         game_data['has_rom_cfg'] = True
         game_data['rom_cfg_file'] = f"{romname}.cfg"
     if default_controls:
         game_data['has_default_cfg'] = True
-    
-    # IMPORTANT: Keep mappings key if it exists
-    # (This should already be preserved from the original game_data)
     
     return game_data
 
@@ -2436,28 +2458,29 @@ def get_friendly_dinput_alternatives(dinput_mapping: str) -> str:
     # Multiple mappings are already in friendly format
     return dinput_mapping
 
-def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str):
-    """Process target_button with FIXED support for specialized directional controls"""
+def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str, friendly_names: bool = True):
+    """Process target_button with friendly names toggle support"""
     
     control_name = label.get('name', '')
     
     if " ||| " in mapping:
-        # Handle increment/decrement pairs - FIXED for specialized controls
+        # Handle increment/decrement pairs
         inc_mapping, dec_mapping = mapping.split(" ||| ")
         
         if input_mode == 'xinput':
-            # IMPORTANT: Check if this is a specialized directional control first
             xinput_alternatives = get_xinput_directional_alternatives(control_name)
             
             if xinput_alternatives:
-                # Use the specialized directional alternatives instead of raw mapping
-                label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                # Use the specialized directional alternatives
+                if friendly_names:
+                    label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                else:
+                    label['target_button'] = xinput_alternatives
                 label['xinput_alternatives'] = xinput_alternatives
-                print(f"Applied specialized XInput alternatives for {control_name}: {label['target_button']}")
             else:
                 # Fall back to processing the raw increment/decrement mappings
-                inc_friendly = get_friendly_xinput_name(inc_mapping) if inc_mapping != "NONE" else ""
-                dec_friendly = get_friendly_xinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+                inc_friendly = get_friendly_xinput_name(inc_mapping, friendly_names) if inc_mapping != "NONE" else ""
+                dec_friendly = get_friendly_xinput_name(dec_mapping, friendly_names) if dec_mapping != "NONE" else ""
                 
                 if inc_friendly and dec_friendly:
                     label['target_button'] = f"{inc_friendly} | {dec_friendly}"
@@ -2465,18 +2488,20 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
                     label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
                     
         elif input_mode == 'dinput':
-            # IMPORTANT: Check for DInput directional alternatives first
             dinput_alternatives = get_dinput_directional_alternatives(control_name)
             
             if dinput_alternatives:
                 # Use the specialized directional alternatives
-                label['target_button'] = dinput_alternatives
+                if friendly_names:
+                    label['target_button'] = dinput_alternatives
+                else:
+                    # For raw mode, show actual DInput codes
+                    label['target_button'] = f"DINPUT_1_POV_{control_name.split('_')[-1]}"
                 label['dinput_alternatives'] = dinput_alternatives
-                print(f"Applied specialized DInput alternatives for {control_name}: {label['target_button']}")
             else:
                 # Fall back to processing raw mappings
-                inc_friendly = get_friendly_dinput_name(inc_mapping) if inc_mapping != "NONE" else ""
-                dec_friendly = get_friendly_dinput_name(dec_mapping) if dec_mapping != "NONE" else ""
+                inc_friendly = get_friendly_dinput_name(inc_mapping, friendly_names) if inc_mapping != "NONE" else ""
+                dec_friendly = get_friendly_dinput_name(dec_mapping, friendly_names) if dec_mapping != "NONE" else ""
                 
                 if inc_friendly and dec_friendly:
                     label['target_button'] = f"{inc_friendly} | {dec_friendly}"
@@ -2484,76 +2509,90 @@ def _process_target_button_for_label(label: Dict, mapping: str, input_mode: str)
                     label['target_button'] = inc_friendly or dec_friendly or "Not Assigned"
                     
         elif input_mode == 'keycode':
-            inc_keycode = extract_keycode_from_mapping(inc_mapping)
-            dec_keycode = extract_keycode_from_mapping(dec_mapping)
-            
-            if inc_keycode and dec_keycode:
-                label['target_button'] = f"{inc_keycode} | {dec_keycode}"
-            elif inc_keycode or dec_keycode:
-                label['target_button'] = inc_keycode or dec_keycode
+            if friendly_names:
+                inc_keycode = extract_keycode_from_mapping(inc_mapping)
+                dec_keycode = extract_keycode_from_mapping(dec_mapping)
+                
+                if inc_keycode and dec_keycode:
+                    label['target_button'] = f"{inc_keycode} | {dec_keycode}"
+                elif inc_keycode or dec_keycode:
+                    label['target_button'] = inc_keycode or dec_keycode
+                else:
+                    label['target_button'] = "No Key Assigned"
             else:
-                label['target_button'] = "No Key Assigned"
+                # Show raw keycode mappings
+                label['target_button'] = f"{inc_mapping} | {dec_mapping}"
         else:
-            label['target_button'] = format_mapping_display(mapping, input_mode)
+            label['target_button'] = format_mapping_display(mapping, input_mode, friendly_names)
     else:
         # Regular mapping (no increment/decrement pairs)
         if input_mode == 'xinput':
-            # XInput logic (existing, working)
             xinput_alternatives = get_xinput_directional_alternatives(control_name)
             
             if xinput_alternatives:
-                label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                if friendly_names:
+                    label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                else:
+                    label['target_button'] = xinput_alternatives
                 label['xinput_alternatives'] = xinput_alternatives
             elif 'XINPUT' in mapping:
-                label['target_button'] = get_friendly_xinput_name(mapping)
+                label['target_button'] = get_friendly_xinput_name(mapping, friendly_names)
             else:
                 converted = convert_mapping(mapping, 'xinput')
                 if converted.startswith('XINPUT'):
                     xinput_alternatives = get_xinput_directional_alternatives(control_name)
                     if xinput_alternatives:
-                        label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                        if friendly_names:
+                            label['target_button'] = get_friendly_xinput_alternatives(xinput_alternatives)
+                        else:
+                            label['target_button'] = xinput_alternatives
                         label['xinput_alternatives'] = xinput_alternatives
                     else:
-                        label['target_button'] = get_friendly_xinput_name(converted)
+                        label['target_button'] = get_friendly_xinput_name(converted, friendly_names)
                 else:
-                    label['target_button'] = format_mapping_display(mapping, input_mode)
+                    label['target_button'] = format_mapping_display(mapping, input_mode, friendly_names)
         
         elif input_mode == 'dinput':
-            # SIMPLIFIED: DInput with clear directional alternatives
             dinput_alternatives = get_dinput_directional_alternatives(control_name)
             
             if dinput_alternatives:
-                # Use the clear alternatives (D-Pad Up | Left Stick Up)
-                label['target_button'] = dinput_alternatives
+                if friendly_names:
+                    label['target_button'] = dinput_alternatives
+                else:
+                    # Show raw DInput mapping
+                    label['target_button'] = f"DINPUT_1_POV_{control_name.split('_')[-1]}"
                 label['dinput_alternatives'] = dinput_alternatives
             elif 'DINPUT' in mapping:
-                label['target_button'] = get_friendly_dinput_name(mapping)
+                label['target_button'] = get_friendly_dinput_name(mapping, friendly_names)
             else:
-                # Try to convert or provide sensible directional fallback
                 converted = convert_mapping(mapping, 'dinput')
                 if converted.startswith('DINPUT'):
-                    label['target_button'] = get_friendly_dinput_name(converted)
+                    label['target_button'] = get_friendly_dinput_name(converted, friendly_names)
                 else:
-                    # For joystick directions, provide clear fallback
-                    if 'JOYSTICK_UP' in control_name:
+                    # Provide fallback
+                    if friendly_names and 'JOYSTICK_UP' in control_name:
                         label['target_button'] = 'D-Pad Up | Left Stick Up'
-                    elif 'JOYSTICK_DOWN' in control_name:
+                    elif friendly_names and 'JOYSTICK_DOWN' in control_name:
                         label['target_button'] = 'D-Pad Down | Left Stick Down'
-                    elif 'JOYSTICK_LEFT' in control_name:
+                    elif friendly_names and 'JOYSTICK_LEFT' in control_name:
                         label['target_button'] = 'D-Pad Left | Left Stick Left'
-                    elif 'JOYSTICK_RIGHT' in control_name:
+                    elif friendly_names and 'JOYSTICK_RIGHT' in control_name:
                         label['target_button'] = 'D-Pad Right | Left Stick Right'
                     else:
-                        label['target_button'] = format_mapping_display(mapping, input_mode)
+                        label['target_button'] = format_mapping_display(mapping, input_mode, friendly_names)
         
         elif input_mode == 'keycode':
-            keycode_display = extract_keycode_from_mapping(mapping)
-            label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
+            if friendly_names:
+                keycode_display = extract_keycode_from_mapping(mapping)
+                label['target_button'] = keycode_display if keycode_display else "No Key Assigned"
+            else:
+                # Show raw keycode mapping
+                label['target_button'] = mapping if mapping.startswith("KEYCODE") else "No Key Assigned"
         else:
-            label['target_button'] = format_mapping_display(mapping, input_mode)
+            label['target_button'] = format_mapping_display(mapping, input_mode, friendly_names)
 
-def _set_display_name_for_label(label: Dict, input_mode: str):
-    """Set display name with FIXED support for specialized controls"""
+def _set_display_name_for_label(label: Dict, input_mode: str, friendly_names: bool = True):
+    """Set display name with friendly names toggle support"""
     
     if 'target_button' in label:
         if input_mode == 'keycode':
@@ -2565,7 +2604,7 @@ def _set_display_name_for_label(label: Dict, input_mode: str):
             if '|' in target and (input_mode == 'xinput' or input_mode == 'dinput'):
                 # Already formatted with alternatives, use as-is
                 label['display_name'] = target
-            elif not target.startswith('P1 '):
+            elif friendly_names and not target.startswith('P1 '):
                 label['display_name'] = f'P1 {target}'
             else:
                 label['display_name'] = target
@@ -2573,23 +2612,30 @@ def _set_display_name_for_label(label: Dict, input_mode: str):
         # Fallback to control name formatting
         control_name = label['name']
         if input_mode == 'keycode':
-            label['display_name'] = "No Key Assigned"
+            label['display_name'] = "No Key Assigned" if friendly_names else control_name
         elif input_mode == 'xinput':
             # Check for directional alternatives
             xinput_alternatives = get_xinput_directional_alternatives(control_name)
-            if xinput_alternatives:
+            if xinput_alternatives and friendly_names:
                 label['display_name'] = get_friendly_xinput_alternatives(xinput_alternatives)
-            else:
+            elif friendly_names:
                 label['display_name'] = f"P1 {control_name.split('_')[-1]}"
+            else:
+                label['display_name'] = control_name
         elif input_mode == 'dinput':
-            # FIXED: Check for DInput directional alternatives
+            # Check for DInput directional alternatives
             dinput_alternatives = get_dinput_directional_alternatives(control_name)
-            if dinput_alternatives:
+            if dinput_alternatives and friendly_names:
                 label['display_name'] = get_friendly_dinput_alternatives(dinput_alternatives)
-            else:
+            elif friendly_names:
                 label['display_name'] = f"P1 {control_name.split('_')[-1]}"
+            else:
+                label['display_name'] = control_name
         else:
-            label['display_name'] = f"P1 {control_name.split('_')[-1]}"
+            if friendly_names:
+                label['display_name'] = f"P1 {control_name.split('_')[-1]}"
+            else:
+                label['display_name'] = control_name
 
 def cleanup_database_connections():
     """Clean up cached database connections"""
