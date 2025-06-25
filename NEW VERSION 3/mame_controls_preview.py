@@ -7259,7 +7259,7 @@ class PreviewWindow(QMainWindow):
         print(f"Directional mode: {directional_mode}, Font: {current_font.family()}")
 
     def get_button_prefix_from_mapping(self, mapping):
-        """Get the button prefix based on mapping string, including multiple button assignments"""
+        """Get the button prefix based on mapping string, including multiple button assignments and new MAME codes"""
         # Standard XINPUT mappings
         xinput_to_prefix = {
             "XINPUT_1_A": "A",
@@ -7346,35 +7346,54 @@ class PreviewWindow(QMainWindow):
             "TRACKCODE_1_YAXIS_NEG_FAST": "TRK↑+"
         }
         
-        # Add directional joystick mappings
+        # Add directional joystick mappings (including both old and new formats)
         directional_to_prefix = {
-            # Left stick mappings (already present)
+            # Left stick mappings - STANDARD FORMAT
             "JOYCODE_1_XAXIS_RIGHT_SWITCH": "→",
             "JOYCODE_1_XAXIS_LEFT_SWITCH": "←",
             "JOYCODE_1_YAXIS_UP_SWITCH": "↑",
             "JOYCODE_1_YAXIS_DOWN_SWITCH": "↓",
             
-            # RIGHT STICK MAPPINGS (MISSING - ADD THESE)
+            # Left stick mappings - NEW SLIDER2 FORMAT
+            "JOYCODE_1_SLIDER2_LEFT_SWITCH": "←",
+            "JOYCODE_1_SLIDER2_RIGHT_SWITCH": "→",
+            "JOYCODE_1_SLIDER2_UP_SWITCH": "↑",
+            "JOYCODE_1_SLIDER2_DOWN_SWITCH": "↓",
+            
+            # RIGHT STICK MAPPINGS
             "JOYCODE_1_RXAXIS_POS_SWITCH": "RS→",   # Right stick right
             "JOYCODE_1_RXAXIS_NEG_SWITCH": "RS←",   # Right stick left  
             "JOYCODE_1_RYAXIS_NEG_SWITCH": "RS↑",   # Right stick up
             "JOYCODE_1_RYAXIS_POS_SWITCH": "RS↓",   # Right stick down
             
-            # D-pad mappings (already present)
+            # D-pad mappings - OLD FORMAT (for backward compatibility)
             "JOYCODE_1_DPADUP": "D↑",
             "JOYCODE_1_DPADDOWN": "D↓",
             "JOYCODE_1_DPADLEFT": "D←",
             "JOYCODE_1_DPADRIGHT": "D→",
+            
+            # D-pad mappings - NEW FORMAT (HAT controls)
+            "JOYCODE_1_HAT1UP": "D↑",
+            "JOYCODE_1_HAT1DOWN": "D↓",
+            "JOYCODE_1_HAT1LEFT": "D←",
+            "JOYCODE_1_HAT1RIGHT": "D→",
         }
 
-        # Add trigger/analog axis mappings
+        # Add trigger/analog axis mappings (including both old and new formats)
         trigger_to_prefix = {
+            # OLD FORMAT - for backward compatibility
             "JOYCODE_1_ZAXIS_NEG_SWITCH": "LT",
+            "JOYCODE_1_ZAXIS_POS_SWITCH": "LT+",
             "JOYCODE_1_RZAXIS_NEG_SWITCH": "RT",
-            "JOYCODE_1_ZAXIS_POS_SWITCH": "LT+",  # If ever needed for full direction
-            "JOYCODE_1_RZAXIS_POS_SWITCH": "RT+",   # If ever needed for full direction
+            "JOYCODE_1_RZAXIS_POS_SWITCH": "RT+",
             "JOYCODE_1_ZAXIS": "LT",         # Left Trigger full axis
             "JOYCODE_1_RZAXIS": "RT",        # Right Trigger full axis
+            
+            # NEW FORMAT - SLIDER controls
+            "JOYCODE_1_SLIDER2_NEG_SWITCH": "LT",
+            "JOYCODE_1_SLIDER2_POS_SWITCH": "LT+",
+            
+            # Other axis mappings
             "JOYCODE_1_XAXIS": "LS←→",       # Left Stick X
             "JOYCODE_1_YAXIS": "LS↑↓",       # Left Stick Y
             "JOYCODE_1_RXAXIS": "RS←→",      # Right Stick X
@@ -7427,7 +7446,7 @@ class PreviewWindow(QMainWindow):
             "KEYCODE_L": "L"
         }
         
-        # JOYCODE mappings - these work for BOTH DirectInput and XInput modes
+        # JOYCODE mappings - including both old and new button mappings
         joycode_to_prefix = {
             # Buttons - use getattr with fallback to avoid AttributeError
             "JOYCODE_1_BUTTON1": "A" if getattr(self, 'use_xinput', True) else "B1",
@@ -7436,17 +7455,30 @@ class PreviewWindow(QMainWindow):
             "JOYCODE_1_BUTTON4": "Y" if getattr(self, 'use_xinput', True) else "B4",
             "JOYCODE_1_BUTTON5": "LB" if getattr(self, 'use_xinput', True) else "B5",
             "JOYCODE_1_BUTTON6": "RB" if getattr(self, 'use_xinput', True) else "B6",
+            "JOYCODE_1_BUTTON7": "LT" if getattr(self, 'use_xinput', True) else "B7",
+            
+            # OLD FORMAT - Button 8 and 9 (for backward compatibility)
+            "JOYCODE_1_BUTTON8": "BACK" if getattr(self, 'use_xinput', True) else "B8",
+            "JOYCODE_1_BUTTON9": "START" if getattr(self, 'use_xinput', True) else "B9",
+            
+            # NEW FORMAT - Named buttons
+            "JOYCODE_1_SELECT": "BACK",
+            "JOYCODE_1_START": "START",
             
             # Axes - CRITICAL: These should work regardless of input mode
             "JOYCODE_1_ZAXIS": "LT" if getattr(self, 'use_xinput', True) else "Z-AXIS",
             "JOYCODE_1_RZAXIS": "RT" if getattr(self, 'use_xinput', True) else "RZ-AXIS",
             "JOYCODE_1_ZAXIS_NEG_SWITCH": "LT",
             "JOYCODE_1_RZAXIS_NEG_SWITCH": "RT",
+            
+            # NEW SLIDER FORMAT
+            "JOYCODE_1_SLIDER2_NEG_SWITCH": "LT",
+            "JOYCODE_1_SLIDER2_POS_SWITCH": "LT+",
         }
         
         # Combine all mappings
         all_mappings = {**xinput_to_prefix, **dinput_to_prefix, **joycode_to_prefix, 
-                        **keyboard_to_prefix, **directional_to_prefix}
+                        **keyboard_to_prefix, **directional_to_prefix, **trigger_to_prefix}
         
         # Handle multiple button assignments with BOTH ||| and space separators
         if "|||" in mapping or " " in mapping:
