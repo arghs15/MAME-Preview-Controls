@@ -4679,6 +4679,21 @@ class MAMEControlConfig(ctk.CTk):
             state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"  # ADDED
         )
         alternating_check.grid(row=2, column=2, padx=5, pady=5, sticky="w")
+
+        # Console game checkbox
+        console_var = tk.BooleanVar(value=game_data.get('console', False) if not is_new_game else False)
+        console_check = ctk.CTkCheckBox(
+            properties_grid, 
+            text="Console Game", 
+            variable=console_var,
+            checkbox_width=20,
+            checkbox_height=20,
+            corner_radius=3,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["secondary"],
+            state="disabled" if (self.CONTROLS_ONLY_EDIT and not is_new_game) else "normal"
+        )
+        console_check.grid(row=2, column=3, padx=5, pady=5, sticky="w")
         
         # Row 3: Buttons and Sticks
         ctk.CTkLabel(
@@ -5467,7 +5482,8 @@ class MAMEControlConfig(ctk.CTk):
                         "sticks": sticks_var.get(),
                         "alternating": bool(alternating_var.get()),
                         "clones": {},
-                        "controls": {}
+                        "controls": {},
+                        "console": bool(console_var.get()),
                     }
                 }
                 
@@ -5530,6 +5546,7 @@ class MAMEControlConfig(ctk.CTk):
                 buttons_var.trace_add("write", lambda *args: editor.after(500, update_preview))
                 sticks_var.trace_add("write", lambda *args: editor.after(500, update_preview))
                 alternating_var.trace_add("write", lambda *args: editor.after(500, update_preview))
+                console_var.trace_add("write", lambda *args: editor.after(500, update_preview))  # NEW LINE
         
         # Set up update events after a short delay
         editor.after(200, setup_update_events)
@@ -5605,6 +5622,7 @@ class MAMEControlConfig(ctk.CTk):
                 game_entry["buttons"] = buttons_var.get()
                 game_entry["sticks"] = sticks_var.get()
                 game_entry["alternating"] = bool(alternating_var.get())
+                game_entry["console"] = bool(console_var.get())
                 
                 # Handle clones
                 if not clone_entries:
@@ -6978,6 +6996,7 @@ class MAMEControlConfig(ctk.CTk):
                 'alternating': game_data['alternating'],
                 'mirrored': game_data.get('mirrored', False),
                 'miscDetails': game_data.get('miscDetails', ''),
+                'console': game_data.get('console', False),  
                 'mappings': game_data.get('mappings', []),  # ENSURE MAPPINGS ARE INCLUDED
                 'source': game_data.get('source', 'unknown'),
                 'input_mode': self.input_mode
@@ -7051,13 +7070,14 @@ class MAMEControlConfig(ctk.CTk):
             # Build complete info text including additional details
             info_text = f"ROM Name: {metadata['romname']}\n"
             info_text += f"Players: {metadata['numPlayers']}\n"
-            info_text += f"Alternating Play: {'Yes' if metadata['alternating'] else 'No'}\n"
-            info_text += f"Mirrored Controls: {'Yes' if metadata['mirrored'] else 'No'}"
+            info_text += f"Console Game: {'Yes' if metadata.get('console', False) else 'No'}"  # NEW LINE
+            #info_text += f"Alternating Play: {'Yes' if metadata['alternating'] else 'No'}\n"
+            #info_text += f"Mirrored Controls: {'Yes' if metadata['mirrored'] else 'No'}"
             
             # Add miscDetails if available
             if metadata['miscDetails']:
                 info_text += f"\n{metadata['miscDetails']}"
-            
+
             # Add mappings if available
             if metadata['mappings']:
                 if len(metadata['mappings']) == 1:

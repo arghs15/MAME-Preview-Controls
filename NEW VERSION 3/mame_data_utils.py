@@ -60,6 +60,7 @@ def load_gamedata_json(gamedata_path: str) -> Tuple[Dict, Dict, Dict]:
                             'buttons': clone_data.get('buttons', game_data.get('buttons', '0')),
                             'sticks': clone_data.get('sticks', game_data.get('sticks', '0')),
                             'alternating': clone_data.get('alternating', game_data.get('alternating', False)),
+                            'console': clone_data.get('console', game_data.get('console', False)),  # NEW: Preserve console field
                             # Clone inherits parent's controls unless it has its own
                             'controls': clone_data.get('controls', game_data.get('controls', {}))
                         }
@@ -314,9 +315,8 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
             conn.close()
         return None
 
-# 3. Update build_gamedata_db function to store mappings
 def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
-    """Build SQLite database from gamedata.json with mappings support - UPDATED"""
+    """Build SQLite database from gamedata.json with console field support - UPDATED"""
     start_time = time.time()
     
     if not gamedata_json:
@@ -336,7 +336,7 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
         cursor.execute("DROP TABLE IF EXISTS game_controls")
         cursor.execute("DROP TABLE IF EXISTS clone_relationships")
         
-        # Create tables - UPDATED to include mappings column
+        # Create tables - UPDATED to include console column
         cursor.execute('''
         CREATE TABLE games (
             rom_name TEXT PRIMARY KEY,
@@ -345,6 +345,7 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
             buttons INTEGER,
             sticks INTEGER,
             alternating BOOLEAN,
+            console BOOLEAN,
             is_clone BOOLEAN,
             parent_rom TEXT,
             mappings TEXT
@@ -401,6 +402,7 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                 buttons = int(game_data.get('buttons', 0))
                 sticks = int(game_data.get('sticks', 0))
                 alternating = 1 if game_data.get('alternating', False) else 0
+                console = 1 if game_data.get('console', False) else 0  # NEW: Handle console field
                 is_clone = 0  # Parent entries aren't clones
                 parent_rom = None
                 
@@ -410,10 +412,10 @@ def build_gamedata_db(gamedata_json: Dict, db_path: str) -> bool:
                     import json
                     mappings_json = json.dumps(game_data['mappings'])
                 
-                # Insert parent game - UPDATED query with mappings
+                # Insert parent game - UPDATED query with console field
                 cursor.execute(
-                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (rom_name, game_name, player_count, buttons, sticks, alternating, is_clone, parent_rom, mappings_json)
+                    "INSERT OR IGNORE INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (rom_name, game_name, player_count, buttons, sticks, alternating, console, is_clone, parent_rom, mappings_json)
                 )
                 
                 if cursor.rowcount > 0:
@@ -768,7 +770,7 @@ _db_connection_cache = {}
 
 # 2. Update get_game_data_from_db function to include mappings
 def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
-    """Get control data from SQLite database with mappings support - UPDATED"""
+    """Get control data from SQLite database with console field support - UPDATED"""
     
     if not os.path.exists(db_path):
         return None
@@ -779,10 +781,10 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Updated query to include mappings column
+        # Updated query to include console column
         cursor.execute("""
             SELECT g.rom_name, g.game_name, g.player_count, g.buttons, g.sticks, 
-                   g.alternating, g.is_clone, g.parent_rom, g.mappings,
+                   g.alternating, g.console, g.is_clone, g.parent_rom, g.mappings,
                    c.control_name, c.display_name
             FROM games g
             LEFT JOIN game_controls c ON g.rom_name = c.rom_name
@@ -813,6 +815,7 @@ def get_game_data_from_db(romname: str, db_path: str) -> Optional[Dict]:
             'gamename': first_row['game_name'],
             'numPlayers': first_row['player_count'],
             'alternating': bool(first_row['alternating']),
+            'console': bool(first_row['console']),  # NEW: Include console field
             'mirrored': False,
             'miscDetails': f"Buttons: {first_row['buttons']}, Sticks: {first_row['sticks']}",
             'players': [],
@@ -977,6 +980,7 @@ def _convert_gamedata_json_to_standard_format(romname: str, game_data: Dict,
         'numPlayers': int(game_data.get('playercount', 1)),
         'alternating': game_data.get('alternating', False),
         'mirrored': False,
+        'console': game_data.get('console', False),  # NEW: Preserve console field
         'miscDetails': f"Buttons: {game_data.get('buttons', '?')}, Sticks: {game_data.get('sticks', '?')}",
         'players': [],
         'source': 'gamedata.json'
