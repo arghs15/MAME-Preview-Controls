@@ -921,8 +921,6 @@ def clear_database_cache():
     _db_connection_cache.clear()
     print("Forced database connection cache clear")
     
-# Replace the get_game_data function in mame_data_utils.py with this clean version:
-
 def get_game_data(romname: str, gamedata_json: Dict, parent_lookup: Dict, 
                   db_path: str = None, rom_data_cache: Dict = None) -> Optional[Dict]:
     """
@@ -2993,8 +2991,66 @@ def filter_xinput_controls(game_data: Dict) -> Dict:
     
     return filtered_data
 
-def scan_roms_directory(mame_dir: str) -> Set[str]:
-    """Scan the roms directory for available games with improved path handling"""
+def load_rom_exclusion_list(mame_dir: str) -> Set[str]:
+    """
+    Load ROM exclusion list from settings/excluded_roms.txt
+    Each line should contain one ROM name to exclude
+    """
+    settings_dir = os.path.join(mame_dir, "preview", "settings")
+    exclusion_file = os.path.join(settings_dir, "excluded_roms.txt")
+    excluded_roms = set()
+    
+    if os.path.exists(exclusion_file):
+        try:
+            with open(exclusion_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    rom_name = line.strip()
+                    # Skip empty lines and comments (lines starting with #)
+                    if rom_name and not rom_name.startswith('#'):
+                        excluded_roms.add(rom_name)
+            
+            print(f"Loaded {len(excluded_roms)} ROMs from exclusion list")
+            if excluded_roms:
+                print(f"Sample excluded ROMs: {list(excluded_roms)[:5]}")
+        except Exception as e:
+            print(f"Error loading ROM exclusion list: {e}")
+    else:
+        print(f"No ROM exclusion list found at: {exclusion_file}")
+        print("Create 'excluded_roms.txt' in the settings folder to exclude specific ROMs")
+    
+    return excluded_roms
+
+def save_rom_exclusion_list(mame_dir: str, excluded_roms: Set[str]) -> bool:
+    """
+    Save ROM exclusion list to settings/excluded_roms.txt
+    """
+    settings_dir = os.path.join(mame_dir, "settings")
+    exclusion_file = os.path.join(settings_dir, "excluded_roms.txt")
+    
+    try:
+        # Create settings directory if it doesn't exist
+        os.makedirs(settings_dir, exist_ok=True)
+        
+        with open(exclusion_file, 'w', encoding='utf-8') as f:
+            f.write("# ROM Exclusion List\n")
+            f.write("# Add one ROM name per line to exclude it from the GUI\n")
+            f.write("# Lines starting with # are treated as comments\n")
+            f.write("# Example:\n")
+            f.write("# badrom1\n")
+            f.write("# badrom2\n")
+            f.write("\n")
+            
+            for rom_name in sorted(excluded_roms):
+                f.write(f"{rom_name}\n")
+        
+        print(f"Saved {len(excluded_roms)} ROMs to exclusion list: {exclusion_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving ROM exclusion list: {e}")
+        return False
+
+def scan_roms_directory(mame_dir: str, use_exclusion_list: bool = True) -> Set[str]:
+    """Scan the roms directory for available games with improved path handling and exclusion support"""
     
     roms_dir = os.path.join(mame_dir, "roms")
     available_roms = set()
@@ -3003,7 +3059,13 @@ def scan_roms_directory(mame_dir: str) -> Set[str]:
         print(f"ROMs directory not found: {roms_dir}")
         return available_roms
 
+    # Load exclusion list if enabled
+    excluded_roms = set()
+    if use_exclusion_list:
+        excluded_roms = load_rom_exclusion_list(mame_dir)
+
     rom_count = 0
+    excluded_count = 0
 
     try:
         for filename in os.listdir(roms_dir):
@@ -3019,6 +3081,14 @@ def scan_roms_directory(mame_dir: str) -> Set[str]:
                 
             # Strip common ROM extensions
             base_name = os.path.splitext(filename)[0]
+            
+            # Check if ROM is in exclusion list
+            if use_exclusion_list and base_name in excluded_roms:
+                excluded_count += 1
+                if excluded_count <= 5:  # Print first 5 excluded ROMs as sample
+                    print(f"Excluded ROM: {base_name}")
+                continue
+            
             available_roms.add(base_name)
             rom_count += 1
             
@@ -3026,6 +3096,8 @@ def scan_roms_directory(mame_dir: str) -> Set[str]:
                 print(f"Found ROM: {base_name}")
         
         print(f"Total ROMs found: {len(available_roms)}")
+        if excluded_count > 0:
+            print(f"Total ROMs excluded: {excluded_count}")
         if len(available_roms) > 0:
             print(f"Sample of available ROMs: {list(available_roms)[:5]}")
         else:
@@ -3034,6 +3106,48 @@ def scan_roms_directory(mame_dir: str) -> Set[str]:
         print(f"Error scanning ROMs directory: {e}")
     
     return available_roms
+
+def add_rom_to_exclusion_list(mame_dir: str, rom_name: str) -> bool:
+    """
+    Add a single ROM to the exclusion list
+    """
+    excluded_roms = load_rom_exclusion_list(mame_dir)
+    excluded_roms.add(rom_name)
+    return save_rom_exclusion_list(mame_dir, excluded_roms)
+
+def remove_rom_from_exclusion_list(mame_dir: str, rom_name: str) -> bool:
+    """
+    Remove a single ROM from the exclusion list
+    """
+    excluded_roms = load_rom_exclusion_list(mame_dir)
+    if rom_name in excluded_roms:
+        excluded_roms.remove(rom_name)
+        return save_rom_exclusion_list(mame_dir, excluded_roms)
+    return False
+
+def is_rom_excluded(mame_dir: str, rom_name: str) -> bool:
+    """
+    Check if a ROM is in the exclusion list
+    """
+    excluded_roms = load_rom_exclusion_list(mame_dir)
+    return rom_name in excluded_roms
+
+def get_exclusion_list_stats(mame_dir: str) -> Dict[str, Any]:
+    """
+    Get statistics about the exclusion list
+    """
+    excluded_roms = load_rom_exclusion_list(mame_dir)
+    settings_dir = os.path.join(mame_dir, "settings")
+    exclusion_file = os.path.join(settings_dir, "excluded_roms.txt")
+    
+    stats = {
+        'total_excluded': len(excluded_roms),
+        'exclusion_file_exists': os.path.exists(exclusion_file),
+        'exclusion_file_path': exclusion_file,
+        'sample_excluded': list(excluded_roms)[:10] if excluded_roms else []
+    }
+    
+    return stats
 
 # ============================================================================
 # HELPER FUNCTIONS FOR DATA ANALYSIS
