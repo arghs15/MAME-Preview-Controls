@@ -7277,7 +7277,17 @@ class PreviewWindow(QMainWindow):
             "XINPUT_1_DPAD_LEFT": "D←",
             "XINPUT_1_DPAD_RIGHT": "D→",
             "XINPUT_1_START": "START",
-            "XINPUT_1_SELECT": "BACK"
+            "XINPUT_1_SELECT": "BACK",
+
+            # ADD THESE FOR DUAL-STICK GAMES LIKE SMASH T.V.:
+            "XINPUT_1_LEFTY_POS": "LS↓",      # Left stick down
+            "XINPUT_1_LEFTY_NEG": "LS↑",      # Left stick up  
+            "XINPUT_1_LEFTX_POS": "LS→",      # Left stick right
+            "XINPUT_1_LEFTX_NEG": "LS←",      # Left stick left
+            "XINPUT_1_RIGHTY_POS": "RS↓",     # Right stick down
+            "XINPUT_1_RIGHTY_NEG": "RS↑",     # Right stick up
+            "XINPUT_1_RIGHTX_POS": "RS→",     # Right stick right
+            "XINPUT_1_RIGHTX_NEG": "RS←",     # Right stick left
         }
         
         # Add DirectInput mappings
