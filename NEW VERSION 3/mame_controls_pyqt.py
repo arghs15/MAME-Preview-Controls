@@ -55,7 +55,7 @@ class MAMEControlConfig:
         """Initialize the standardized directory structure"""
         self.preview_dir = os.path.join(self.mame_dir, "preview")
         self.settings_dir = os.path.join(self.preview_dir, "settings")
-        self.info_dir = os.path.join(self.settings_dir, "info")
+        self.info_dir = os.path.join(self.preview_dir, "info")
         self.cache_dir = os.path.join(self.preview_dir, "cache")
 
         # Create directories if they don't exist
