@@ -6431,16 +6431,39 @@ class MAMEControlConfig(ctk.CTk):
         if not self.current_game:
             messagebox.showinfo("No Game Selected", "Please select a game first")
             return
+        
+        # PERFORMANCE OPTIMIZATION 1: Quick validation without full data loading
+        cache_file = os.path.join(self.cache_dir, f"{self.current_game}_cache.json")
+        
+        # Check if we have a valid cache first (fastest path)
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    cache_peek = json.load(f)
                 
-        # Get complete game data with default values applied
+                # Quick validation - if it has basic structure, we're good
+                if isinstance(cache_peek, dict) and ('players' in cache_peek or 'game_data' in cache_peek):
+                    print(f"✅ Valid cache found for {self.current_game} - launching preview directly")
+                    self._launch_preview_process()
+                    return
+                else:
+                    print(f"🔄 Invalid cache structure detected - will rebuild")
+            except Exception as e:
+                print(f"⚠️ Cache read error: {e} - will rebuild")
+        
+        # PERFORMANCE OPTIMIZATION 2: Only get minimal data for validation
+        print(f"📦 Building cache for {self.current_game}...")
+        
+        # Get game data efficiently (this method should already be optimized)
         game_data = self.get_game_data(self.current_game)
         if not game_data:
             messagebox.showinfo("No Control Data", f"No control data found for {self.current_game}")
             return
         
-        # IMPORTANT: Get custom control configuration if it exists
+        # PERFORMANCE OPTIMIZATION 3: Process custom configs only if they exist
         cfg_controls = {}
         if self.current_game in self.custom_configs:
+            print(f"🎛️ Processing custom config for {self.current_game}")
             # Parse the custom config
             cfg_controls = parse_cfg_controls(self.custom_configs[self.current_game], self.input_mode)
             
@@ -6459,27 +6482,41 @@ class MAMEControlConfig(ctk.CTk):
                 getattr(self, 'original_default_controls', {}),
                 self.input_mode
             )
+        else:
+            print(f"📄 No custom config found for {self.current_game}")
 
-        # NEW CODE: Filter out non-XInput controls if in XInput Only mode
+        # PERFORMANCE OPTIMIZATION 4: Apply XInput filtering only if needed
         if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
             game_data = filter_xinput_controls(game_data)
+            print(f"🎯 Applied XInput-only filter")
         
-        # Create cache directory if it doesn't exist yet
-        cache_dir = os.path.join(self.preview_dir, "cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        # Save the processed game data to the cache file
-        cache_path = os.path.join(cache_dir, f"{self.current_game}_cache.json")
+        # PERFORMANCE OPTIMIZATION 5: Streamlined cache creation
         try:
-            with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(game_data, f, indent=2)
-            print(f"Saved processed game data to cache: {cache_path}")
+            # Create cache in new format with metadata wrapper
+            cache_data = {
+                'rom_name': self.current_game,
+                'input_mode': getattr(self, 'input_mode', 'xinput'),
+                'friendly_names': getattr(self, 'friendly_names', True),
+                'xinput_only_mode': getattr(self, 'xinput_only_mode', True),
+                'cached_timestamp': time.time(),
+                'cache_version': '2.0',
+                'game_data': game_data
+            }
+            
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2)
+            print(f"💾 Cache created for {self.current_game}")
+            
         except Exception as e:
-            print(f"Warning: Could not save cache file: {e}")
+            print(f"⚠️ Error saving cache: {e} - preview will still launch")
         
-        # The rest of the method remains unchanged
+        # Launch the preview
+        self._launch_preview_process()
+
+    def _launch_preview_process(self):
+        """Optimized preview launch process"""
         
-        # Handle PyInstaller frozen executable
+        # PERFORMANCE OPTIMIZATION 6: Handle PyInstaller frozen executable (fastest path)
         if getattr(sys, 'frozen', False):
             command = [
                 sys.executable,
@@ -6490,31 +6527,33 @@ class MAMEControlConfig(ctk.CTk):
                 command.append("--no-buttons")
                 
             # Launch and track the process
-            process = subprocess.Popen(command)
+            process = subprocess.Popen(command, 
+                                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
             if not hasattr(self, 'preview_processes'):
                 self.preview_processes = []
             self.preview_processes.append(process)
+            print(f"🚀 Preview launched (PyInstaller mode)")
             return
         
-        # Use script-based approach
+        # PERFORMANCE OPTIMIZATION 7: Optimized script path discovery
+        script_candidates = [
+            os.path.join(self.app_dir, "mame_controls_main.py"),
+            os.path.join(self.mame_dir, "mame_controls_main.py"), 
+            os.path.join(self.preview_dir, "mame_controls_main.py")
+        ]
+        
+        script_path = None
+        for candidate in script_candidates:
+            if os.path.exists(candidate):
+                script_path = candidate
+                break
+        
+        if not script_path:
+            messagebox.showerror("Error", "Could not find mame_controls_main.py")
+            return
+        
+        # Build and launch command
         try:
-            # First check the main app directory
-            script_path = os.path.join(self.app_dir, "mame_controls_main.py")
-            
-            # If not found, check the MAME root directory
-            if not os.path.exists(script_path):
-                script_path = os.path.join(self.mame_dir, "mame_controls_main.py")
-            
-            # Still not found, check preview directory
-            if not os.path.exists(script_path):
-                script_path = os.path.join(self.preview_dir, "mame_controls_main.py")
-                
-            # If none of the above worked, we can't find the main script
-            if not os.path.exists(script_path):
-                messagebox.showerror("Error", "Could not find mame_controls_main.py")
-                return
-                
-            # Found the script, build the command
             command = [
                 sys.executable,
                 script_path,
@@ -6525,13 +6564,16 @@ class MAMEControlConfig(ctk.CTk):
             if self.hide_preview_buttons:
                 command.append("--no-buttons")
                 
-            # Launch and track the process
-            process = subprocess.Popen(command)
+            # Launch with optimized process creation
+            process = subprocess.Popen(command,
+                                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
             if not hasattr(self, 'preview_processes'):
                 self.preview_processes = []
             self.preview_processes.append(process)
+            print(f"🚀 Preview launched (script mode): {os.path.basename(script_path)}")
+            
         except Exception as e:
-            print(f"Error launching preview: {e}")
+            print(f"❌ Error launching preview: {e}")
             messagebox.showerror("Error", f"Failed to launch preview: {str(e)}")
 
     def toggle_hide_preview_buttons(self):

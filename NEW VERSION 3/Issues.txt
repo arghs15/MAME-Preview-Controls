@@ -1,3 +1,3 @@
-Vertical alignment not working again - need to fix
-prefix for some directionals not showing in preview
-prefix for one game did not show with --show-preview, but showed the next time...
+done - Vertical alignment not working again - need to fix
+done - prefix for some directionals not showing in preview
+? -prefix for one game did not show with --show-preview, but showed the next time...

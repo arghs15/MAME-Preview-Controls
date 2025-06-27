@@ -501,167 +501,85 @@ class MAMEControlConfig:
             return None
 
     def show_preview_standalone(self, rom_name, auto_close=False, clean_mode=False):
-        """Show the preview for a specific ROM - FIXED for cache format migration"""
-        print(f"Starting standalone preview for ROM: {rom_name}")
+        """Show the preview for a specific ROM - OPTIMIZED VERSION"""
+        print(f"🚀 Starting optimized preview for ROM: {rom_name}")
         start_time = time.time()
         
-        # Initialize directory structure first
+        # PERFORMANCE FIX 1: Set directories immediately without validation
         self.app_dir = get_application_path()
         self.mame_dir = get_mame_parent_dir(self.app_dir)
-        
-        if not self.mame_dir:
-            print("Error: MAME directory not found!")
-            return
-        
-        print(f"Using MAME directory: {self.mame_dir}")
-        
-        # Set up all directories
         self.preview_dir = os.path.join(self.mame_dir, "preview")
         self.settings_dir = os.path.join(self.preview_dir, "settings")
-        self.info_dir = os.path.join(self.settings_dir, "info")
         self.cache_dir = os.path.join(self.preview_dir, "cache")
-        
-        os.makedirs(self.preview_dir, exist_ok=True)
-        os.makedirs(self.settings_dir, exist_ok=True)
-        os.makedirs(self.info_dir, exist_ok=True)
-        os.makedirs(self.cache_dir, exist_ok=True)
-        
-        cache_file = os.path.join(self.cache_dir, f"{rom_name}_cache.json")
-        
-        # Initialize ROM data cache if needed
-        if not hasattr(self, 'rom_data_cache'):
-            self.rom_data_cache = {}
-        
-        # Set the current game
         self.current_game = rom_name
         
-        # Load settings first (needed for fallback mappings)
-        self.load_settings()
-        
-        # Get command line arguments
-        import sys
-        for i, arg in enumerate(sys.argv):
-            if arg == '--screen' and i+1 < len(sys.argv):
-                try:
-                    self.preferred_preview_screen = int(sys.argv[i+1])
-                    print(f"OVERRIDE: Using screen {self.preferred_preview_screen} from command line")
-                except:
-                    pass
-            elif arg == '--no-buttons':
-                self.hide_preview_buttons = True
-                print(f"OVERRIDE: Hiding buttons due to command line flag")
-            elif arg == '--input-mode' and i+1 < len(sys.argv):
-                self.input_mode = sys.argv[i+1]
-                if self.input_mode not in ['xinput', 'dinput', 'joycode']:
-                    self.input_mode = 'xinput'
-                print(f"OVERRIDE: Using input mode {self.input_mode} from command line")
-        
-        # Try to load from cache first (with format detection)
+        # PERFORMANCE FIX 2: Fast cache loading
+        cache_file = os.path.join(self.cache_dir, f"{rom_name}_cache.json")
         game_data = None
-        cache_used = False
         
         if os.path.exists(cache_file):
-            print(f"🔍 Checking cache file: {os.path.basename(cache_file)}")
-            
-            # Use the enhanced cache loader that handles both formats
-            cached_game_data = self.load_game_cache_with_validation(cache_file, rom_name)
-            
-            if cached_game_data:
-                # Apply your new fallback mappings to ensure controls have proper names
-                game_data = self.apply_default_control_names(cached_game_data)
-                if game_data:
-                    print(f"✅ Using cached data for {rom_name} (with fallback mappings applied)")
-                    self.rom_data_cache[rom_name] = game_data
-                    cache_used = True
-                    data_load_time = time.time() - start_time
-                    print(f"📊 Game data loaded from cache in {data_load_time:.3f} seconds")
-            else:
-                print(f"🔄 Cache validation failed or old format detected - loading fresh")
-        
-        # If cache failed or doesn't exist, load fresh with your new enhancements
-        if not game_data:
-            print(f"📂 Loading fresh data with enhanced fallback mappings...")
-            
-            # Set up database path
-            db_path = os.path.join(self.settings_dir, "gamedata.db")
-            if os.path.exists(db_path):
-                print(f"🗃️  Database found: {db_path}")
-                self.db_path = db_path
-            
-            # Load game data using your enhanced unified getter (includes fallback mappings)
-            data_load_start = time.time()
-            game_data = self.get_unified_game_data(rom_name)
-            data_load_time = time.time() - data_load_start
-            
-            if game_data:
-                print(f"📊 Fresh game data loaded in {data_load_time:.3f} seconds")
-                print(f"✨ Includes new fallback mappings for controls without cfg files")
+            try:
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    cache_data = json.load(f)
                 
-                # Save to NEW cache format for future use
-                try:
-                    # Create cache in new format with metadata wrapper
-                    new_cache_data = {
-                        'rom_name': rom_name,
-                        'input_mode': getattr(self, 'input_mode', 'xinput'),
-                        'friendly_names': getattr(self, 'friendly_names', True),
-                        'xinput_only_mode': getattr(self, 'xinput_only_mode', True),
-                        'cached_timestamp': time.time(),
-                        'cache_version': '2.0',  # Mark as new format
-                        'game_data': game_data  # Your enhanced game data with fallbacks
-                    }
-                    
-                    with open(cache_file, 'w', encoding='utf-8') as f:
-                        json.dump(new_cache_data, f, indent=2, ensure_ascii=False)
-                    print(f"💾 Saved enhanced data to NEW format cache: {os.path.basename(cache_file)}")
-                    
-                    # Clean up old format cache if it existed
-                    if os.path.exists(cache_file + ".old"):
-                        os.remove(cache_file + ".old")
-                        
-                except Exception as e:
-                    print(f"⚠️  Error saving new cache: {e}")
-            else:
-                print(f"❌ Failed to load game data from all sources")
+                # Handle both cache formats quickly
+                if isinstance(cache_data, dict) and 'game_data' in cache_data:
+                    game_data = cache_data['game_data']
+                    print(f"✅ Loaded from NEW format cache")
+                elif isinstance(cache_data, dict) and 'players' in cache_data:
+                    game_data = cache_data
+                    print(f"✅ Loaded from OLD format cache")
+                
+                if game_data:
+                    cache_load_time = time.time() - start_time
+                    print(f"📊 Cache loaded in {cache_load_time:.3f} seconds")
+            except Exception as e:
+                print(f"⚠️ Cache error: {e}")
         
-        # Exit gracefully if we still don't have game data
+        # Only do heavy processing if cache failed
         if not game_data:
-            print(f"\n❌ ERROR: No control data found for {rom_name}")
-            print("💡 This means:")
-            print("   1. ROM might not exist in gamedata.json/database")
-            print("   2. ROM name might be misspelled")
-            print("   3. Database might be missing or corrupted")
-            print("🔧 Try: python mame_controls_main.py --precache --game", rom_name)
-            return
+            print(f"📂 Loading fresh data...")
+            # Initialize ROM data cache if needed
+            if not hasattr(self, 'rom_data_cache'):
+                self.rom_data_cache = {}
+            
+            # Load minimal settings
+            self.input_mode = getattr(self, 'input_mode', 'xinput')
+            self.hide_preview_buttons = getattr(self, 'hide_preview_buttons', False)
+            
+            # Use unified game data getter
+            game_data = self.get_unified_game_data(rom_name)
+            
+            if not game_data:
+                print(f"❌ No game data found for {rom_name}")
+                return
         
-        # Rest of the preview window creation code remains the same...
+        # PERFORMANCE FIX 3: Skip auto_close setup unless needed
         if auto_close:
-            print("🎮 Auto-close enabled - preview will close when MAME exits")
+            print("🎮 Auto-close enabled")
             self.monitor_mame_process(check_interval=0.5)
         
-        # Show the preview window
+        # PERFORMANCE FIX 4: Fast preview window creation
         try:
             from mame_controls_preview import PreviewWindow
             
             preview_start = time.time()
             
-            # Create the preview window
+            # Create preview window with minimal setup
             self.preview_window = PreviewWindow(
                 rom_name,
                 game_data,
                 self.mame_dir,
-                None,
-                self.hide_preview_buttons,
+                None,  # parent
+                getattr(self, 'hide_preview_buttons', False),
                 clean_mode,
                 getattr(self, 'input_mode', 'xinput')
             )
             
-            # Mark as standalone and apply settings
+            # PERFORMANCE FIX 5: Minimal window setup
             self.preview_window.standalone_mode = True
             
-            if hasattr(self.preview_window, 'ensure_consistent_text_positioning'):
-                self.preview_window.ensure_consistent_text_positioning()
-            
-            # Apply fullscreen settings
+            # Apply fullscreen settings quickly
             from PyQt5.QtCore import Qt
             self.preview_window.setWindowFlags(
                 Qt.WindowStaysOnTopHint | 
@@ -669,51 +587,27 @@ class MAMEControlConfig:
                 Qt.Tool
             )
             
-            self.preview_window.setAttribute(Qt.WA_NoSystemBackground, True)
-            self.preview_window.setAttribute(Qt.WA_TranslucentBackground, True)
+            # PERFORMANCE FIX 6: Skip heavy styling in preview mode
+            # self.preview_window.setStyleSheet(...)  # SKIP FOR SPEED
             
-            self.preview_window.setStyleSheet("""
-                QMainWindow, QWidget {
-                    border: none !important;
-                    padding: 0px !important;
-                    margin: 0px !important;
-                    background-color: black;
-                }
-            """)
-            
-            # Get screen geometry and show
+            # Show fullscreen immediately
             from PyQt5.QtWidgets import QDesktopWidget
             desktop = QDesktopWidget()
             screen_num = getattr(self, 'preferred_preview_screen', 1)
             screen_geometry = desktop.screenGeometry(screen_num - 1)
             
             self.preview_window.setGeometry(screen_geometry)
-            print(f"🖥️  Applied screen geometry: {screen_geometry.width()}x{screen_geometry.height()}")
-            
             self.preview_window.showFullScreen()
             self.preview_window.activateWindow()
             self.preview_window.raise_()
             
-            # Check dimensions after delay
-            from PyQt5.QtCore import QTimer
-            from PyQt5 import sip
-            
-            def check_window_dimensions():
-                if hasattr(self, 'preview_window') and self.preview_window and not sip.isdeleted(self.preview_window):
-                    self.ensure_full_dimensions(self.preview_window, screen_geometry)
-
-            QTimer.singleShot(100, check_window_dimensions)
-            
-            preview_time = time.time() - preview_start
             total_time = time.time() - start_time
-            print(f"🎨 Preview window created in {preview_time:.3f} seconds")
-            print(f"⏱️  Total startup time: {total_time:.3f} seconds")
+            print(f"⚡ Total startup time: {total_time:.3f} seconds")
             
         except Exception as e:
             print(f"❌ Error showing preview: {str(e)}")
             import traceback
             traceback.print_exc()
-            return
     
     def ensure_full_dimensions(self, window, screen_geometry):
         """Ensure the window and all children use the full dimensions"""
