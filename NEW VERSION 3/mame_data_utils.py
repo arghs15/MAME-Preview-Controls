@@ -1572,69 +1572,67 @@ def joycode_to_xinput(mapping: str) -> str:
     
     return xinput_mappings.get(mapping, mapping)
 
+# Modified functions in mame_data_utils.py for 1-based DInput buttons
+
 def joycode_to_dinput(mapping: str) -> str:
-    """Convert JOYCODE to DInput format - UPDATED for latest MAME mappings"""
+    """Convert JOYCODE to DInput format - MODIFIED for 1-based buttons"""
     dinput_mappings = {
-        # Standard button mappings (0-based for DInput)
-        'JOYCODE_1_BUTTON1': 'DINPUT_1_BUTTON0',
-        'JOYCODE_1_BUTTON2': 'DINPUT_1_BUTTON1',
-        'JOYCODE_1_BUTTON3': 'DINPUT_1_BUTTON2',
-        'JOYCODE_1_BUTTON4': 'DINPUT_1_BUTTON3',
-        'JOYCODE_1_BUTTON5': 'DINPUT_1_BUTTON4',
-        'JOYCODE_1_BUTTON6': 'DINPUT_1_BUTTON5',
-        'JOYCODE_1_BUTTON7': 'DINPUT_1_BUTTON6',
-        'JOYCODE_1_BUTTON8': 'DINPUT_1_BUTTON7',
-        'JOYCODE_1_BUTTON9': 'DINPUT_1_BUTTON8',
-        'JOYCODE_1_BUTTON10': 'DINPUT_1_BUTTON9',
+        # Standard button mappings (1-based for DInput) - CHANGED
+        'JOYCODE_1_BUTTON1': 'DINPUT_1_BUTTON1',  # Button 1 -> Button 1
+        'JOYCODE_1_BUTTON2': 'DINPUT_1_BUTTON2',  # Button 2 -> Button 2
+        'JOYCODE_1_BUTTON3': 'DINPUT_1_BUTTON3',  # Button 3 -> Button 3
+        'JOYCODE_1_BUTTON4': 'DINPUT_1_BUTTON4',  # Button 4 -> Button 4
+        'JOYCODE_1_BUTTON5': 'DINPUT_1_BUTTON5',  # Button 5 -> Button 5
+        'JOYCODE_1_BUTTON6': 'DINPUT_1_BUTTON6',  # Button 6 -> Button 6
+        'JOYCODE_1_BUTTON7': 'DINPUT_1_BUTTON7',  # Button 7 -> Button 7
+        'JOYCODE_1_BUTTON8': 'DINPUT_1_BUTTON8',  # Button 8 -> Button 8
+        'JOYCODE_1_BUTTON9': 'DINPUT_1_BUTTON9',  # Button 9 -> Button 9
+        'JOYCODE_1_BUTTON10': 'DINPUT_1_BUTTON10', # Button 10 -> Button 10
         
-        # NEW: Modern MAME button names
-        'JOYCODE_1_SELECT': 'DINPUT_1_BUTTON7',    # NEW: Maps to button 7 (0-based)
-        'JOYCODE_1_START': 'DINPUT_1_BUTTON8',     # NEW: Maps to button 8 (0-based)
+        # NEW: Modern MAME button names (keep 1-based)
+        'JOYCODE_1_SELECT': 'DINPUT_1_BUTTON8',    # Select -> Button 8
+        'JOYCODE_1_START': 'DINPUT_1_BUTTON9',     # Start -> Button 9
         
-        # UPDATED: HAT1 mappings (new in latest MAME)
-        'JOYCODE_1_HAT1UP': 'DINPUT_1_POV_UP',       # NEW: Replaces HATUP
-        'JOYCODE_1_HAT1DOWN': 'DINPUT_1_POV_DOWN',   # NEW: Replaces HATDOWN  
-        'JOYCODE_1_HAT1LEFT': 'DINPUT_1_POV_LEFT',   # NEW: Replaces HATLEFT
-        'JOYCODE_1_HAT1RIGHT': 'DINPUT_1_POV_RIGHT', # NEW: Replaces HATRIGHT
+        # D-pad mappings (unchanged)
+        'JOYCODE_1_HAT1UP': 'DINPUT_1_POV_UP',
+        'JOYCODE_1_HAT1DOWN': 'DINPUT_1_POV_DOWN',
+        'JOYCODE_1_HAT1LEFT': 'DINPUT_1_POV_LEFT',
+        'JOYCODE_1_HAT1RIGHT': 'DINPUT_1_POV_RIGHT',
         
-        # Legacy HAT mappings (for backward compatibility)
+        # Legacy HAT mappings
         'JOYCODE_1_HATUP': 'DINPUT_1_POV_UP',
         'JOYCODE_1_HATDOWN': 'DINPUT_1_POV_DOWN',
         'JOYCODE_1_HATLEFT': 'DINPUT_1_POV_LEFT',
         'JOYCODE_1_HATRIGHT': 'DINPUT_1_POV_RIGHT',
         
-        # UPDATED: Slider mappings (SLIDER2 instead of ZAXIS)
-        'JOYCODE_1_SLIDER1': 'DINPUT_1_SLIDER0',           # Often used for triggers
-        'JOYCODE_1_SLIDER2': 'DINPUT_1_SLIDER1',           # NEW: Replaces ZAXIS
+        # Slider/trigger mappings (unchanged)
+        'JOYCODE_1_SLIDER1': 'DINPUT_1_SLIDER0',
+        'JOYCODE_1_SLIDER2': 'DINPUT_1_SLIDER1',
         'JOYCODE_1_SLIDER1_NEG_SWITCH': 'DINPUT_1_SLIDER0_NEG',
-        'JOYCODE_1_SLIDER2_NEG_SWITCH': 'DINPUT_1_SLIDER1_NEG',  # NEW
-        'JOYCODE_1_SLIDER2_POS_SWITCH': 'DINPUT_1_SLIDER1_POS',  # NEW
+        'JOYCODE_1_SLIDER2_NEG_SWITCH': 'DINPUT_1_SLIDER1_NEG',
+        'JOYCODE_1_SLIDER2_POS_SWITCH': 'DINPUT_1_SLIDER1_POS',
         
-        # Legacy Z-axis mappings (for backward compatibility)
-        'JOYCODE_1_ZAXIS_NEG_SWITCH': 'DINPUT_1_ZAXIS_NEG',  # Old name
-        'JOYCODE_1_ZAXIS_POS_SWITCH': 'DINPUT_1_ZAXIS_POS',  # Old name
+        # Player 2 mappings (same pattern)
+        'JOYCODE_2_BUTTON1': 'DINPUT_2_BUTTON1',
+        'JOYCODE_2_BUTTON2': 'DINPUT_2_BUTTON2',
+        'JOYCODE_2_BUTTON3': 'DINPUT_2_BUTTON3',
+        'JOYCODE_2_BUTTON4': 'DINPUT_2_BUTTON4',
+        'JOYCODE_2_BUTTON5': 'DINPUT_2_BUTTON5',
+        'JOYCODE_2_BUTTON6': 'DINPUT_2_BUTTON6',
+        'JOYCODE_2_BUTTON7': 'DINPUT_2_BUTTON7',
+        'JOYCODE_2_BUTTON8': 'DINPUT_2_BUTTON8',
+        'JOYCODE_2_BUTTON9': 'DINPUT_2_BUTTON9',
+        'JOYCODE_2_BUTTON10': 'DINPUT_2_BUTTON10',
         
-        # Player 2 mappings with same updates
-        'JOYCODE_2_BUTTON1': 'DINPUT_2_BUTTON0',
-        'JOYCODE_2_BUTTON2': 'DINPUT_2_BUTTON1',
-        'JOYCODE_2_BUTTON3': 'DINPUT_2_BUTTON2',
-        'JOYCODE_2_BUTTON4': 'DINPUT_2_BUTTON3',
-        'JOYCODE_2_BUTTON5': 'DINPUT_2_BUTTON4',
-        'JOYCODE_2_BUTTON6': 'DINPUT_2_BUTTON5',
-        'JOYCODE_2_BUTTON7': 'DINPUT_2_BUTTON6',
-        'JOYCODE_2_BUTTON8': 'DINPUT_2_BUTTON7',
-        'JOYCODE_2_BUTTON9': 'DINPUT_2_BUTTON8',
-        'JOYCODE_2_BUTTON10': 'DINPUT_2_BUTTON9',
+        # Player 2 system buttons
+        'JOYCODE_2_SELECT': 'DINPUT_2_BUTTON8',
+        'JOYCODE_2_START': 'DINPUT_2_BUTTON9',
         
-        # Player 2 NEW button names
-        'JOYCODE_2_SELECT': 'DINPUT_2_BUTTON7',    # NEW
-        'JOYCODE_2_START': 'DINPUT_2_BUTTON8',     # NEW
-        
-        # Player 2 HAT1 mappings
-        'JOYCODE_2_HAT1UP': 'DINPUT_2_POV_UP',     # NEW
-        'JOYCODE_2_HAT1DOWN': 'DINPUT_2_POV_DOWN', # NEW
-        'JOYCODE_2_HAT1LEFT': 'DINPUT_2_POV_LEFT', # NEW
-        'JOYCODE_2_HAT1RIGHT': 'DINPUT_2_POV_RIGHT', # NEW
+        # Player 2 D-pad
+        'JOYCODE_2_HAT1UP': 'DINPUT_2_POV_UP',
+        'JOYCODE_2_HAT1DOWN': 'DINPUT_2_POV_DOWN',
+        'JOYCODE_2_HAT1LEFT': 'DINPUT_2_POV_LEFT',
+        'JOYCODE_2_HAT1RIGHT': 'DINPUT_2_POV_RIGHT',
     }
     
     return dinput_mappings.get(mapping, mapping)
@@ -1705,52 +1703,49 @@ def xinput_to_dinput(mapping: str) -> str:
     return mapping_dict.get(mapping, mapping)
 
 def dinput_to_joycode(mapping: str) -> str:
-    """Convert DInput to JOYCODE format - UPDATED for latest MAME mappings"""
+    """Convert DInput to JOYCODE format - MODIFIED for 1-based buttons"""
     reverse_mappings = {
-        # Standard button mappings (convert from 0-based to 1-based)
-        'DINPUT_1_BUTTON0': 'JOYCODE_1_BUTTON1',
-        'DINPUT_1_BUTTON1': 'JOYCODE_1_BUTTON2',
-        'DINPUT_1_BUTTON2': 'JOYCODE_1_BUTTON3',
-        'DINPUT_1_BUTTON3': 'JOYCODE_1_BUTTON4',
-        'DINPUT_1_BUTTON4': 'JOYCODE_1_BUTTON5',
-        'DINPUT_1_BUTTON5': 'JOYCODE_1_BUTTON6',
-        'DINPUT_1_BUTTON6': 'JOYCODE_1_BUTTON7',
+        # Standard button mappings (1-based) - CHANGED
+        'DINPUT_1_BUTTON1': 'JOYCODE_1_BUTTON1',   # Button 1 -> Button 1
+        'DINPUT_1_BUTTON2': 'JOYCODE_1_BUTTON2',   # Button 2 -> Button 2
+        'DINPUT_1_BUTTON3': 'JOYCODE_1_BUTTON3',   # Button 3 -> Button 3
+        'DINPUT_1_BUTTON4': 'JOYCODE_1_BUTTON4',   # Button 4 -> Button 4
+        'DINPUT_1_BUTTON5': 'JOYCODE_1_BUTTON5',   # Button 5 -> Button 5
+        'DINPUT_1_BUTTON6': 'JOYCODE_1_BUTTON6',   # Button 6 -> Button 6
+        'DINPUT_1_BUTTON7': 'JOYCODE_1_BUTTON7',   # Button 7 -> Button 7
+        'DINPUT_1_BUTTON8': 'JOYCODE_1_SELECT',    # Button 8 -> SELECT
+        'DINPUT_1_BUTTON9': 'JOYCODE_1_START',     # Button 9 -> START
+        'DINPUT_1_BUTTON10': 'JOYCODE_1_BUTTON10', # Button 10 -> Button 10
         
-        # UPDATED: Prefer new MAME names
-        'DINPUT_1_BUTTON7': 'JOYCODE_1_SELECT',    # NEW: Use SELECT name
-        'DINPUT_1_BUTTON8': 'JOYCODE_1_START',     # NEW: Use START name
-        'DINPUT_1_BUTTON8': 'JOYCODE_1_BUTTON9',
-        'DINPUT_1_BUTTON9': 'JOYCODE_1_BUTTON10',
+        # D-pad mappings (unchanged)
+        'DINPUT_1_POV_UP': 'JOYCODE_1_HAT1UP',
+        'DINPUT_1_POV_DOWN': 'JOYCODE_1_HAT1DOWN',
+        'DINPUT_1_POV_LEFT': 'JOYCODE_1_HAT1LEFT',
+        'DINPUT_1_POV_RIGHT': 'JOYCODE_1_HAT1RIGHT',
         
-        # UPDATED: Prefer new HAT1 names
-        'DINPUT_1_POV_UP': 'JOYCODE_1_HAT1UP',       # NEW
-        'DINPUT_1_POV_DOWN': 'JOYCODE_1_HAT1DOWN',   # NEW
-        'DINPUT_1_POV_LEFT': 'JOYCODE_1_HAT1LEFT',   # NEW
-        'DINPUT_1_POV_RIGHT': 'JOYCODE_1_HAT1RIGHT', # NEW
-        
-        # UPDATED: Prefer SLIDER2 names
+        # Slider mappings (unchanged)
         'DINPUT_1_SLIDER0': 'JOYCODE_1_SLIDER1',
-        'DINPUT_1_SLIDER1': 'JOYCODE_1_SLIDER2',     # NEW: Map to SLIDER2
+        'DINPUT_1_SLIDER1': 'JOYCODE_1_SLIDER2',
         'DINPUT_1_SLIDER0_NEG': 'JOYCODE_1_SLIDER1_NEG_SWITCH',
-        'DINPUT_1_SLIDER1_NEG': 'JOYCODE_1_SLIDER2_NEG_SWITCH', # NEW
-        'DINPUT_1_SLIDER1_POS': 'JOYCODE_1_SLIDER2_POS_SWITCH', # NEW
+        'DINPUT_1_SLIDER1_NEG': 'JOYCODE_1_SLIDER2_NEG_SWITCH',
+        'DINPUT_1_SLIDER1_POS': 'JOYCODE_1_SLIDER2_POS_SWITCH',
         
         # Player 2 mappings
-        'DINPUT_2_BUTTON0': 'JOYCODE_2_BUTTON1',
-        'DINPUT_2_BUTTON1': 'JOYCODE_2_BUTTON2',
-        'DINPUT_2_BUTTON2': 'JOYCODE_2_BUTTON3',
-        'DINPUT_2_BUTTON3': 'JOYCODE_2_BUTTON4',
-        'DINPUT_2_BUTTON4': 'JOYCODE_2_BUTTON5',
-        'DINPUT_2_BUTTON5': 'JOYCODE_2_BUTTON6',
-        'DINPUT_2_BUTTON6': 'JOYCODE_2_BUTTON7',
-        'DINPUT_2_BUTTON7': 'JOYCODE_2_SELECT',    # NEW
-        'DINPUT_2_BUTTON8': 'JOYCODE_2_START',     # NEW
+        'DINPUT_2_BUTTON1': 'JOYCODE_2_BUTTON1',
+        'DINPUT_2_BUTTON2': 'JOYCODE_2_BUTTON2',
+        'DINPUT_2_BUTTON3': 'JOYCODE_2_BUTTON3',
+        'DINPUT_2_BUTTON4': 'JOYCODE_2_BUTTON4',
+        'DINPUT_2_BUTTON5': 'JOYCODE_2_BUTTON5',
+        'DINPUT_2_BUTTON6': 'JOYCODE_2_BUTTON6',
+        'DINPUT_2_BUTTON7': 'JOYCODE_2_BUTTON7',
+        'DINPUT_2_BUTTON8': 'JOYCODE_2_SELECT',
+        'DINPUT_2_BUTTON9': 'JOYCODE_2_START',
         
         # Player 2 POV/HAT
-        'DINPUT_2_POV_UP': 'JOYCODE_2_HAT1UP',     # NEW
-        'DINPUT_2_POV_DOWN': 'JOYCODE_2_HAT1DOWN', # NEW
-        'DINPUT_2_POV_LEFT': 'JOYCODE_2_HAT1LEFT', # NEW
-        'DINPUT_2_POV_RIGHT': 'JOYCODE_2_HAT1RIGHT', # NEW
+        'DINPUT_2_POV_UP': 'JOYCODE_2_HAT1UP',
+        'DINPUT_2_POV_DOWN': 'JOYCODE_2_HAT1DOWN',
+        'DINPUT_2_POV_LEFT': 'JOYCODE_2_HAT1LEFT',
+        'DINPUT_2_POV_RIGHT': 'JOYCODE_2_HAT1RIGHT',
     }
     
     return reverse_mappings.get(mapping, mapping)
@@ -2139,7 +2134,7 @@ def get_friendly_xinput_name(mapping: str, friendly_names: bool = True) -> str:
     return friendly_map.get(action, action)
 
 def get_friendly_dinput_name(mapping: str, friendly_names: bool = True) -> str:
-    """Convert a DINPUT mapping code into a human-friendly button/stick name - with toggle"""
+    """Convert a DINPUT mapping code into a human-friendly name - COMPLETE VERSION"""
     if not mapping or not mapping.startswith('DINPUT_'):
         return mapping
     
@@ -2154,12 +2149,41 @@ def get_friendly_dinput_name(mapping: str, friendly_names: bool = True) -> str:
     player_num = parts[1]
     action = parts[2]
     
-    # Enhanced button mapping
+    # Handle buttons with 1-based display
     if action.startswith("BUTTON"):
-        button_num = action[6:]  # Extract number from 'BUTTON0'
-        return f"Button {button_num}"
+        button_num_str = action[6:]  # Extract number from 'BUTTON0', 'BUTTON1', etc.
+        try:
+            button_num = int(button_num_str)
+            display_num = button_num + 1  # Convert 0-based to 1-based for display
+            return f"Button {display_num}"
+        except ValueError:
+            return f"Button {button_num_str}"
     
-    # Enhanced POV/directional mapping
+    # Handle sliders with 1-based display (but keep 0-based codes)
+    elif action.startswith("SLIDER"):
+        slider_parts = action.split('_')  # Split 'SLIDER0', 'SLIDER1_NEG', etc.
+        slider_base = slider_parts[0]  # 'SLIDER0' or 'SLIDER1'
+        slider_num_str = slider_base[6:]  # Extract '0' or '1'
+        
+        try:
+            slider_num = int(slider_num_str)
+            display_num = slider_num + 1  # Convert 0-based to 1-based for display
+            
+            # Handle directional modifiers
+            if len(slider_parts) > 1:
+                modifier = slider_parts[1]  # 'NEG', 'POS', etc.
+                if modifier == 'NEG':
+                    return f"Slider {display_num} Negative"
+                elif modifier == 'POS':
+                    return f"Slider {display_num} Positive"
+                else:
+                    return f"Slider {display_num} {modifier}"
+            else:
+                return f"Slider {display_num}"
+        except ValueError:
+            return f"Slider {slider_num_str}"
+    
+    # Handle POV/D-pad (unchanged)
     elif action == "POV_UP" or action == "POVUP":
         return "POV Up"
     elif action == "POV_DOWN" or action == "POVDOWN":
@@ -2169,27 +2193,42 @@ def get_friendly_dinput_name(mapping: str, friendly_names: bool = True) -> str:
     elif action == "POV_RIGHT" or action == "POVRIGHT":
         return "POV Right"
     
-    # Enhanced axis mapping
-    elif action == "XAXIS_NEG":
-        return "X-Axis Left"
-    elif action == "XAXIS_POS":
-        return "X-Axis Right"
-    elif action == "YAXIS_NEG":
-        return "Y-Axis Up"
-    elif action == "YAXIS_POS":
-        return "Y-Axis Down"
-    elif action == "ZAXIS_NEG":
-        return "Z-Axis Neg"
-    elif action == "ZAXIS_POS":
-        return "Z-Axis Pos"
-    elif action == "RXAXIS_NEG":
-        return "RX-Axis Left"
-    elif action == "RXAXIS_POS":
-        return "RX-Axis Right"
-    elif action == "RYAXIS_NEG":
-        return "RY-Axis Up"
-    elif action == "RYAXIS_POS":
-        return "RY-Axis Down"
+    # Handle axes with 1-based display
+    elif action.startswith("XAXIS"):
+        if "_NEG" in action:
+            return "X-Axis Left"
+        elif "_POS" in action:
+            return "X-Axis Right"
+        else:
+            return "X-Axis"
+    elif action.startswith("YAXIS"):
+        if "_NEG" in action:
+            return "Y-Axis Up"
+        elif "_POS" in action:
+            return "Y-Axis Down"
+        else:
+            return "Y-Axis"
+    elif action.startswith("ZAXIS"):
+        if "_NEG" in action:
+            return "Z-Axis Negative"
+        elif "_POS" in action:
+            return "Z-Axis Positive"
+        else:
+            return "Z-Axis"
+    elif action.startswith("RXAXIS"):
+        if "_NEG" in action:
+            return "RX-Axis Left"
+        elif "_POS" in action:
+            return "RX-Axis Right"
+        else:
+            return "RX-Axis"
+    elif action.startswith("RYAXIS"):
+        if "_NEG" in action:
+            return "RY-Axis Up"
+        elif "_POS" in action:
+            return "RY-Axis Down"
+        else:
+            return "RY-Axis"
     
     # Fallback
     return f"DInput {player_num} {action}"
@@ -2437,19 +2476,19 @@ def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
     
     elif input_mode == 'dinput':
         return {
-            # Player 1 Standard Buttons (0-based for DInput)
-            'P1_BUTTON1': 'DINPUT_1_BUTTON0',
-            'P1_BUTTON2': 'DINPUT_1_BUTTON1',
-            'P1_BUTTON3': 'DINPUT_1_BUTTON2',
-            'P1_BUTTON4': 'DINPUT_1_BUTTON3',
-            'P1_BUTTON5': 'DINPUT_1_BUTTON4',
-            'P1_BUTTON6': 'DINPUT_1_BUTTON5',
-            'P1_BUTTON7': 'DINPUT_1_BUTTON6',
-            'P1_BUTTON8': 'DINPUT_1_BUTTON7',
-            'P1_BUTTON9': 'DINPUT_1_BUTTON8',
-            'P1_BUTTON10': 'DINPUT_1_BUTTON9',
+            # Player 1 Standard Buttons (1-based for DInput) - CHANGED
+            'P1_BUTTON1': 'DINPUT_1_BUTTON1',  # Button 1 -> Button 1
+            'P1_BUTTON2': 'DINPUT_1_BUTTON2',  # Button 2 -> Button 2
+            'P1_BUTTON3': 'DINPUT_1_BUTTON3',  # Button 3 -> Button 3
+            'P1_BUTTON4': 'DINPUT_1_BUTTON4',  # Button 4 -> Button 4
+            'P1_BUTTON5': 'DINPUT_1_BUTTON5',  # Button 5 -> Button 5
+            'P1_BUTTON6': 'DINPUT_1_BUTTON6',  # Button 6 -> Button 6
+            'P1_BUTTON7': 'DINPUT_1_BUTTON7',  # Button 7 -> Button 7
+            'P1_BUTTON8': 'DINPUT_1_BUTTON8',  # Button 8 -> Button 8
+            'P1_BUTTON9': 'DINPUT_1_BUTTON9',  # Button 9 -> Button 9
+            'P1_BUTTON10': 'DINPUT_1_BUTTON10', # Button 10 -> Button 10
             
-            # Player 1 Directional Controls
+            # Player 1 Directional Controls (unchanged)
             'P1_JOYSTICK_UP': 'DINPUT_1_POV_UP',
             'P1_JOYSTICK_DOWN': 'DINPUT_1_POV_DOWN',
             'P1_JOYSTICK_LEFT': 'DINPUT_1_POV_LEFT',
@@ -2463,11 +2502,11 @@ def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
             'P1_JOYSTICKRIGHT_LEFT': 'DINPUT_1_RXAXIS_NEG',
             'P1_JOYSTICKRIGHT_RIGHT': 'DINPUT_1_RXAXIS_POS',
             
-            # Player 1 System Controls
-            'P1_START': 'DINPUT_1_BUTTON8',
-            'P1_SELECT': 'DINPUT_1_BUTTON9',
+            # Player 1 System Controls (changed to match 1-based)
+            'P1_START': 'DINPUT_1_BUTTON9',    # Start -> Button 9
+            'P1_SELECT': 'DINPUT_1_BUTTON10',  # Select -> Button 10
             
-            # Player 1 Specialized Controls
+            # Player 1 Specialized Controls (unchanged)
             'P1_PEDAL': 'DINPUT_1_ZAXIS_POS',
             'P1_PEDAL2': 'DINPUT_1_ZAXIS_NEG',
             'P1_AD_STICK_X': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
@@ -2477,19 +2516,19 @@ def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
             'P1_TRACKBALL_X': 'DINPUT_1_XAXIS_NEG ||| DINPUT_1_XAXIS_POS',
             'P1_TRACKBALL_Y': 'DINPUT_1_YAXIS_NEG ||| DINPUT_1_YAXIS_POS',
             
-            # Player 2 Controls (mirror P1)
-            'P2_BUTTON1': 'DINPUT_2_BUTTON0',
-            'P2_BUTTON2': 'DINPUT_2_BUTTON1',
-            'P2_BUTTON3': 'DINPUT_2_BUTTON2',
-            'P2_BUTTON4': 'DINPUT_2_BUTTON3',
-            'P2_BUTTON5': 'DINPUT_2_BUTTON4',
-            'P2_BUTTON6': 'DINPUT_2_BUTTON5',
+            # Player 2 Controls (same 1-based pattern)
+            'P2_BUTTON1': 'DINPUT_2_BUTTON1',
+            'P2_BUTTON2': 'DINPUT_2_BUTTON2',
+            'P2_BUTTON3': 'DINPUT_2_BUTTON3',
+            'P2_BUTTON4': 'DINPUT_2_BUTTON4',
+            'P2_BUTTON5': 'DINPUT_2_BUTTON5',
+            'P2_BUTTON6': 'DINPUT_2_BUTTON6',
             'P2_JOYSTICK_UP': 'DINPUT_2_POV_UP',
             'P2_JOYSTICK_DOWN': 'DINPUT_2_POV_DOWN',
             'P2_JOYSTICK_LEFT': 'DINPUT_2_POV_LEFT',
             'P2_JOYSTICK_RIGHT': 'DINPUT_2_POV_RIGHT',
-            'P2_START': 'DINPUT_2_BUTTON8',
-            'P2_SELECT': 'DINPUT_2_BUTTON9',
+            'P2_START': 'DINPUT_2_BUTTON9',
+            'P2_SELECT': 'DINPUT_2_BUTTON10',
         }
     
     elif input_mode == 'keycode':

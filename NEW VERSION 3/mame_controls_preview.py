@@ -7241,28 +7241,46 @@ class PreviewWindow(QMainWindow):
             "XINPUT_1_RIGHTX_NEG": "RS←",     # Right stick left
         }
         
-        # Add DirectInput mappings
+        # Add DirectInput mappings - EXPANDED WITH MISSING SLIDER MAPPINGS
         dinput_to_prefix = {
-            "DINPUT_1_BUTTON0": "B0",
-            "DINPUT_1_BUTTON1": "B1",
-            "DINPUT_1_BUTTON2": "B2",
-            "DINPUT_1_BUTTON3": "B3",
-            "DINPUT_1_BUTTON4": "B4",
-            "DINPUT_1_BUTTON5": "B5",
-            "DINPUT_1_BUTTON6": "B6",
-            "DINPUT_1_BUTTON7": "B7",
-            "DINPUT_1_BUTTON8": "B8",
-            "DINPUT_1_BUTTON9": "B9",
-            "DINPUT_1_POV_UP": "POV↑",
-            "DINPUT_1_POV_DOWN": "POV↓",
-            "DINPUT_1_POV_LEFT": "POV←",
-            "DINPUT_1_POV_RIGHT": "POV→",
-            "DINPUT_1_XAXIS_NEG": "X←",
-            "DINPUT_1_XAXIS_POS": "X→",
-            "DINPUT_1_YAXIS_NEG": "Y↑",
-            "DINPUT_1_YAXIS_POS": "Y↓",
-            "DINPUT_1_ZAXIS": "Z-AXIS",      # DirectInput Z-axis
-            "DINPUT_1_RZAXIS": "RZ-AXIS",    # DirectInput RZ-axis
+            # Buttons - Start from 1 as users expect (even though DirectInput is 0-based internally)
+            "DINPUT_1_BUTTON0": "B1",   # First button = Button 1 to user
+            "DINPUT_1_BUTTON1": "B2",   # Second button = Button 2 to user
+            "DINPUT_1_BUTTON2": "B3",   # Third button = Button 3 to user
+            "DINPUT_1_BUTTON3": "B4",
+            "DINPUT_1_BUTTON4": "B5",
+            "DINPUT_1_BUTTON5": "B6",
+            "DINPUT_1_BUTTON6": "B7",
+            "DINPUT_1_BUTTON7": "B8",
+            "DINPUT_1_BUTTON8": "B9",
+            "DINPUT_1_BUTTON9": "B10",
+            
+            # POV Hat (D-Pad equivalent)
+            "DINPUT_1_POV_UP": "HAT↑",
+            "DINPUT_1_POV_DOWN": "HAT↓",
+            "DINPUT_1_POV_LEFT": "HAT←",
+            "DINPUT_1_POV_RIGHT": "HAT→",
+            
+            # Primary Axes - More descriptive
+            "DINPUT_1_XAXIS_NEG": "X-",     # X-axis negative (left)
+            "DINPUT_1_XAXIS_POS": "X+",     # X-axis positive (right)
+            "DINPUT_1_YAXIS_NEG": "Y-",     # Y-axis negative (up/forward)
+            "DINPUT_1_YAXIS_POS": "Y+",     # Y-axis positive (down/back)
+            
+            # Rotation Axes
+            "DINPUT_1_ZAXIS": "Z-AXIS",     # Z rotation
+            "DINPUT_1_RZAXIS": "RZ-AXIS",   # RZ rotation
+            
+            # ADD THESE MISSING SLIDER MAPPINGS FOR OUT RUN:
+            "DINPUT_1_SLIDER0": "SL1",       # Slider 0 (full axis)
+            "DINPUT_1_SLIDER0_NEG": "SL1-",  # Slider 0 negative (brake)
+            "DINPUT_1_SLIDER0_POS": "SL1+",  # Slider 0 positive
+            "DINPUT_1_SLIDER1": "SL2",       # Slider 1 (full axis)
+            "DINPUT_1_SLIDER1_NEG": "SL2-",  # Slider 1 negative (accelerate)
+            "DINPUT_1_SLIDER1_POS": "SL2+",  # Slider 1 positive
+            "DINPUT_1_SLIDER2": "SL3",       # Slider 2 (full axis)
+            "DINPUT_1_SLIDER2_NEG": "SL3-",  # Slider 2 negative
+            "DINPUT_1_SLIDER2_POS": "SL3+",  # Slider 2 positive
         }
         
         # MAME specialized control mappings
