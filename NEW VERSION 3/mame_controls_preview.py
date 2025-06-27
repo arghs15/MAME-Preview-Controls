@@ -676,7 +676,7 @@ class PreviewWindow(QMainWindow):
             return False
 
     def distribute_controls_vertically(self):
-        """Distribute visible controls evenly in columns with improved boundary detection"""
+        """Distribute ALL visible controls evenly with fresh calculation"""
         # Get all visible control labels
         visible_controls = []
         for control_name, control_data in self.control_labels.items():
@@ -687,164 +687,94 @@ class PreviewWindow(QMainWindow):
         if len(visible_controls) < 2:
             self.show_toast_notification("Need at least 2 visible controls to distribute")
             return False
-        
-        print(f"\n=== DISTRIBUTE DEBUG (Enhanced) ===")
+
+        print(f"\n=== DISTRIBUTE DEBUG (Fresh Layout) ===")
         print(f"Processing {len(visible_controls)} visible controls")
         
-        # Group controls by column (similar X positions)
-        columns = {}
-        column_tolerance = 50  # Controls within 50px horizontally are considered same column
+        # Sort ALL controls by Y position
+        visible_controls.sort(key=lambda item: item[1].y())
         
-        for control_name, label in visible_controls:
-            x_pos = label.x()
-            
-            # Find which column this control belongs to
-            assigned_column = None
-            for col_x in columns.keys():
-                if abs(x_pos - col_x) <= column_tolerance:
-                    assigned_column = col_x
-                    break
-            
-            # If no existing column found, create new one
-            if assigned_column is None:
-                assigned_column = x_pos
-                columns[assigned_column] = []
-            
-            columns[assigned_column].append((control_name, label))
+        print("BEFORE Distribution:")
+        for i, (control_name, label) in enumerate(visible_controls):
+            print(f"  {i}: {control_name} at X={label.x()}, Y={label.y()}, height={label.height()}px")
         
-        print(f"Found {len(columns)} columns with controls:")
-        for col_x, controls in columns.items():
-            print(f"  Column at X={col_x}: {len(controls)} controls")
+        # Find the topmost and bottommost controls' BOUNDARIES
+        topmost_y = visible_controls[0][1].y()
+        bottommost_y = visible_controls[-1][1].y()
+        total_available_height = bottommost_y - topmost_y
         
-        total_changes = 0
-        columns_processed = 0
+        print(f"Boundaries: Top={topmost_y}, Bottom={bottommost_y}, Available={total_available_height}px")
         
-        # Process each column separately
-        for col_x, column_controls in columns.items():
-            # Need at least 2 controls in a column to distribute
-            if len(column_controls) < 2:
-                print(f"  Skipping column at X={col_x} - only {len(column_controls)} control(s)")
-                continue
-            
-            print(f"\n--- Processing Column at X={col_x} ---")
-            
-            # Sort controls in this column by Y position
-            column_controls.sort(key=lambda item: item[1].y())
-            
-            # Print BEFORE positions with label heights
-            print("BEFORE Distribution:")
-            for i, (control_name, label) in enumerate(column_controls):
-                label_height = label.height()
-                print(f"  {i}: {control_name} at Y={label.y()}, height={label_height}px")
-            
-            # Find the actual visual boundaries (topmost and bottommost controls)
-            topmost_control = column_controls[0]  # First in sorted list
-            bottommost_control = column_controls[-1]  # Last in sorted list
-            
-            topmost_name, topmost_label = topmost_control
-            bottommost_name, bottommost_label = bottommost_control
-            
-            topmost_y = topmost_label.y()
-            bottommost_y = bottommost_label.y()
-            
-            # Calculate available space between the boundaries
-            total_height = bottommost_y - topmost_y
-            
-            print(f"Visual boundaries:")
-            print(f"  Topmost: {topmost_name} at Y={topmost_y}")
-            print(f"  Bottommost: {bottommost_name} at Y={bottommost_y}")
-            print(f"  Available height: {total_height}px")
-            
-            # Calculate more reasonable minimum spacing
-            avg_label_height = sum(label.height() for _, label in column_controls) / len(column_controls)
-            min_spacing = avg_label_height + 5
-            
-            print(f"Average label height: {avg_label_height:.1f}px, Min spacing: {min_spacing:.1f}px")
-            
-            # Only skip if total height is extremely small
-            required_minimum = min_spacing * (len(column_controls) - 1)
-            if total_height < required_minimum * 0.5:  # Very relaxed requirement
-                print(f"  Skipping column - insufficient space for distribution")
-                print(f"  Need at least: {required_minimum * 0.5:.1f}px, Have: {total_height}px")
-                continue
-            
-            # Calculate even spacing for this column
-            steps = len(column_controls) - 1
-            if steps > 0:
-                step_size = total_height / steps
+        # Calculate the total height needed for all labels
+        total_label_height = sum(label.height() for _, label in visible_controls)
+        
+        # Calculate how much space is left for gaps
+        total_gap_space = total_available_height - total_label_height
+        num_gaps = len(visible_controls) - 1
+        
+        if num_gaps > 0:
+            gap_size = total_gap_space / num_gaps
+        else:
+            gap_size = 0
+        
+        print(f"Total label height: {total_label_height}px")
+        print(f"Total gap space: {total_gap_space}px")
+        print(f"Number of gaps: {num_gaps}")
+        print(f"Gap size: {gap_size:.1f}px")
+        
+        # FRESH CALCULATION: Calculate target positions from scratch
+        print("\nCalculating fresh target positions:")
+        controls_moved = 0
+        current_y = topmost_y  # Start from the top
+        
+        for i, (control_name, label) in enumerate(visible_controls):
+            # Calculate target Y position
+            if i == 0:
+                # First control stays at top
+                target_y = topmost_y
             else:
-                step_size = 0
+                # Each subsequent control is positioned after the previous one + gap
+                target_y = int(current_y)
             
-            print(f"Steps: {steps}, Step size: {step_size:.1f}px")
+            current_label_y = label.y()
+            will_move = abs(current_label_y - target_y) > 1  # 1px tolerance
             
-            column_changes = 0
+            print(f"  {i}: {control_name} → Y={target_y} (current: {current_label_y}) {'MOVE' if will_move else 'STAY'}")
             
-            # Calculate target positions based on actual topmost/bottommost
-            print("\nTarget positions:")
-            for i, (control_name, label) in enumerate(column_controls):
-                if i == 0:
-                    # Keep topmost exactly where it is
-                    target_y = topmost_y
-                elif i == len(column_controls) - 1:
-                    # Keep bottommost exactly where it is
-                    target_y = bottommost_y
-                else:
-                    # Distribute evenly between top and bottom
-                    target_y = int(topmost_y + (i * step_size))
-                
-                current_y = label.y()
-                will_move = abs(current_y - target_y) > 2
-                print(f"  {i}: {control_name} → Y={target_y} (current: {current_y}) {'MOVE' if will_move else 'STAY'}")
-                
-                # Apply the move
-                if will_move:
-                    label.move(label.x(), target_y)
-                    column_changes += 1
-                    print(f"  MOVED: {control_name} from Y={current_y} to Y={target_y}")
+            if will_move:
+                label.move(label.x(), target_y)  # Keep X, change Y
+                controls_moved += 1
+                print(f"  MOVED: {control_name} from Y={current_label_y} to Y={target_y}")
             
-            # Print AFTER positions
-            print("\nAFTER Distribution:")
-            # Re-sort to show current positions
-            column_controls.sort(key=lambda item: item[1].y())
-            for i, (control_name, label) in enumerate(column_controls):
-                spacing = ""
-                if i > 0:
-                    prev_y = column_controls[i-1][1].y()
-                    gap = label.y() - prev_y
-                    spacing = f" (gap: {gap}px)"
-                print(f"  {i}: {control_name} at Y={label.y()}{spacing}")
-            
-            # Calculate actual spacing between adjacent controls
-            print("\nActual gaps between controls:")
-            for i in range(1, len(column_controls)):
-                prev_label = column_controls[i-1][1]
-                curr_label = column_controls[i][1]
-                prev_y = prev_label.y()
-                curr_y = curr_label.y()
-                gap = curr_y - prev_y
-                prev_height = prev_label.height()
-                overlap_check = gap < prev_height
-                status = " (OVERLAP!)" if overlap_check else " (OK)"
-                print(f"  Gap {i-1}→{i}: {gap}px{status}")
-            
-            if column_changes > 0:
-                print(f"\nDistributed {column_changes} controls in column at X={col_x}")
-                total_changes += column_changes
-                columns_processed += 1
+            # Update current_y for next control (this control's bottom + gap)
+            current_y = target_y + label.height() + gap_size
         
-        print(f"\n=== DISTRIBUTE COMPLETE ===\n")
+        # Verification: Print final positions and gaps
+        print("\nAFTER Distribution:")
+        visible_controls.sort(key=lambda item: item[1].y())  # Re-sort by new positions
         
-        # Force a repaint to ensure changes are visible
+        for i, (control_name, label) in enumerate(visible_controls):
+            gap_info = ""
+            if i > 0:
+                prev_label = visible_controls[i-1][1]
+                prev_bottom = prev_label.y() + prev_label.height()
+                actual_gap = label.y() - prev_bottom
+                gap_info = f" (gap: {actual_gap:.0f}px)"
+            print(f"  {i}: {control_name} at X={label.x()}, Y={label.y()}{gap_info}")
+        
+        print(f"\n=== DISTRIBUTE COMPLETE ===")
+        print(f"Moved {controls_moved} controls with {gap_size:.1f}px gaps")
+        
+        # Force canvas update
         if hasattr(self, 'canvas'):
             self.canvas.update()
         
-        # Show results
-        if total_changes > 0:
-            self.show_toast_notification(f"Distributed {total_changes} controls across {columns_processed} columns")
+        if controls_moved > 0:
+            self.show_toast_notification(f"Distributed {controls_moved} controls with {gap_size:.0f}px gaps")
         else:
-            self.show_toast_notification("Controls already evenly distributed")
+            self.show_toast_notification("Controls already perfectly distributed")
         
-        return total_changes > 0
+        return controls_moved > 0
 
     def show_toast_notification(self, message, duration=2000):
         """Show a brief notification that automatically disappears after specified duration (ms)"""
@@ -3450,7 +3380,7 @@ class PreviewWindow(QMainWindow):
             self.no_buttons_visible = True
             print("DEBUG: Forcing No Buttons notification visible in Show All Controls view")
         # Truncate display text with minimal space loss
-    def truncate_display_text(self, text, max_length=15):
+    def truncate_display_text(self, text, max_length=50):
         """Truncate display text with minimal space loss"""
         if len(text) <= max_length:
             return text
@@ -7229,6 +7159,27 @@ class PreviewWindow(QMainWindow):
                     # Resize with the calculated width
                     label.resize(label_width, label_height)
                     
+                    # CALCULATE STANDARD HEIGHT based on current font
+                    font_metrics = QFontMetrics(label.font())
+                    base_height = font_metrics.height()
+
+                    # Add some padding for visual consistency
+                    standard_height = int(base_height * 1.4)  # 40% padding above font height
+
+                    # FORCE CONSISTENT HEIGHT for all control labels
+                    label.setFixedHeight(standard_height)
+
+                    # Ensure text doesn't wrap and uses single line
+                    label.setWordWrap(False)
+                    label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+                    # Center text vertically within the fixed height
+                    label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+                    # Debug output for first few controls to verify height calculation
+                    if control_count <= 3:  # Only log first 3 controls
+                        print(f"HEIGHT CALC: {control_name} - font_height={base_height}px, standard_height={standard_height}px, text='{display_text[:20]}...'")
+
                     # CRITICAL FIX: Only assign drag events if not in clean mode
                     if not clean_mode:
                         label.mousePressEvent = lambda event, lbl=label: self.on_label_press(event, lbl)
