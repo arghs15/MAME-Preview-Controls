@@ -1278,13 +1278,13 @@ def parse_default_cfg(cfg_content: str) -> Tuple[Dict[str, str], Dict[str, str]]
     return controls, original_controls
 
 def parse_cfg_controls(cfg_content: str, input_mode: str = 'xinput') -> Dict[str, str]:
-    """Parse MAME cfg file to extract control mappings with support for increment/decrement pairs"""
+    """Parse MAME cfg file to extract control mappings with joystick prioritization fix"""
     controls = {}
     try:
         print(f"Parsing CFG content of length: {len(cfg_content)}")
         print(f"Using mapping mode: {input_mode} for parsing CFG")
 
-        # Mapping extractor - revised to prioritize XInput
+        # FIXED: Enhanced mapping extractor that prioritizes joystick over D-pad
         def get_preferred_mapping(mapping_str: str) -> str:
             if not mapping_str:
                 return "NONE"
@@ -1293,19 +1293,42 @@ def parse_cfg_controls(cfg_content: str, input_mode: str = 'xinput') -> Dict[str
             if "OR" in mapping_str:
                 parts = [p.strip() for p in mapping_str.strip().split("OR")]
                 
-                # Always prioritize XINPUT first, then JOYCODE
+                # 1. Always prioritize XINPUT first
                 for part in parts:
                     if "XINPUT" in part:
                         return part
+                
+                # 2. Among JOYCODE options, prioritize joystick/analog over D-pad
+                joystick_keywords = ["SLIDER", "AXIS", "STICK"]  # Joystick/analog controls
+                dpad_keywords = ["HAT", "DPAD"]                  # D-pad controls
+                
+                # Look for joystick JOYCODE controls first
                 for part in parts:
-                    if "JOYCODE" in part:
+                    if "JOYCODE" in part and any(keyword in part for keyword in joystick_keywords):
                         # Convert JOYCODE to XINPUT if possible
                         xinput_mapping = convert_mapping(part, input_mode)
                         if xinput_mapping.startswith("XINPUT"):
                             return xinput_mapping
                         return part
+                
+                # Then look for D-pad JOYCODE controls
+                for part in parts:
+                    if "JOYCODE" in part and any(keyword in part for keyword in dpad_keywords):
+                        # Convert JOYCODE to XINPUT if possible
+                        xinput_mapping = convert_mapping(part, input_mode)
+                        if xinput_mapping.startswith("XINPUT"):
+                            return xinput_mapping
+                        return part
+                
+                # Finally, any other JOYCODE
+                for part in parts:
+                    if "JOYCODE" in part:
+                        xinput_mapping = convert_mapping(part, input_mode)
+                        if xinput_mapping.startswith("XINPUT"):
+                            return xinput_mapping
+                        return part
                         
-                # If no matching part, return the first one
+                # If no JOYCODE found, return the first part
                 return parts[0]
             else:
                 # Single mapping, return as is or convert if needed
@@ -1550,24 +1573,28 @@ def joycode_to_xinput(mapping: str) -> str:
         # Legacy Z-axis mappings (for backward compatibility)
         'JOYCODE_1_ZAXIS_NEG_SWITCH': 'XINPUT_1_TRIGGER_L',  # Old name
         'JOYCODE_1_ZAXIS_POS_SWITCH': 'XINPUT_1_TRIGGER_R',  # Old name
+
+        # LEFT STICK AXIS MAPPINGS (Y-axis for up/down)
+        'JOYCODE_1_YAXIS_UP_SWITCH': 'XINPUT_1_LEFTY_NEG',      # ← MISSING!
+        'JOYCODE_1_YAXIS_DOWN_SWITCH': 'XINPUT_1_LEFTY_POS',    # ← MISSING!
+        'JOYCODE_2_YAXIS_UP_SWITCH': 'XINPUT_2_LEFTY_NEG',      # ← MISSING!
+        'JOYCODE_2_YAXIS_DOWN_SWITCH': 'XINPUT_2_LEFTY_POS',    # ← MISSING!
         
-        # Player 2 mappings with same updates
-        'JOYCODE_2_BUTTON1': 'XINPUT_2_A',
-        'JOYCODE_2_BUTTON2': 'XINPUT_2_B',
-        'JOYCODE_2_BUTTON3': 'XINPUT_2_X',
-        'JOYCODE_2_BUTTON4': 'XINPUT_2_Y',
-        'JOYCODE_2_BUTTON5': 'XINPUT_2_SHOULDER_L',
-        'JOYCODE_2_BUTTON6': 'XINPUT_2_SHOULDER_R',
-        'JOYCODE_2_SELECT': 'XINPUT_2_BACK',      # NEW
-        'JOYCODE_2_START': 'XINPUT_2_START',      # NEW
-        'JOYCODE_2_BUTTON9': 'XINPUT_2_THUMB_L',
-        'JOYCODE_2_BUTTON10': 'XINPUT_2_THUMB_R',
+        # LEFT STICK SLIDER2 MAPPINGS (X-axis for left/right)
+        'JOYCODE_1_SLIDER2_LEFT_SWITCH': 'XINPUT_1_LEFTX_NEG',  # ← MISSING!
+        'JOYCODE_1_SLIDER2_RIGHT_SWITCH': 'XINPUT_1_LEFTX_POS', # ← MISSING!
+        'JOYCODE_2_SLIDER2_LEFT_SWITCH': 'XINPUT_2_LEFTX_NEG',  # ← MISSING!
+        'JOYCODE_2_SLIDER2_RIGHT_SWITCH': 'XINPUT_2_LEFTX_POS', # ← MISSING!
         
-        # Player 2 D-pad (new HAT1 names)
-        'JOYCODE_2_HAT1UP': 'XINPUT_2_DPAD_UP',
-        'JOYCODE_2_HAT1DOWN': 'XINPUT_2_DPAD_DOWN',
-        'JOYCODE_2_HAT1LEFT': 'XINPUT_2_DPAD_LEFT',
-        'JOYCODE_2_HAT1RIGHT': 'XINPUT_2_DPAD_RIGHT',
+        # RIGHT STICK MAPPINGS (RX/RY axes)
+        'JOYCODE_1_RXAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTX_NEG',   # ← MISSING!
+        'JOYCODE_1_RXAXIS_POS_SWITCH': 'XINPUT_1_RIGHTX_POS',   # ← MISSING!
+        'JOYCODE_1_RYAXIS_NEG_SWITCH': 'XINPUT_1_RIGHTY_NEG',   # ← MISSING!
+        'JOYCODE_1_RYAXIS_POS_SWITCH': 'XINPUT_1_RIGHTY_POS',   # ← MISSING!
+        'JOYCODE_2_RXAXIS_NEG_SWITCH': 'XINPUT_2_RIGHTX_NEG',   # ← MISSING!
+        'JOYCODE_2_RXAXIS_POS_SWITCH': 'XINPUT_2_RIGHTX_POS',   # ← MISSING!
+        'JOYCODE_2_RYAXIS_NEG_SWITCH': 'XINPUT_2_RIGHTY_NEG',   # ← MISSING!
+        'JOYCODE_2_RYAXIS_POS_SWITCH': 'XINPUT_2_RIGHTY_POS',   # ← MISSING!
     }
     
     return xinput_mappings.get(mapping, mapping)
@@ -2394,30 +2421,32 @@ def format_mapping_display(mapping: str, input_mode: str = 'xinput', friendly_na
 # ============================================================================
 
 def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
-    """
-    Get MAME's default control mappings when no cfg files exist
-    These mirror what MAME automatically assigns through its input APIs
-    """
+    """Get MAME's default control mappings - ENHANCED with missing system controls"""
     
     if input_mode == 'xinput':
         return {
-            # Player 1 Standard Buttons
+            # ===== EXISTING MAPPINGS (keep these) =====
             'P1_BUTTON1': 'XINPUT_1_A',
             'P1_BUTTON2': 'XINPUT_1_B', 
             'P1_BUTTON3': 'XINPUT_1_X',
             'P1_BUTTON4': 'XINPUT_1_Y',
             'P1_BUTTON5': 'XINPUT_1_SHOULDER_L',
             'P1_BUTTON6': 'XINPUT_1_SHOULDER_R',
-            'P1_BUTTON7': 'XINPUT_1_TRIGGER_L',
-            'P1_BUTTON8': 'XINPUT_1_TRIGGER_R',
+            'P1_BUTTON7': 'XINPUT_1_TRIGGER_L',      # ← ADD MISSING
+            'P1_BUTTON8': 'XINPUT_1_TRIGGER_R',      # ← ADD MISSING
             'P1_BUTTON9': 'XINPUT_1_THUMB_L',
             'P1_BUTTON10': 'XINPUT_1_THUMB_R',
             
-            # Player 1 Directional Controls
-            'P1_JOYSTICK_UP': 'XINPUT_1_DPAD_UP',
-            'P1_JOYSTICK_DOWN': 'XINPUT_1_DPAD_DOWN',
-            'P1_JOYSTICK_LEFT': 'XINPUT_1_DPAD_LEFT',
-            'P1_JOYSTICK_RIGHT': 'XINPUT_1_DPAD_RIGHT',
+            # ===== MISSING SYSTEM CONTROLS =====
+            'P1_START': 'XINPUT_1_START',            # ← ADD MISSING
+            'P1_SELECT': 'XINPUT_1_BACK',            # ← ADD MISSING
+            
+            # Directional Controls (existing)
+            'P1_JOYSTICK_UP': 'XINPUT_1_LEFTY_NEG',     # ← FIXED: was DPAD_UP
+            'P1_JOYSTICK_DOWN': 'XINPUT_1_LEFTY_POS',   # ← FIXED: was DPAD_DOWN  
+            'P1_JOYSTICK_LEFT': 'XINPUT_1_LEFTX_NEG',   # ← FIXED: was DPAD_LEFT
+            'P1_JOYSTICK_RIGHT': 'XINPUT_1_LEFTX_POS',  # ← FIXED: was DPAD_RIGHT
+            
             'P1_JOYSTICKLEFT_UP': 'XINPUT_1_LEFTY_NEG',
             'P1_JOYSTICKLEFT_DOWN': 'XINPUT_1_LEFTY_POS',
             'P1_JOYSTICKLEFT_LEFT': 'XINPUT_1_LEFTX_NEG',
@@ -2427,17 +2456,13 @@ def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
             'P1_JOYSTICKRIGHT_LEFT': 'XINPUT_1_RIGHTX_NEG',
             'P1_JOYSTICKRIGHT_RIGHT': 'XINPUT_1_RIGHTX_POS',
             
-            # Player 1 System Controls
-            'P1_START': 'XINPUT_1_START',
-            'P1_SELECT': 'XINPUT_1_BACK',
+            # ===== MISSING D-PAD EXPLICIT CONTROLS =====
+            'P1_DPAD_UP': 'XINPUT_1_DPAD_UP',           # ← ADD MISSING
+            'P1_DPAD_DOWN': 'XINPUT_1_DPAD_DOWN',       # ← ADD MISSING
+            'P1_DPAD_LEFT': 'XINPUT_1_DPAD_LEFT',       # ← ADD MISSING
+            'P1_DPAD_RIGHT': 'XINPUT_1_DPAD_RIGHT',     # ← ADD MISSING
             
-            # Player 1 D-Pad (explicit)
-            'P1_DPAD_UP': 'XINPUT_1_DPAD_UP',
-            'P1_DPAD_DOWN': 'XINPUT_1_DPAD_DOWN',
-            'P1_DPAD_LEFT': 'XINPUT_1_DPAD_LEFT',
-            'P1_DPAD_RIGHT': 'XINPUT_1_DPAD_RIGHT',
-            
-            # Player 1 Specialized Controls (common defaults)
+            # Specialized Controls (existing - keep these)
             'P1_PEDAL': 'XINPUT_1_TRIGGER_R',
             'P1_PEDAL2': 'XINPUT_1_TRIGGER_L',
             'P1_AD_STICK_X': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
@@ -2455,23 +2480,9 @@ def get_default_mame_mappings(input_mode: str = 'xinput') -> Dict[str, str]:
             'P1_POSITIONAL': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
             'P1_STEER': 'XINPUT_1_LEFTX_NEG ||| XINPUT_1_LEFTX_POS',
             
-            # Player 2 Controls (mirror P1)
-            'P2_BUTTON1': 'XINPUT_2_A',
-            'P2_BUTTON2': 'XINPUT_2_B',
-            'P2_BUTTON3': 'XINPUT_2_X', 
-            'P2_BUTTON4': 'XINPUT_2_Y',
-            'P2_BUTTON5': 'XINPUT_2_SHOULDER_L',
-            'P2_BUTTON6': 'XINPUT_2_SHOULDER_R',
-            'P2_BUTTON7': 'XINPUT_2_TRIGGER_L',
-            'P2_BUTTON8': 'XINPUT_2_TRIGGER_R',
-            'P2_BUTTON9': 'XINPUT_2_THUMB_L',
-            'P2_BUTTON10': 'XINPUT_2_THUMB_R',
-            'P2_JOYSTICK_UP': 'XINPUT_2_DPAD_UP',
-            'P2_JOYSTICK_DOWN': 'XINPUT_2_DPAD_DOWN',
-            'P2_JOYSTICK_LEFT': 'XINPUT_2_DPAD_LEFT',
-            'P2_JOYSTICK_RIGHT': 'XINPUT_2_DPAD_RIGHT',
-            'P2_START': 'XINPUT_2_START',
-            'P2_SELECT': 'XINPUT_2_BACK',
+            # ===== MISSING GAMBLING CONTROLS =====
+            'P1_GAMBLE_HIGH': 'XINPUT_1_SHOULDER_R',    # ← ADD MISSING (uses BUTTON6)
+            'P1_GAMBLE_LOW': 'XINPUT_1_SHOULDER_L',     # ← ADD MISSING (uses BUTTON5)
         }
     
     elif input_mode == 'dinput':
