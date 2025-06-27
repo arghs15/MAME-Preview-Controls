@@ -1197,16 +1197,16 @@ class MAMEControlConfig(ctk.CTk):
         self.app_dir = get_application_path()
         self.mame_dir = get_mame_parent_dir(self.app_dir)
         
-        # Set up directory structure - all data will be stored in these locations
+        # Set up directory structure
         self.preview_dir = os.path.join(self.mame_dir, "preview")
         self.settings_dir = os.path.join(self.preview_dir, "settings")
-        self.info_dir = os.path.join(self.settings_dir, "info")
+        self.info_dir = os.path.join(self.preview_dir, "info")  # FIXED: Direct in preview folder
         self.cache_dir = os.path.join(self.preview_dir, "cache")
 
-        # Create these directories if they don't exist
+        # Create directories if they don't exist
         os.makedirs(self.preview_dir, exist_ok=True)
         os.makedirs(self.settings_dir, exist_ok=True)
-        os.makedirs(self.info_dir, exist_ok=True)
+        os.makedirs(self.info_dir, exist_ok=True)  # FIXED: Create info dir in preview
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Define standard paths for key files
@@ -1214,7 +1214,6 @@ class MAMEControlConfig(ctk.CTk):
         self.db_path = os.path.join(self.settings_dir, "gamedata.db")
         self.settings_path = os.path.join(self.settings_dir, "control_config_settings.json")
         
-        # Return if the directories were created successfully
         return (os.path.exists(self.preview_dir) and 
                 os.path.exists(self.settings_dir) and 
                 os.path.exists(self.info_dir))
@@ -4033,6 +4032,7 @@ class MAMEControlConfig(ctk.CTk):
         count = 0
         errors = []
         skipped = 0
+        skipped_roms = []  # NEW: Track which ROMs were skipped
         
         # Process all ROMs with control data
         roms_to_process = list(self.available_roms)
@@ -4058,22 +4058,42 @@ class MAMEControlConfig(ctk.CTk):
                     else:
                         print(f"Skipping {rom_name}: No config content generated")
                         skipped += 1
+                        skipped_roms.append(f"{rom_name} (no mappable controls)")  # NEW: Add reason
                 else:
                     print(f"Skipping {rom_name}: No control data found")
                     skipped += 1
+                    skipped_roms.append(f"{rom_name} (no control data)")  # NEW: Add reason
             except Exception as e:
                 error_msg = f"Error with {rom_name}: {str(e)}"
                 print(error_msg)
                 errors.append(error_msg)
         
-        # Final report
+        # Enhanced final report with ROM names
         report = f"Generated {count} config files in {info_dir}\n"
-        report += f"Skipped {skipped} ROMs\n"
+        
+        # NEW: Include skipped ROM details
+        if skipped > 0:
+            report += f"\nSkipped {skipped} ROMs:\n"
+            # Show up to 10 skipped ROMs, then summarize the rest
+            if len(skipped_roms) <= 10:
+                for rom in skipped_roms:
+                    report += f"  • {rom}\n"
+            else:
+                # Show first 8, then summary
+                for rom in skipped_roms[:8]:
+                    report += f"  • {rom}\n"
+                report += f"  • ... and {len(skipped_roms) - 8} more ROMs\n"
+        
+        # Error section (existing)
         if errors:
             report += f"\nEncountered {len(errors)} errors:\n"
-            report += "\n".join(errors[:5])  # Show first 5 errors
-            if len(errors) > 5:
-                report += f"\n...and {len(errors) - 5} more errors"
+            if len(errors) <= 5:
+                for error in errors:
+                    report += f"  • {error}\n"
+            else:
+                for error in errors[:3]:
+                    report += f"  • {error}\n"
+                report += f"  • ... and {len(errors) - 3} more errors\n"
         
         print(report)
         messagebox.showinfo("Config Generation Report", report)
@@ -4093,8 +4113,8 @@ class MAMEControlConfig(ctk.CTk):
         # Try to find in other locations
         found_path = self.find_file_in_standard_locations(
             "default.conf",
-            subdirs=[["settings", "info"], ["preview", "settings", "info"], ["info"]],
-            copy_to_settings=False  # We'll copy to info_dir instead
+            subdirs=[["info"], ["preview", "info"], ["settings", "info"]],  # Check preview/info first
+            copy_to_settings=False
         )
         
         if found_path:
@@ -4132,35 +4152,39 @@ class MAMEControlConfig(ctk.CTk):
 
     def _get_default_template_content(self):
         """Get default template content"""
-        return """controller D-pad		= 
-    controller D-pad t		= 
-    controller L-stick		= 
-    controller L-stick t	= 
-    controller R-stick		= 
-    controller R-stick t	= 
-    controller A			= 
-    controller A t			= 
-    controller B			= 
-    controller B t			= 
-    controller X			= 
-    controller X t			= 
-    controller Y			= 
-    controller Y t			= 
-    controller LB			= 
-    controller LB t			= 
-    controller LT			= 
-    controller LT t			= 
-    controller RB			= 
-    controller RB t			= 
-    controller RT			= 
-    controller RT t			= 
-    controller start		= 
-    controller start t		=
-    controller select		= 
-    controller select t		=
-    controller xbox			= 
-    controller xbox t		= """
-    
+        # Create each line separately to avoid any indentation issues
+        lines = [
+            "controller D-pad = ",
+            "controller D-pad t = ",
+            "controller L-stick = ",
+            "controller L-stick t = ",
+            "controller R-stick = ",
+            "controller R-stick t = ",
+            "controller A = ",
+            "controller A t = ",
+            "controller B = ",
+            "controller B t = ",
+            "controller X = ",
+            "controller X t = ",
+            "controller Y = ",
+            "controller Y t = ",
+            "controller LB = ",
+            "controller LB t = ",
+            "controller LT = ",
+            "controller LT t = ",
+            "controller RB = ",
+            "controller RB t = ",
+            "controller RT = ",
+            "controller RT t = ",
+            "controller start = ",
+            "controller start t = ",
+            "controller select = ",
+            "controller select t = ",
+            "controller xbox = ",
+            "controller xbox t = "
+        ]
+        return "\n".join(lines)
+
     def generate_game_config(self, game_data: dict) -> str:
         """Generate config file content for a specific game"""
         template = self.load_default_template()
