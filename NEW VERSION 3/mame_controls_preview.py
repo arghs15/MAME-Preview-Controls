@@ -5075,15 +5075,12 @@ class PreviewWindow(QMainWindow):
         """Handle key press events"""
         from PyQt5.QtCore import Qt
         
-        # Close on Escape
-        if event.key() == Qt.Key_Escape:
-            # Close the window
-            self.close()
-            
-            # If this is a standalone preview, also exit the application
-            if getattr(self, 'standalone_mode', False):
-                # Give a short delay before quitting to allow cleanup
-                QTimer.singleShot(100, QApplication.quit)
+        # Close on ANY key press
+        self.close()
+        
+        # If this is a standalone preview, also exit the application
+        if getattr(self, 'standalone_mode', False):
+            QTimer.singleShot(100, QApplication.quit)
         
         # Distribute vertically with Ctrl+D
         elif event.key() == Qt.Key_D and event.modifiers() & Qt.ControlModifier:
@@ -5721,11 +5718,10 @@ class PreviewWindow(QMainWindow):
         
         return settings
     
-    # Update the save_text_settings method in PreviewWindow
     def save_text_settings(self, settings):
         """Save text appearance settings to file in settings directory"""
         try:
-            # Update local settings
+            # Update local settings first
             self.text_settings.update(settings)
             
             # Create settings directory if it doesn't exist
@@ -5734,13 +5730,19 @@ class PreviewWindow(QMainWindow):
             # Save to settings file in settings directory
             settings_file = os.path.join(self.settings_dir, "text_appearance_settings.json")
             
+            # FIX: Save the UPDATED self.text_settings, not the parameter
             with open(settings_file, 'w') as f:
-                json.dump(self.text_settings, f)
-            print(f"Saved text settings to {settings_file}: {self.text_settings}")
+                json.dump(self.text_settings, f, indent=2)  # Added indent for readability
+                
+            print(f"✅ Saved text settings to {settings_file}")
+            print(f"Settings saved: {self.text_settings}")
+            return True
+            
         except Exception as e:
-            print(f"Error saving text settings: {e}")
+            print(f"❌ Error saving text settings: {e}")
             import traceback
             traceback.print_exc()
+            return False
           
     def on_label_press(self, event, label):
         """Handle mouse press on label"""
@@ -6519,12 +6521,22 @@ class PreviewWindow(QMainWindow):
     def save_positions(self, is_global=False):
         """Save current control positions to file while preserving existing positions"""
         try:
-            # Create settings directory if it doesn't exist
+            # Ensure settings directory exists
+            if not hasattr(self, 'settings_dir'):
+                print("❌ settings_dir not set! Cannot save positions.")
+                return False
+                
             os.makedirs(self.settings_dir, exist_ok=True)
             
             # Determine the file paths - always save in settings directory
-            positions_filepath = os.path.join(self.settings_dir, 
-                                            "global_positions.json" if is_global else f"{self.rom_name}_positions.json")
+            if is_global:
+                positions_filepath = os.path.join(self.settings_dir, "global_positions.json")
+                save_type_msg = "global"
+            else:
+                positions_filepath = os.path.join(self.settings_dir, f"{self.rom_name}_positions.json")
+                save_type_msg = f"ROM-specific ({self.rom_name})"
+            
+            print(f"💾 Saving {save_type_msg} positions to: {positions_filepath}")
             
             # Load existing positions to preserve them
             existing_positions = {}
@@ -6532,73 +6544,62 @@ class PreviewWindow(QMainWindow):
                 try:
                     with open(positions_filepath, 'r') as f:
                         existing_positions = json.load(f)
-                    print(f"Loaded {len(existing_positions)} existing positions to preserve")
+                    print(f"📂 Loaded {len(existing_positions)} existing positions to preserve")
                 except Exception as e:
-                    print(f"Error loading existing positions: {e}")
+                    print(f"⚠️ Error loading existing positions: {e}")
             
+            # Save No Buttons notification position if it exists
             if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
                 self.save_no_buttons_position()
+            
             # Get positions for current controls
             y_offset = self.text_settings.get("y_offset", -40)
             new_positions = {}
             
+            if not hasattr(self, 'control_labels') or not self.control_labels:
+                print("⚠️ No control labels to save!")
+                return False
+            
             for control_name, control_data in self.control_labels.items():
+                if 'label' not in control_data or not control_data['label']:
+                    continue
+                    
                 label_pos = control_data['label'].pos()
                 
                 # Store normalized position (without y-offset)
                 new_positions[control_name] = [label_pos.x(), label_pos.y() - y_offset]
+            
+            print(f"💾 Saving {len(new_positions)} control positions")
             
             # Merge existing and new positions (new ones override existing ones)
             merged_positions = {**existing_positions, **new_positions}
             
             # Save merged positions to file
             with open(positions_filepath, 'w') as f:
-                json.dump(merged_positions, f)
+                json.dump(merged_positions, f, indent=2)
             
-            print(f"Saved {len(new_positions)} new positions and preserved {len(existing_positions) - len(set(existing_positions.keys()) & set(new_positions.keys()))} existing positions to: {positions_filepath}")
+            preserved_count = len(existing_positions) - len(set(existing_positions.keys()) & set(new_positions.keys()))
+            print(f"✅ Saved {len(new_positions)} new positions and preserved {preserved_count} existing positions")
             
             # Also save text settings
-            self.save_text_settings(self.text_settings)
+            if hasattr(self, 'text_settings'):
+                self.save_text_settings(self.text_settings)
             
             # Save logo settings
-            if hasattr(self, 'logo_label') and self.logo_label:
-                # Update logo settings before saving
-                if self.logo_label.isVisible():
-                    # Update current logo position and size
-                    self.logo_settings["logo_visible"] = True
-                    self.logo_settings["custom_position"] = True
-                    self.logo_settings["x_position"] = self.logo_label.pos().x()
-                    self.logo_settings["y_position"] = self.logo_label.pos().y()
-                    
-                    # Update size percentages based on current pixmap
-                    logo_pixmap = self.logo_label.pixmap()
-                    if logo_pixmap and not logo_pixmap.isNull():
-                        canvas_width = self.canvas.width()
-                        canvas_height = self.canvas.height()
-                        
-                        width_percentage = (logo_pixmap.width() / canvas_width) * 100
-                        height_percentage = (logo_pixmap.height() / canvas_height) * 100
-                        
-                        self.logo_settings["width_percentage"] = width_percentage
-                        self.logo_settings["height_percentage"] = height_percentage
-                
-                # Save logo settings
+            if hasattr(self, 'logo_label') and self.logo_label and hasattr(self, 'logo_settings'):
                 self.save_logo_settings()
             
-            # Print confirmation
-            save_type = "global" if is_global else f"ROM-specific ({self.rom_name})"
-            print(f"All settings saved as {save_type}")
-            
-            # Show toast notification with appropriate message
+            # Show success notification
             if is_global:
                 self.show_toast_notification("Positions saved for all games")
             else:
                 self.show_toast_notification(f"Positions saved for {self.rom_name}")
-                
+            
+            print(f"✅ All {save_type_msg} settings saved successfully")
             return True
                 
         except Exception as e:
-            print(f"Error saving settings: {e}")
+            print(f"❌ Error saving positions: {e}")
             import traceback
             traceback.print_exc()
             
@@ -9075,10 +9076,25 @@ class TextSettingsDialog(QDialog):
         # If parent provided and has the method, update parent settings
         if self.parent and hasattr(self.parent, 'update_text_settings'):
             self.parent.update_text_settings(settings)
-    
+            
+            # FORCE save text settings immediately
+            if hasattr(self.parent, 'save_text_settings'):
+                success = self.parent.save_text_settings(settings)
+                if success:
+                    print("✅ Text settings saved from dialog")
+                else:
+                    print("❌ Failed to save text settings from dialog")
+
     def accept_settings(self):
         """Save settings and close dialog"""
         self.apply_settings()
+        
+        # Double-check that settings were saved
+        if self.parent and hasattr(self.parent, 'save_text_settings'):
+            settings = self.get_current_settings()
+            self.parent.save_text_settings(settings)
+            print("✅ Final text settings save on dialog close")
+        
         self.accept()
 
 class GridSettingsDialog(QDialog):
