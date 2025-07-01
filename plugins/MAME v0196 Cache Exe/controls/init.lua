@@ -38,7 +38,7 @@ function exports.startplugin()
         os.execute("echo Game detected: " .. game_name .. " > C:\\mame_plugin_log.txt")
         
         -- Use the new --precache option to load data in background
-        local command = string.format('"preview\\MAME_Controls.exe" --precache --game %s', game_name)
+        local command = string.format('"preview\\MAME Controls.exe" --precache --game %s', game_name)
         print("Pre-caching controls for: " .. game_name)
         
         -- Try to run the precache command
@@ -63,7 +63,7 @@ function exports.startplugin()
         print("Showing controls for: " .. game_name)
         
         -- Show controls
-        local command = string.format('"preview\\MAME_Controls.exe" --preview-only --game %s --screen 1 --clean-preview', game_name)
+        local command = string.format('"preview\\MAME Controls.exe" --preview-only --game %s --screen 1 --clean-preview', game_name)
         print("Running: " .. command)
         os.execute(command)
         
