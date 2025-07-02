@@ -9090,26 +9090,28 @@ class MAMEControlConfig(ctk.CTk):
                 "name": "Mortal Kombat Layout",
                 "description": "6-button Mortal Kombat layout (HP, LP, BL, RN, HK, LK)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON1",  # High Punch -> Button 1
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON2",  # Low Punch -> Button 2
-                    "P1_BUTTON3": "JOYCODE_1_BUTTON3",  # Block -> Button 3
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON4",  # High Kick -> Button 4
-                    "P1_BUTTON5": "JOYCODE_1_BUTTON5",  # Low Kick -> Button 5
-                    "P2_BUTTON1": "JOYCODE_2_BUTTON1",
-                    "P2_BUTTON2": "JOYCODE_2_BUTTON2",
-                    "P2_BUTTON3": "JOYCODE_2_BUTTON3",
-                    "P2_BUTTON4": "JOYCODE_2_BUTTON4",
-                    "P2_BUTTON5": "JOYCODE_2_BUTTON5"
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON6",  # High Punch -> Button 6 (RB)
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Block -> Button 4 (Y)
+                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # High Kick -> Slider (RT)
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON3",  # Low Punch -> Button 3 (X)
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON1",  # Low Kick -> Button 1 (A)
+                    "P1_BUTTON6": "JOYCODE_1_BUTTON2",  # Run -> Button 2 (B)
+                    "P2_BUTTON1": "JOYCODE_2_BUTTON6",
+                    "P2_BUTTON2": "JOYCODE_2_BUTTON4",
+                    "P2_BUTTON3": "JOYCODE_2_SLIDER2_NEG_SWITCH",
+                    "P2_BUTTON4": "JOYCODE_2_BUTTON3",
+                    "P2_BUTTON5": "JOYCODE_2_BUTTON1",
+                    "P2_BUTTON6": "JOYCODE_2_BUTTON2",
                 }
             },
             "tekken": {
                 "name": "Tekken Layout",
                 "description": "4-button Tekken layout (LP, RP, LK, RK)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 1
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 2
-                    "P1_BUTTON3": "JOYCODE_1_BUTTON1",  # Left Kick -> Button 4
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON2",  # Right Kick -> Button 4
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 3 (X)
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 4 (Y)
+                    "P1_BUTTON3": "JOYCODE_1_BUTTON1",  # Left Kick -> Button 1 (A)
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON2",  # Right Kick -> Button 2 (B)
                     "P2_BUTTON1": "JOYCODE_1_BUTTON3",
                     "P2_BUTTON2": "JOYCODE_1_BUTTON4",
                     "P2_BUTTON3": "JOYCODE_1_BUTTON1",
@@ -9120,11 +9122,11 @@ class MAMEControlConfig(ctk.CTk):
                 "name": "Tekken Tag Layout",
                 "description": "5-button Tekken layout (LP, RP, LK, RK, Tag)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 1
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 2
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",  # Left Kick -> Button 4
-                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",  # Right Kick -> Button 4
-                    "P1_BUTTON6": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # Tag
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 3 (X)
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 4 (Y)
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",  # Left Kick -> Button 1 (A)
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",  # Right Kick -> Button 2 (B)
+                    "P1_BUTTON6": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # Tag -> Slider (RT)
                     "P2_BUTTON1": "JOYCODE_1_BUTTON3",
                     "P2_BUTTON2": "JOYCODE_1_BUTTON4",
                     "P2_BUTTON4": "JOYCODE_1_BUTTON1",
