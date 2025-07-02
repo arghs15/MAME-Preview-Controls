@@ -9332,7 +9332,48 @@ class MAMEControlConfig(ctk.CTk):
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
         
-        # Options checkboxes
+        # MAME Version toggle
+        mame_version_frame = ctk.CTkFrame(options_card, fg_color="transparent")
+        mame_version_frame.pack(fill="x", padx=15, pady=(0, 10))
+        
+        mame_version_var = tk.StringVar(value="new")
+        
+        ctk.CTkLabel(
+            mame_version_frame,
+            text="MAME Version Compatibility:",
+            font=("Arial", 13, "bold")
+        ).pack(side="left", padx=0, pady=5)
+        
+        mame_new_radio = ctk.CTkRadioButton(
+            mame_version_frame,
+            text="New MAME (0.250+)",
+            variable=mame_version_var,
+            value="new",
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["secondary"]
+        )
+        mame_new_radio.pack(side="left", padx=15, pady=5)
+        
+        mame_old_radio = ctk.CTkRadioButton(
+            mame_version_frame,
+            text="Old MAME (0.249-)",
+            variable=mame_version_var,
+            value="old",
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["secondary"]
+        )
+        mame_old_radio.pack(side="left", padx=15, pady=5)
+        
+        # Version info label
+        version_info_label = ctk.CTkLabel(
+            options_card,
+            text="New MAME uses SLIDER2, Old MAME uses ZAXIS for analog controls",
+            font=("Arial", 11),
+            text_color=self.theme_colors["text_dimmed"]
+        )
+        version_info_label.pack(padx=15, pady=(0, 10))
+        
+        # Other options checkboxes
         options_frame = ctk.CTkFrame(options_card, fg_color="transparent")
         options_frame.pack(fill="x", padx=15, pady=(0, 15))
         
@@ -9433,7 +9474,8 @@ class MAMEControlConfig(ctk.CTk):
                             preset_data['mappings'],
                             backup_cfg_var.get(),
                             create_missing_var.get(),
-                            update_existing_var.get()
+                            update_existing_var.get(),
+                            mame_version_var.get()  # Pass MAME version setting
                         )
                         
                         if result['success']:
@@ -9506,12 +9548,33 @@ class MAMEControlConfig(ctk.CTk):
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f'{width}x{height}+{x}+{y}')
 
-    def configure_game_fightstick_mapping(self, rom_name, button_mappings, backup_cfg=True, create_missing=True, update_existing=True):
-        """Configure fightstick mapping for a specific game"""
+    def configure_game_fightstick_mapping(self, rom_name, button_mappings, backup_cfg=True, create_missing=True, update_existing=True, mame_version="new"):
+        """Configure fightstick mapping for a specific game with MAME version compatibility"""
         try:
             import xml.etree.ElementTree as ET
             import shutil
             from datetime import datetime
+            
+            # Convert button mappings based on MAME version
+            def convert_joycode_for_mame_version(joycode, version):
+                """Convert joycodes between old and new MAME versions"""
+                if version == "old":
+                    # Convert new MAME codes to old MAME codes
+                    joycode = joycode.replace("SLIDER2_NEG_SWITCH", "ZAXIS_NEG_SWITCH")
+                    joycode = joycode.replace("SLIDER2_POS_SWITCH", "ZAXIS_POS_SWITCH")
+                else:  # version == "new"
+                    # Convert old MAME codes to new MAME codes (if any exist in mappings)
+                    joycode = joycode.replace("ZAXIS_NEG_SWITCH", "SLIDER2_NEG_SWITCH")
+                    joycode = joycode.replace("ZAXIS_POS_SWITCH", "SLIDER2_POS_SWITCH")
+                return joycode
+            
+            # Apply version conversion to all button mappings
+            converted_mappings = {}
+            for control, joycode in button_mappings.items():
+                converted_mappings[control] = convert_joycode_for_mame_version(joycode, mame_version)
+            
+            # Use converted mappings for the rest of the function
+            button_mappings = converted_mappings
             
             # Get paths
             cfg_dir = os.path.join(self.mame_dir, "cfg")
@@ -9590,12 +9653,21 @@ class MAMEControlConfig(ctk.CTk):
                         mask = str(control_data.get('mask', '0'))
                         tag = control_data.get('tag', ':IN0')
                         
+                        # DEBUG: Print what we're checking
+                        print(f"DEBUG: {rom_name} - {mame_control}: tag='{tag}', mask='{mask}'")
+                        
                         # SPECIAL CASE: Some games (like tektagt) need defvalue="0" instead of matching mask
                         # Most games use defvalue=mask, but JVS games often use defvalue="0"
                         if tag and ":JVS" in tag:
                             defvalue = "0"  # JVS games typically use defvalue="0"
+                            print(f"DEBUG: JVS detected - setting defvalue='0'")
                         else:
                             defvalue = mask  # Default behavior - defvalue matches mask
+                            print(f"DEBUG: Non-JVS - setting defvalue='{mask}'")
+                    else:
+                        print(f"DEBUG: No control data found for {mame_control} in {rom_name}")
+                else:
+                    print(f"DEBUG: No game data found for {rom_name}")
                 
                 if existing_port is not None:
                     if update_existing:
@@ -9606,6 +9678,13 @@ class MAMEControlConfig(ctk.CTk):
                         else:
                             newseq = ET.SubElement(existing_port, "newseq", type="standard")
                             newseq.text = joystick_code
+                        
+                        # IMPORTANT: Also update the port attributes with correct defvalue for JVS
+                        existing_port.set("tag", tag)
+                        existing_port.set("mask", mask)
+                        existing_port.set("defvalue", defvalue)  # This will use the JVS-corrected defvalue
+                        
+                        print(f"DEBUG: Updated existing port - tag='{tag}', mask='{mask}', defvalue='{defvalue}'")
                         updated_buttons.append(mame_control)
                 else:
                         # Create new port element with proper formatting
@@ -9618,6 +9697,9 @@ class MAMEControlConfig(ctk.CTk):
                                 'defvalue': defvalue,
                                 'newseq': joystick_code
                             }
+                            
+                            # DEBUG: Print what we're about to create
+                            print(f"DEBUG: Creating port - tag='{tag}', type='{mame_control}', mask='{mask}', defvalue='{defvalue}'")
                             
                             # Add to input element using manual XML construction
                             self.add_formatted_port_to_input(input_elem, new_port_data)
@@ -9653,6 +9735,9 @@ class MAMEControlConfig(ctk.CTk):
     def add_formatted_port_to_input(self, input_elem, port_data):
         """Add a properly formatted port element to input"""
         import xml.etree.ElementTree as ET
+        
+        # DEBUG: Print what port data we received
+        print(f"DEBUG: add_formatted_port_to_input received: {port_data}")
         
         # Create the port element
         port = ET.SubElement(input_elem, "port")
@@ -9730,8 +9815,6 @@ class MAMEControlConfig(ctk.CTk):
         root = ET.Element("mameconfig", version="10")
         ET.SubElement(root, "system", name=rom_name)
         return root
-
-
 
 if __name__ == "__main__":
     try:
