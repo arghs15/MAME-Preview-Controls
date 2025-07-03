@@ -9044,7 +9044,7 @@ class MAMEControlConfig(ctk.CTk):
             "• Remapping buttons to match standard fightstick layout\n"
             "• Adding missing button configurations to CFG files\n"
             "• Setting correct mask and defvalue for each button\n\n"
-            "Select a mapping preset and choose which games to configure."
+            "Select a mapping preset and choose which games to configure, or use 'All Compatible Games' to process everything automatically."
         )
         
         ctk.CTkLabel(
@@ -9148,23 +9148,25 @@ class MAMEControlConfig(ctk.CTk):
             font=("Arial", 13, "bold")
         ).pack(side="left", padx=10, pady=10)
         
-        # Create dropdown with all preset options
-        preset_options = []
-        preset_descriptions = {}
+        # Create dropdown with all preset options PLUS "All Compatible Games" option
+        preset_options = ["All Compatible Games"]  # NEW: Add this as first option
+        preset_descriptions = {
+            "All Compatible Games": "Automatically apply the best mapping to ALL compatible fighting games based on their type"
+        }
         
         for preset_id, preset_data in mapping_presets.items():
             display_text = preset_data["name"]
             preset_options.append(display_text)
             preset_descriptions[display_text] = preset_data["description"]
         
-        preset_var = tk.StringVar(value=preset_options[0])  # Default to first option
+        preset_var = tk.StringVar(value=preset_options[0])  # Default to "All Compatible Games"
         
         preset_dropdown = ctk.CTkComboBox(
             preset_frame,
             values=preset_options,
             variable=preset_var,
-            command=lambda choice: update_games_list(),  # Update list when selection changes
-            width=300,
+            command=lambda choice: update_games_list(),
+            width=350,  # Slightly wider for the new option
             fg_color=self.theme_colors["card_bg"],
             button_color=self.theme_colors["primary"],
             button_hover_color=self.theme_colors["secondary"],
@@ -9194,6 +9196,40 @@ class MAMEControlConfig(ctk.CTk):
             anchor="w"
         ).pack(anchor="w", padx=15, pady=(15, 10))
         
+        # NEW: Function to get ALL games from ALL mappings for "All Compatible Games" option
+        def get_all_compatible_games():
+            """Get all fighting games with their appropriate mappings"""
+            all_games = []
+            game_mapping_assignments = {}  # Track which mapping each game gets
+            
+            # Process each mapping type
+            for preset_id, preset_data in mapping_presets.items():
+                # Determine target mappings for this preset
+                if preset_id == "6button":
+                    target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
+                else:
+                    target_mappings = [preset_id]
+                
+                # Find games for this mapping type
+                for rom_name, rom_data in self.gamedata_json.items():
+                    if rom_name in self.available_roms and 'mappings' in rom_data:
+                        if any(mapping in rom_data['mappings'] for mapping in target_mappings):
+                            # Only add if not already assigned (prevents duplicates)
+                            if rom_name not in game_mapping_assignments:
+                                game_name = rom_data.get('description', rom_name)
+                                all_games.append((rom_name, game_name, False, preset_id))  # Added preset_id
+                                game_mapping_assignments[rom_name] = preset_id
+                                
+                                # Add clones
+                                if 'clones' in rom_data:
+                                    for clone_rom, clone_data in rom_data['clones'].items():
+                                        if clone_rom in self.available_roms and clone_rom not in game_mapping_assignments:
+                                            clone_name = clone_data.get('description', f"{clone_rom} (Clone)")
+                                            all_games.append((clone_rom, clone_name, True, preset_id))  # Added preset_id
+                                            game_mapping_assignments[clone_rom] = preset_id
+            
+            return sorted(all_games, key=lambda x: x[1]), game_mapping_assignments
+        
         # Find games with the selected mapping
         def get_games_for_mapping(mapping_type):
             """Get all games (including clones) that have the specified mapping AND exist in user's ROM folder"""
@@ -9201,7 +9237,7 @@ class MAMEControlConfig(ctk.CTk):
             
             # For 6-button layout, include both "sf" and "ki" mappings
             if mapping_type == "6button":
-                target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]  # Add more 6-button game types here
+                target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
             else:
                 target_mappings = [mapping_type]
             
@@ -9248,57 +9284,95 @@ class MAMEControlConfig(ctk.CTk):
         
         # Function to update games list based on selected preset
         def update_games_list():
-            # Convert display name back to preset_id
             selected_display_name = preset_var.get()
-            selected_preset = None
-            
-            for preset_id, preset_data in mapping_presets.items():
-                if preset_data["name"] == selected_display_name:
-                    selected_preset = preset_id
-                    break
-            
-            if not selected_preset:
-                return []
             
             # Update description label
             description_label.configure(text=preset_descriptions[selected_display_name])
             
-            games = get_games_for_mapping(selected_preset)
-            
             # Clear the current list
             games_listbox.delete(0, tk.END)
             
-            # Add games for the selected preset
-            for rom_name, game_name, is_clone in games:
-                display_text = f"{rom_name} - {game_name}"
-                if is_clone:
-                    display_text += " [Clone]"
-                games_listbox.insert(tk.END, display_text)
+            if selected_display_name == "All Compatible Games":
+                # NEW: Show all compatible games from all presets
+                games, game_assignments = get_all_compatible_games()
+                
+                # Group games by mapping type for display
+                games_by_type = {}
+                for rom_name, game_name, is_clone, preset_id in games:
+                    preset_name = mapping_presets[preset_id]["name"]
+                    if preset_name not in games_by_type:
+                        games_by_type[preset_name] = []
+                    games_by_type[preset_name].append((rom_name, game_name, is_clone, preset_id))
+                
+                # Add games grouped by type
+                for preset_name, preset_games in games_by_type.items():
+                    # Add header for this mapping type
+                    games_listbox.insert(tk.END, f"--- {preset_name} ({len(preset_games)} games) ---")
+                    games_listbox.itemconfig(tk.END, {'bg': self.theme_colors["primary"], 'fg': 'white'})
+                    
+                    # Add games for this type
+                    for rom_name, game_name, is_clone, preset_id in preset_games:
+                        display_text = f"  {rom_name} - {game_name}"
+                        if is_clone:
+                            display_text += " [Clone]"
+                        games_listbox.insert(tk.END, display_text)
+                
+                # Select all game entries (not headers)
+                for i in range(games_listbox.size()):
+                    item_text = games_listbox.get(i)
+                    if not item_text.startswith("---"):  # Skip headers
+                        games_listbox.selection_set(i)
+                
+                # Store the combined games data
+                nonlocal current_games, game_mapping_assignments
+                current_games = games
+                game_mapping_assignments = game_assignments
+                
+            else:
+                # Convert display name back to preset_id for single preset
+                selected_preset = None
+                for preset_id, preset_data in mapping_presets.items():
+                    if preset_data["name"] == selected_display_name:
+                        selected_preset = preset_id
+                        break
+                
+                if selected_preset:
+                    games = get_games_for_mapping(selected_preset)
+                    
+                    # Add games for the selected preset
+                    for rom_name, game_name, is_clone in games:
+                        display_text = f"{rom_name} - {game_name}"
+                        if is_clone:
+                            display_text += " [Clone]"
+                        games_listbox.insert(tk.END, display_text)
+                    
+                    # Select all by default
+                    games_listbox.select_set(0, tk.END)
+                    
+                    # Store single preset games data (convert format to match)
+                    current_games = [(rom, name, clone, selected_preset) for rom, name, clone in games]
+                    game_mapping_assignments = {rom: selected_preset for rom, _, _ in games}
             
-            # Select all by default
-            games_listbox.select_set(0, tk.END)
-            
-            # Update the current_games reference for processing
-            nonlocal current_games
-            current_games = games
-            
-            # Update status to show how many games were found
-            if hasattr(dialog, 'update_idletasks'):
-                dialog.update_idletasks()
-            
-            return games
+            return current_games if 'current_games' in locals() else []
         
         # Store games data for processing
-        current_games = update_games_list()
+        current_games = []
+        game_mapping_assignments = {}
+        update_games_list()
         
-        # Remove the old preset change binding code since we're using command= now
-        
-        # Selection buttons
+        # Selection buttons - MODIFIED for "All Compatible Games" mode
         selection_frame = ctk.CTkFrame(games_card, fg_color="transparent")
         selection_frame.pack(fill="x", padx=15, pady=(0, 15))
         
         def select_all_games():
-            games_listbox.select_set(0, tk.END)
+            if preset_var.get() == "All Compatible Games":
+                # Select all non-header items
+                for i in range(games_listbox.size()):
+                    item_text = games_listbox.get(i)
+                    if not item_text.startswith("---"):
+                        games_listbox.selection_set(i)
+            else:
+                games_listbox.select_set(0, tk.END)
         
         def deselect_all_games():
             games_listbox.select_clear(0, tk.END)
@@ -9321,7 +9395,38 @@ class MAMEControlConfig(ctk.CTk):
             hover_color=self.theme_colors["button_hover"]
         ).pack(side="left", padx=5)
         
-        # Options card
+        # Add a helpful label for All Compatible Games mode
+        info_label = ctk.CTkLabel(
+            games_card,
+            text="",
+            font=("Arial", 11),
+            text_color=self.theme_colors["text_dimmed"],
+            wraplength=700
+        )
+        info_label.pack(padx=15, pady=(0, 10))
+        
+        def update_info_label():
+            if preset_var.get() == "All Compatible Games":
+                total_games = len([g for g in current_games if not g[1].startswith("---")])
+                info_label.configure(
+                    text=f"💡 All Compatible Games mode will automatically apply the appropriate mapping to each game type. "
+                    f"Total games found: {total_games}"
+                )
+            else:
+                info_label.configure(text="")
+        
+        # Update info label when preset changes
+        original_update = update_games_list
+        def enhanced_update():
+            result = original_update()
+            update_info_label()
+            return result
+        update_games_list = enhanced_update
+        
+        # Call it once to set initial state
+        update_info_label()
+        
+        # Options card (unchanged)
         options_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         options_card.pack(fill="x", padx=0, pady=(0, 15))
         
@@ -9418,68 +9523,127 @@ class MAMEControlConfig(ctk.CTk):
         status_text.pack(fill="x", padx=15, pady=15)
         status_text.insert("1.0", "Ready to configure fightstick mappings...")
         
-        # Main processing function
+        # ENHANCED: Main processing function with "All Compatible Games" support
         def apply_fightstick_mappings():
             """Apply the selected fightstick mappings to selected games"""
             try:
-                # Get selected preset and games - FIXED for dropdown
                 selected_display_name = preset_var.get()
-                selected_preset = None
-                
-                # Convert display name back to preset_id
-                for preset_id, preset_data in mapping_presets.items():
-                    if preset_data["name"] == selected_display_name:
-                        selected_preset = preset_id
-                        break
-                
-                if not selected_preset:
-                    messagebox.showerror("Error", "No valid preset selected.", parent=dialog)
-                    return
-                    
-                preset_data = mapping_presets[selected_preset]
                 selected_indices = games_listbox.curselection()
                 
                 if not selected_indices:
                     messagebox.showwarning("No Games Selected", "Please select at least one game to configure.")
                     return
                 
-                # Get selected games
-                selected_games = []
-                for index in selected_indices:
-                    rom_name = current_games[index][0]
-                    selected_games.append(rom_name)
+                # Build list of games to process
+                games_to_process = []
                 
-                # Show confirmation
-                if not messagebox.askyesno(
-                    "Confirm Configuration",
-                    f"Apply {preset_data['name']} to {len(selected_games)} games?\n\n"
-                    f"This will modify CFG files in your MAME cfg directory.",
-                    parent=dialog
-                ):
+                if selected_display_name == "All Compatible Games":
+                    # Process with individual mappings per game
+                    listbox_index = 0
+                    for rom_name, game_name, is_clone, preset_id in current_games:
+                        # Skip headers in the listbox
+                        while listbox_index < games_listbox.size():
+                            if not games_listbox.get(listbox_index).startswith("---"):
+                                break
+                            listbox_index += 1
+                        
+                        # Check if this game is selected
+                        if listbox_index in selected_indices:
+                            games_to_process.append({
+                                'rom_name': rom_name,
+                                'preset_id': preset_id,
+                                'preset_name': mapping_presets[preset_id]["name"]
+                            })
+                        
+                        listbox_index += 1
+                else:
+                    # Single preset mode
+                    selected_preset = None
+                    for preset_id, preset_data in mapping_presets.items():
+                        if preset_data["name"] == selected_display_name:
+                            selected_preset = preset_id
+                            break
+                    
+                    if not selected_preset:
+                        messagebox.showerror("Error", "No valid preset selected.", parent=dialog)
+                        return
+                    
+                    # Get selected games
+                    for index in selected_indices:
+                        if index < len(current_games):
+                            rom_name = current_games[index][0]
+                            games_to_process.append({
+                                'rom_name': rom_name,
+                                'preset_id': selected_preset,
+                                'preset_name': mapping_presets[selected_preset]["name"]
+                            })
+                
+                if not games_to_process:
+                    messagebox.showwarning("No Games Selected", "Please select at least one game to configure.")
+                    return
+                
+                # Show enhanced confirmation message
+                if selected_display_name == "All Compatible Games":
+                    # Group by preset for display
+                    preset_counts = {}
+                    for game in games_to_process:
+                        preset_name = game['preset_name']
+                        preset_counts[preset_name] = preset_counts.get(preset_name, 0) + 1
+                    
+                    preset_summary = []
+                    for preset_name, count in preset_counts.items():
+                        preset_summary.append(f"• {preset_name}: {count} games")
+                    
+                    confirmation_msg = (
+                        f"Apply fightstick mappings to {len(games_to_process)} games?\n\n"
+                        f"Mappings to be applied:\n" + "\n".join(preset_summary) + "\n\n"
+                        f"This will modify CFG files in your MAME cfg directory."
+                    )
+                else:
+                    preset_name = games_to_process[0]['preset_name']
+                    confirmation_msg = (
+                        f"Apply {preset_name} to {len(games_to_process)} games?\n\n"
+                        f"This will modify CFG files in your MAME cfg directory."
+                    )
+                
+                if not messagebox.askyesno("Confirm Configuration", confirmation_msg, parent=dialog):
                     return
                 
                 # Clear status
                 status_text.delete("1.0", tk.END)
-                status_text.insert("1.0", f"Configuring {len(selected_games)} games with {preset_data['name']}...\n\n")
+                if selected_display_name == "All Compatible Games":
+                    status_text.insert("1.0", f"Configuring {len(games_to_process)} games with multiple mapping types...\n\n")
+                else:
+                    status_text.insert("1.0", f"Configuring {len(games_to_process)} games with {games_to_process[0]['preset_name']}...\n\n")
                 dialog.update_idletasks()
                 
                 processed_count = 0
                 error_count = 0
                 
-                # Process each selected game
-                for rom_name in selected_games:
+                # Process each selected game with its appropriate mapping
+                for game_info in games_to_process:
                     try:
+                        rom_name = game_info['rom_name']
+                        preset_id = game_info['preset_id']
+                        preset_name = game_info['preset_name']
+                        
+                        # Get the mappings for this specific preset
+                        button_mappings = mapping_presets[preset_id]['mappings']
+                        
                         result = self.configure_game_fightstick_mapping(
                             rom_name, 
-                            preset_data['mappings'],
+                            button_mappings,
                             backup_cfg_var.get(),
                             create_missing_var.get(),
                             update_existing_var.get(),
-                            mame_version_var.get()  # Pass MAME version setting
+                            mame_version_var.get()
                         )
                         
                         if result['success']:
-                            status_text.insert(tk.END, f"✓ {rom_name}: {result['message']}\n")
+                            if selected_display_name == "All Compatible Games":
+                                status_text.insert(tk.END, f"✓ {rom_name} ({preset_name}): {result['message']}\n")
+                            else:
+                                status_text.insert(tk.END, f"✓ {rom_name}: {result['message']}\n")
                             processed_count += 1
                         else:
                             status_text.insert(tk.END, f"✗ {rom_name}: {result['message']}\n")
@@ -9493,16 +9657,35 @@ class MAMEControlConfig(ctk.CTk):
                     dialog.update_idletasks()
                 
                 # Summary
-                status_text.insert(tk.END, f"\nCompleted: {processed_count} successful, {error_count} errors")
+                if selected_display_name == "All Compatible Games":
+                    # Show detailed summary for all compatible games mode
+                    preset_results = {}
+                    for game_info in games_to_process:
+                        preset_name = game_info['preset_name']
+                        if preset_name not in preset_results:
+                            preset_results[preset_name] = {'success': 0, 'error': 0}
+                    
+                    # Count successes and errors by preset (simplified for this example)
+                    status_text.insert(tk.END, f"\nCompleted: {processed_count} successful, {error_count} errors")
+                    status_text.insert(tk.END, f"\nProcessed games across {len(preset_results)} different mapping types")
+                else:
+                    status_text.insert(tk.END, f"\nCompleted: {processed_count} successful, {error_count} errors")
+                
                 status_text.see(tk.END)
                 
                 # Show completion message
-                messagebox.showinfo(
-                    "Configuration Complete",
-                    f"Processed {processed_count} games successfully.\n"
-                    f"Errors: {error_count}",
-                    parent=dialog
-                )
+                if selected_display_name == "All Compatible Games":
+                    completion_msg = (
+                        f"Processed {processed_count} games successfully across multiple mapping types.\n"
+                        f"Errors: {error_count}"
+                    )
+                else:
+                    completion_msg = (
+                        f"Processed {processed_count} games successfully.\n"
+                        f"Errors: {error_count}"
+                    )
+                
+                messagebox.showinfo("Configuration Complete", completion_msg, parent=dialog)
                 
             except Exception as e:
                 status_text.insert(tk.END, f"\nFATAL ERROR: {str(e)}")
@@ -9516,17 +9699,37 @@ class MAMEControlConfig(ctk.CTk):
         button_container = ctk.CTkFrame(buttons_frame, fg_color="transparent")
         button_container.pack(fill="both", expand=True, padx=20, pady=15)
         
-        # Apply button
-        ctk.CTkButton(
+        # Apply button - ENHANCED text for "All Compatible Games"
+        def get_apply_button_text():
+            if preset_var.get() == "All Compatible Games":
+                return "Apply All Mappings"
+            else:
+                return "Apply Mappings"
+        
+        apply_button = ctk.CTkButton(
             button_container,
-            text="Apply Mappings",
+            text=get_apply_button_text(),
             command=apply_fightstick_mappings,
             width=150,
             height=40,
             fg_color=self.theme_colors["success"],
             hover_color="#218838",
             font=("Arial", 14, "bold")
-        ).pack(side="right", padx=5)
+        )
+        apply_button.pack(side="right", padx=5)
+        
+        # Update button text when preset changes
+        def update_apply_button_text():
+            apply_button.configure(text=get_apply_button_text())
+        
+        # Enhance the dropdown command to also update button text
+        original_command = preset_dropdown.cget("command")
+        def enhanced_dropdown_command(choice):
+            if original_command:
+                original_command(choice)
+            update_apply_button_text()
+        
+        preset_dropdown.configure(command=enhanced_dropdown_command)
         
         # Close button
         ctk.CTkButton(
