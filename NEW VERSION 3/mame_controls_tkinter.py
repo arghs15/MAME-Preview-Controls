@@ -9577,8 +9577,17 @@ class MAMEControlConfig(ctk.CTk):
             
             # Backup existing CFG if it exists and backup is enabled
             if backup_cfg and os.path.exists(cfg_path):
+                # Create backup in fightstick directory
+                if not hasattr(self, 'fightstick_dir'):
+                    self.initialize_fightstick_directory()
+                
+                backup_dir = os.path.join(self.fightstick_dir, "backups")
+                os.makedirs(backup_dir, exist_ok=True)
+                
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_path = os.path.join(cfg_dir, f"{rom_name}.cfg.backup_{timestamp}")
+                backup_filename = f"{rom_name}.{timestamp}.cfg"
+                backup_path = os.path.join(backup_dir, backup_filename)
+                
                 shutil.copy2(cfg_path, backup_path)
                 print(f"Backed up existing CFG to: {backup_path}")
             
