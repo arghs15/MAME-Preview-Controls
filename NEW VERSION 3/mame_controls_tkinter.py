@@ -8211,16 +8211,27 @@ class MAMEControlConfig(ctk.CTk):
             original_qmessagebox = QMessageBox.information
             QMessageBox.information = lambda *args, **kwargs: QMessageBox.Ok
             
-            # Process events to ensure UI is initialized
+            # CRITICAL FIX: Process events multiple times to ensure full initialization
+            import time  # Import time at the top to avoid conflicts
+            for i in range(5):  # Process events multiple times
+                app.processEvents()
+                time.sleep(0.02)  # Small delay between processing
+            
+            print(f"Preview window initialized for {rom_name}")
+            
+            # CRITICAL FIX: Wait for window to be fully ready
+            time.sleep(0.1)  # Give window time to fully initialize
+            
+            # Force another round of event processing
             app.processEvents()
             
-            # Load bezel settings from file
+            # FIXED: Load all settings properly even when no cache exists
             try:
-                # Get bezel settings path
+                # Get settings directory
                 settings_dir = os.path.join(self.preview_dir, "settings")
-                bezel_settings_path = os.path.join(settings_dir, "bezel_settings.json")
                 
-                # First check if we have ROM-specific settings
+                # 1. Load bezel settings
+                bezel_settings_path = os.path.join(settings_dir, "bezel_settings.json")
                 rom_bezel_settings_path = os.path.join(settings_dir, f"{rom_name}_bezel_settings.json")
                 
                 # Choose which settings file to use
@@ -8230,34 +8241,88 @@ class MAMEControlConfig(ctk.CTk):
                     with open(settings_path, 'r') as f:
                         bezel_settings = json.load(f)
                         
-                    # Explicitly set settings values
+                    # Apply bezel settings
                     preview.bezel_visible = bezel_settings.get("bezel_visible", True)
                     preview.logo_visible = bezel_settings.get("logo_visible", True)
                     
-                    # Update UI based on settings
-                    # Force bezel visibility based on settings
-                    if preview.bezel_visible and hasattr(preview, 'has_bezel') and preview.has_bezel:
-                        # First show the bezel
-                        if hasattr(preview, 'show_bezel_with_background'):
-                            preview.show_bezel_with_background()
-                            
-                        # Force bezel to top of z-order
-                        if hasattr(preview, 'bezel_label') and preview.bezel_label:
-                            preview.bezel_label.raise_()
-                    else:
-                        # Explicitly hide bezel
-                        if hasattr(preview, 'hide_bezel'):
-                            preview.hide_bezel()
-                        elif hasattr(preview, 'bezel_label') and preview.bezel_label:
-                            preview.bezel_label.setVisible(False)
+                    # CRITICAL FIX: Apply logo size settings
+                    if 'logo_width_percentage' in bezel_settings:
+                        preview.logo_width_percentage = bezel_settings['logo_width_percentage']
+                    if 'logo_height_percentage' in bezel_settings:
+                        preview.logo_height_percentage = bezel_settings['logo_height_percentage']
                     
-                    # Handle logo visibility
-                    if hasattr(preview, 'logo_label') and preview.logo_label:
-                        preview.logo_label.setVisible(preview.logo_visible)
+                    print(f"Loaded bezel settings: logo size {preview.logo_width_percentage}% x {preview.logo_height_percentage}%")
                 else:
-                    print(f"No bezel settings found, using defaults")
+                    # CRITICAL FIX: Load global logo settings even when no bezel settings exist
+                    global_settings_path = os.path.join(settings_dir, "global_settings.json")
+                    if os.path.exists(global_settings_path):
+                        with open(global_settings_path, 'r') as f:
+                            global_settings = json.load(f)
+                        
+                        # Apply logo size from global settings
+                        if 'logo_width_percentage' in global_settings:
+                            preview.logo_width_percentage = global_settings['logo_width_percentage']
+                        if 'logo_height_percentage' in global_settings:
+                            preview.logo_height_percentage = global_settings['logo_height_percentage']
+                        
+                        print(f"Loaded global logo settings: {preview.logo_width_percentage}% x {preview.logo_height_percentage}%")
+                    else:
+                        # CRITICAL FIX: Use proper default logo sizes (not tiny defaults)
+                        preview.logo_width_percentage = getattr(self, 'logo_width_percentage', 15)
+                        preview.logo_height_percentage = getattr(self, 'logo_height_percentage', 15)
+                        print(f"Using fallback logo settings: {preview.logo_width_percentage}% x {preview.logo_height_percentage}%")
+                
+                # 3. Load text appearance settings to ensure proper text rendering
+                text_settings_path = os.path.join(settings_dir, "text_appearance_settings.json")
+                rom_text_settings_path = os.path.join(settings_dir, f"{rom_name}_text_appearance_settings.json")
+                
+                text_settings_file = rom_text_settings_path if os.path.exists(rom_text_settings_path) else text_settings_path
+                
+                if os.path.exists(text_settings_file):
+                    with open(text_settings_file, 'r') as f:
+                        text_settings = json.load(f)
+                    
+                    # Apply text settings to preview
+                    if hasattr(preview, 'text_settings'):
+                        preview.text_settings.update(text_settings)
+                    else:
+                        preview.text_settings = text_settings
+                    
+                    print(f"Loaded text appearance settings for proper text rendering")
+                
+                # CRITICAL FIX: Ensure logo is resized properly if it exists
+                if hasattr(preview, 'logo_label') and preview.logo_label and hasattr(preview, 'resize_logo'):
+                    preview.resize_logo()
+                    print(f"Resized logo to {preview.logo_width_percentage}% x {preview.logo_height_percentage}%")
+                
+                # Update UI based on settings
+                if preview.bezel_visible and hasattr(preview, 'has_bezel') and preview.has_bezel:
+                    # First show the bezel
+                    if hasattr(preview, 'show_bezel_with_background'):
+                        preview.show_bezel_with_background()
+                        
+                    # Force bezel to top of z-order
+                    if hasattr(preview, 'bezel_label') and preview.bezel_label:
+                        preview.bezel_label.raise_()
+                else:
+                    # Explicitly hide bezel
+                    if hasattr(preview, 'hide_bezel'):
+                        preview.hide_bezel()
+                    elif hasattr(preview, 'bezel_label') and preview.bezel_label:
+                        preview.bezel_label.setVisible(False)
+                
+                # Handle logo visibility
+                if hasattr(preview, 'logo_label') and preview.logo_label:
+                    preview.logo_label.setVisible(preview.logo_visible)
+                    
             except Exception as e:
-                print(f"Error loading bezel settings: {e}")
+                print(f"Error loading settings for {rom_name}: {e}")
+                # CRITICAL FIX: Even on error, ensure proper logo sizes
+                if hasattr(preview, 'logo_width_percentage'):
+                    if not hasattr(preview, 'logo_width_percentage') or preview.logo_width_percentage < 5:
+                        preview.logo_width_percentage = getattr(self, 'logo_width_percentage', 15)
+                    if not hasattr(preview, 'logo_height_percentage') or preview.logo_height_percentage < 5:
+                        preview.logo_height_percentage = getattr(self, 'logo_height_percentage', 15)
             
             # CRITICAL: Ensure controls are above bezel
             if hasattr(preview, 'raise_controls_above_bezel'):
@@ -8269,8 +8334,12 @@ class MAMEControlConfig(ctk.CTk):
                         if 'label' in control_data and control_data['label']:
                             control_data['label'].raise_()
             
-            # Process events to ensure UI updates
-            app.processEvents()
+            # CRITICAL FIX: Final processing to ensure everything is rendered properly
+            for i in range(5):
+                app.processEvents()
+                time.sleep(0.03)
+            
+            print(f"Final UI processing completed for {rom_name}")
             
             # Use direct image generation instead of showing window first
             success = False
