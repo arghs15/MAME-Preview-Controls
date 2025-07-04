@@ -319,6 +319,10 @@ DATABASE vs JSON MODES:
   • --use-db mode: Forces database-only operation (no JSON fallback)
   • Database provides faster loading and better organization
   • JSON files are the traditional fallback method
+
+PERFORMANCE MODES:
+  • --preview-only: Generates preview from game data (slower, full features)
+  • --image-only: Loads pre-saved screenshot (fastest, display only)
 """
 
     # Examples section
@@ -342,6 +346,13 @@ Preview Commands:
   python mame_controls_main.py --preview-only --game pacman --no-buttons
     └─ Show preview with buttons hidden
 
+Fast Image Display (NEW):
+  python mame_controls_main.py --image-only --game sf2
+    └─ Load pre-saved sf2.png from preview/screenshots (FASTEST!)
+  
+  python mame_controls_main.py --image-only --game pacman --auto-close
+    └─ Load pacman.png and auto-close when MAME exits
+
 Cache Management:
   python mame_controls_main.py --precache --game pacman
     └─ Pre-build cache for pacman (database → JSON fallback)
@@ -363,8 +374,8 @@ Advanced Options:
   python mame_controls_main.py --preview-only --game pacman --screen 2
     └─ Show preview on secondary monitor
   
-  python mame_controls_main.py --preview-only --game pacman --auto-close
-    └─ Automatically close preview when MAME exits
+  python mame_controls_main.py --image-only --game sf2 --screen 2
+    └─ Show pre-saved image on secondary monitor
 
 COMMON WORKFLOWS:
 
@@ -376,12 +387,25 @@ COMMON WORKFLOWS:
    python mame_controls_main.py --preview-only --game <romname>
    └─ Fast preview using existing cache/database
 
-3. Force fresh data:
+3. Lightning-fast display (after saving images):
+   python mame_controls_main.py --image-only --game <romname>
+   └─ Instant display of pre-saved screenshot (fastest possible)
+
+4. Export all images, then use fast mode:
+   # Export images for your favorite games
+   python mame_controls_main.py --export-image --game sf2 --output preview/screenshots/sf2.png
+   python mame_controls_main.py --export-image --game pacman --output preview/screenshots/pacman.png
+   
+   # Now use lightning-fast image mode
+   python mame_controls_main.py --image-only --game sf2
+   python mame_controls_main.py --image-only --game pacman
+
+5. Force fresh data:
    python mame_controls_main.py --precache --game <romname> --use-db
    python mame_controls_main.py --preview-only --game <romname>
    └─ Rebuild cache from database, then show preview
 
-4. Troubleshooting:
+6. Troubleshooting:
    python mame_controls_main.py --preview-only --game <romname> --use-db
    └─ Test if ROM exists in database and can generate preview
 """
@@ -399,7 +423,12 @@ COMMON WORKFLOWS:
     mode_group.add_argument(
         '--preview-only', 
         action='store_true',
-        help='Show preview window only (requires --game)'
+        help='Show preview window only (requires --game) - generates from game data'
+    )
+    mode_group.add_argument(
+        '--image-only', 
+        action='store_true',
+        help='Show pre-saved image only (requires --game) - loads from preview/screenshots/ROMNAME.png (FASTEST!)'
     )
     mode_group.add_argument(
         '--precache', 
@@ -422,11 +451,11 @@ COMMON WORKFLOWS:
     )
     
     # Data source options
-    data_group = parser.add_argument_group('DATA SOURCE OPTIONS', 'Control where game data comes from')
+    data_group = parser.add_argument_group('DATA SOURCE OPTIONS', 'Control where game data comes from (only for --preview-only)')
     data_group.add_argument(
         '--use-db', 
         action='store_true',
-        help='Force database mode - no JSON fallback (fails if ROM not in database)'
+        help='Force database mode - no JSON fallback (fails if ROM not in database) [ignored in --image-only mode]'
     )
     
     # Preview customization
@@ -434,24 +463,24 @@ COMMON WORKFLOWS:
     preview_group.add_argument(
         '--clean-preview', 
         action='store_true',
-        help='Show preview without buttons and UI elements (clean export-ready view)'
+        help='Show preview without buttons and UI elements (clean export-ready view) [ignored in --image-only mode]'
     )
     preview_group.add_argument(
         '--no-buttons', 
         action='store_true',
-        help='Hide control buttons in preview (overrides user settings)'
+        help='Hide control buttons in preview (overrides user settings) [ignored in --image-only mode]'
     )
     preview_group.add_argument(
         '--auto-close', 
         action='store_true',
-        help='Automatically close preview when MAME process exits'
+        help='Automatically close preview when MAME process exits [works with both --preview-only and --image-only]'
     )
     preview_group.add_argument(
         '--screen', 
         type=int, 
         default=1, 
         metavar='N',
-        help='Display preview on screen number N (default: 1)'
+        help='Display preview on screen number N (default: 1) [works with both --preview-only and --image-only]'
     )
     
     # Export options
@@ -490,6 +519,9 @@ def validate_arguments(args):
     if args.preview_only and not args.game:
         errors.append("--preview-only requires --game parameter")
     
+    if args.image_only and not args.game:
+        errors.append("--image-only requires --game parameter")
+    
     if args.precache and not args.game:
         errors.append("--precache requires --game parameter")
     
@@ -500,19 +532,23 @@ def validate_arguments(args):
         errors.append("--export-image requires --output parameter")
     
     # Check for conflicting modes
-    mode_count = sum([args.preview_only, args.precache, args.export_image])
+    mode_count = sum([args.preview_only, args.image_only, args.precache, args.export_image])
     if mode_count > 1:
-        errors.append("Cannot combine --preview-only, --precache, and --export-image modes")
+        errors.append("Cannot combine --preview-only, --image-only, --precache, and --export-image modes")
     
     # Check for options that only work with certain modes
     if args.clean_preview and not args.preview_only:
         errors.append("--clean-preview only works with --preview-only mode")
     
-    if args.auto_close and not args.preview_only:
-        errors.append("--auto-close only works with --preview-only mode")
+    if args.auto_close and not (args.preview_only or args.image_only):
+        errors.append("--auto-close works with --preview-only or --image-only modes")
     
     if args.no_buttons and not (args.preview_only or args.export_image):
         errors.append("--no-buttons only works with --preview-only or --export-image modes")
+    
+    # Database options only work with modes that need game data
+    if args.use_db and not (args.preview_only or args.precache or args.export_image):
+        errors.append("--use-db only works with --preview-only, --precache, or --export-image modes")
     
     # Export-specific validations
     if args.no_bezel and not args.export_image:
@@ -532,6 +568,287 @@ def validate_arguments(args):
             errors.append(f"Output directory does not exist: {output_dir}")
     
     return errors
+
+# NEW: Fast image-only preview implementation
+def show_image_only_preview(rom_name, mame_dir, auto_close=False, screen=1):
+    """Ultra-fast preview mode that just loads a pre-saved screenshot"""
+    import os  # Import os at the top of the function
+    
+    print(f"⚡ LIGHTNING MODE: Loading pre-saved image for {rom_name}")
+    
+    # Look for screenshot in expected location
+    preview_dir = os.path.join(mame_dir, "preview")
+    screenshots_dir = os.path.join(preview_dir, "screenshots")
+    
+    # Try multiple image extensions
+    extensions = ['.png', '.jpg', '.jpeg', '.bmp']
+    image_path = None
+    
+    for ext in extensions:
+        potential_path = os.path.join(screenshots_dir, f"{rom_name}{ext}")
+        if os.path.exists(potential_path):
+            image_path = potential_path
+            break
+    
+    if not image_path:
+        print(f"❌ ERROR: No screenshot found for '{rom_name}'")
+        print(f"📁 Looked in: {screenshots_dir}")
+        print(f"🔍 Expected files: {rom_name}.png, {rom_name}.jpg, etc.")
+        print(f"💡 Use --export-image first to create the screenshot, or use --preview-only for full generation")
+        return 1
+    
+    print(f"✅ Found screenshot: {os.path.basename(image_path)}")
+    print(f"📁 Loading from: {image_path}")
+    
+    try:
+        # Use PyQt5 for fast image display
+        from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+        from PyQt5.QtGui import QPixmap, QKeySequence, QFont
+        from PyQt5.QtCore import Qt, QTimer
+        
+        # Create lightweight application
+        app = QApplication(sys.argv)
+        app.setApplicationName("MAME Controls - Lightning Preview")
+        
+        # Create main window
+        window = QWidget()
+        window.setWindowTitle(f"MAME Controls - {rom_name.upper()} (Lightning Mode)")
+        window.setStyleSheet("""
+            QWidget {
+                background-color: #1a1a1a;
+                color: white;
+            }
+        """)
+        
+        # Create layout
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Load and display image
+        print(f"📷 Loading image...")
+        pixmap = QPixmap(image_path)
+        
+        if pixmap.isNull():
+            print(f"❌ ERROR: Failed to load image from {image_path}")
+            return 1
+        
+        # Create image label with fullscreen scaling
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setScaledContents(False)  # We'll handle scaling manually
+        
+        # Add small status label - make it semi-transparent overlay
+        status_label = QLabel(f"⚡ Lightning Mode: {rom_name.upper()} | ESC/Any Key/Gamepad to close | F/F11 for fullscreen")
+        status_label.setAlignment(Qt.AlignCenter)
+        status_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 150);
+                color: white;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 14px;
+                border-radius: 4px;
+            }
+        """)
+        status_label.setFixedHeight(40)
+        
+        # Add to layout
+        layout.addWidget(image_label)
+        layout.addWidget(status_label)
+        
+        window.setLayout(layout)
+        
+        # Configure for fullscreen display
+        window.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        
+        # Handle screen positioning and fullscreen
+        if screen > 1:
+            try:
+                from PyQt5.QtWidgets import QDesktopWidget
+                desktop = QDesktopWidget()
+                if screen <= desktop.screenCount():
+                    screen_geo = desktop.screenGeometry(screen - 1)
+                    window.setGeometry(screen_geo)
+                    print(f"📺 Fullscreen on screen {screen}")
+                else:
+                    print(f"⚠️  Screen {screen} not available, using default")
+                    window.showFullScreen()
+            except Exception as e:
+                print(f"⚠️  Screen positioning failed: {e}")
+                window.showFullScreen()
+        else:
+            # Default to fullscreen on primary screen
+            window.showFullScreen()
+            print(f"📺 Fullscreen on primary screen")
+        
+        # Scale image to fit screen while maintaining aspect ratio
+        screen_size = app.primaryScreen().size()
+        if screen > 1:
+            try:
+                from PyQt5.QtWidgets import QDesktopWidget
+                desktop = QDesktopWidget()
+                if screen <= desktop.screenCount():
+                    screen_size = desktop.screenGeometry(screen - 1).size()
+            except:
+                pass
+        
+        # Scale pixmap to fit screen
+        scaled_pixmap = pixmap.scaled(
+            screen_size, 
+            Qt.KeepAspectRatio, 
+            Qt.SmoothTransformation
+        )
+        image_label.setPixmap(scaled_pixmap)
+        
+        # Add keyboard shortcuts for better control
+        def close_window():
+            print("👋 Closing lightning preview...")
+            window.close()
+            app.quit()
+        
+        def toggle_fullscreen():
+            if window.isFullScreen():
+                window.showNormal()
+                print("🪟 Switched to windowed mode")
+            else:
+                window.showFullScreen()
+                print("📺 Switched to fullscreen mode")
+        
+        # Handle ESC key and F key
+        from PyQt5.QtWidgets import QShortcut
+        from PyQt5.QtCore import QTimer
+        
+        esc_shortcut = QShortcut(QKeySequence("Escape"), window)
+        esc_shortcut.activated.connect(close_window)
+        
+        f_shortcut = QShortcut(QKeySequence("F"), window)
+        f_shortcut.activated.connect(toggle_fullscreen)
+        
+        # Also handle F11 for fullscreen toggle
+        f11_shortcut = QShortcut(QKeySequence("F11"), window)
+        f11_shortcut.activated.connect(toggle_fullscreen)
+        
+        # Add gamepad/joystick input handling
+        def check_gamepad_input():
+            """Check for gamepad button presses to close preview"""
+            try:
+                import pygame
+                
+                # Initialize pygame joystick module if not already done
+                if not hasattr(check_gamepad_input, 'initialized'):
+                    pygame.init()
+                    pygame.joystick.init()
+                    check_gamepad_input.initialized = True
+                    
+                    # Initialize all connected joysticks
+                    joystick_count = pygame.joystick.get_count()
+                    check_gamepad_input.joysticks = []
+                    for i in range(joystick_count):
+                        joystick = pygame.joystick.Joystick(i)
+                        joystick.init()
+                        check_gamepad_input.joysticks.append(joystick)
+                        print(f"🎮 Gamepad detected: {joystick.get_name()}")
+                
+                # Process pygame events
+                pygame.event.pump()
+                
+                # Check for joystick button presses
+                for joystick in getattr(check_gamepad_input, 'joysticks', []):
+                    # Check any button press (buttons 0-15 should cover most gamepads)
+                    for button_num in range(min(16, joystick.get_numbuttons())):
+                        if joystick.get_button(button_num):
+                            print(f"🎮 Gamepad button {button_num} pressed - closing preview")
+                            close_window()
+                            return
+                    
+                    # Check D-pad/hat movements
+                    for hat_num in range(joystick.get_numhats()):
+                        hat_value = joystick.get_hat(hat_num)
+                        if hat_value != (0, 0):  # Any D-pad direction
+                            print(f"🎮 D-pad pressed - closing preview")
+                            close_window()
+                            return
+                
+            except ImportError:
+                # pygame not available, skip gamepad input
+                pass
+            except Exception as e:
+                # Ignore gamepad errors to avoid crashes
+                pass
+        
+        # Add additional keyboard input handling for any key press
+        def handle_key_press(event):
+            """Handle any key press to close preview"""
+            key = event.key()
+            
+            # Allow F and F11 to work for fullscreen toggle
+            if key in [Qt.Key_F, Qt.Key_F11]:
+                return  # Let the shortcuts handle these
+            
+            # Allow Escape to work normally
+            if key == Qt.Key_Escape:
+                return  # Let the shortcut handle this
+            
+            # Any other key closes the preview
+            print(f"⌨️  Key pressed - closing preview")
+            close_window()
+        
+        # Override the key press event for the window
+        original_keyPressEvent = window.keyPressEvent
+        window.keyPressEvent = handle_key_press
+        
+        # Start gamepad monitoring timer
+        gamepad_timer = QTimer()
+        gamepad_timer.timeout.connect(check_gamepad_input)
+        gamepad_timer.start(50)  # Check every 50ms for responsive input
+        
+        # Auto-close functionality if enabled
+        if auto_close:
+            print("🔄 Auto-close enabled - will monitor for MAME process")
+            
+            # Simple MAME process monitoring
+            def check_mame_process():
+                import subprocess
+                try:
+                    # Check if any MAME process is running
+                    result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq mame*.exe'], 
+                                          capture_output=True, text=True, timeout=5)
+                    if 'mame' not in result.stdout.lower():
+                        print("🎮 MAME process not detected, closing preview...")
+                        close_window()
+                        return
+                except:
+                    pass  # Continue monitoring
+                
+                # Check again in 2 seconds
+                QTimer.singleShot(2000, check_mame_process)
+            
+            # Start monitoring after 3 seconds
+            QTimer.singleShot(3000, check_mame_process)
+        
+        # Show window in fullscreen
+        window.show()
+        window.raise_()  # Bring to front
+        window.activateWindow()
+        
+        # Print performance stats
+        file_size = os.path.getsize(image_path)
+        print(f"📊 Image loaded: {pixmap.width()}x{pixmap.height()}, {file_size:,} bytes")
+        print(f"📺 Displaying fullscreen (scaled: {scaled_pixmap.width()}x{scaled_pixmap.height()})")
+        print(f"⚡ Lightning preview ready! (Any key/gamepad button to close, F/F11 for fullscreen)")
+        
+        # Run the application
+        return app.exec_()
+        
+    except ImportError:
+        print("❌ PyQt5 not available for image display")
+        return 1
+    except Exception as e:
+        print(f"❌ Error in lightning preview: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 def validate_cache_file(cache_file: str, rom_name: str) -> bool:
     """Fast cache validation - only check essential structure"""
@@ -874,6 +1191,22 @@ def main():
             # Exit without showing any UI
             return 0
 
+        # Handle IMAGE-ONLY mode (NEW - FASTEST MODE)
+        if args.game and args.image_only:
+            print(f"⚡ LIGHTNING MODE: Fast image display for ROM: {args.game}")
+            
+            # This mode completely bypasses all game data loading and just shows a pre-saved image
+            # It's the fastest possible way to display a control layout
+            # Perfect for when you've already exported images and want instant display
+            
+            print(f"🚀 Launching lightning preview...")
+            return show_image_only_preview(
+                rom_name=args.game,
+                mame_dir=mame_dir,
+                auto_close=args.auto_close,
+                screen=args.screen
+            )
+        
         # Check for preview-only mode - OPTIMIZED VERSION
         if args.game and args.preview_only:
             print(f"🎯 Fast preview mode for ROM: {args.game}")
