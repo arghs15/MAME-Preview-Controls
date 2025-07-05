@@ -5464,6 +5464,173 @@ class MAMEControlConfig(ctk.CTk):
         )
         add_clone_button.pack(pady=10)
         
+        # Mappings card - ADD THIS NEW SECTION
+        mappings_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        mappings_card.pack(fill="x", padx=0, pady=(0, 15))
+
+        ctk.CTkLabel(
+            mappings_card,
+            text="Game Mappings (Categories)",
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+
+        mappings_description = (
+            "Mappings help categorize games for tools like the Fightstick Mapper. "
+            "Common mappings include: sf, ki, mk, tekken, darkstalkers, marvel, capcom, snk, etc."
+        )
+
+        ctk.CTkLabel(
+            mappings_card,
+            text=mappings_description,
+            font=("Arial", 12),
+            text_color=self.theme_colors["text_dimmed"],
+            wraplength=750
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+
+        # Container for mapping entries
+        mappings_container = ctk.CTkFrame(mappings_card, fg_color="transparent")
+        mappings_container.pack(fill="x", padx=15, pady=(0, 15))
+
+        # Get existing mappings
+        existing_mappings = []
+        if not is_new_game and rom_name in self.gamedata_json:
+            existing_mappings = self.gamedata_json[rom_name].get('mappings', [])
+
+        # Store mapping entries for saving
+        mapping_entries = []
+
+        def add_mapping_row(mapping_value=""):
+            """Add a new mapping entry row"""
+            row_frame = ctk.CTkFrame(
+                mappings_container, 
+                fg_color=self.theme_colors["background"],
+                corner_radius=4
+            )
+            row_frame.pack(fill="x", pady=2)
+            
+            # Mapping value entry
+            mapping_var = tk.StringVar(value=mapping_value)
+            mapping_entry = ctk.CTkEntry(
+                row_frame,
+                width=200,
+                textvariable=mapping_var,
+                fg_color=self.theme_colors["card_bg"],
+                placeholder_text="Enter mapping (e.g., sf, ki, mk)"
+            )
+            mapping_entry.pack(side="left", padx=10, pady=8)
+            
+            # Common mappings dropdown for quick selection
+            common_mappings = [
+                "sf", "ki", "mk", "tekken", "neogeo"
+            ]
+            
+            def on_common_select(selection):
+                if selection and selection != "Select common...":
+                    mapping_var.set(selection)
+            
+            common_dropdown = ctk.CTkComboBox(
+                row_frame,
+                values=["Select common..."] + common_mappings,
+                command=on_common_select,
+                width=150,
+                fg_color=self.theme_colors["card_bg"],
+                button_color=self.theme_colors["primary"],
+                button_hover_color=self.theme_colors["secondary"],
+                dropdown_fg_color=self.theme_colors["card_bg"]
+            )
+            common_dropdown.pack(side="left", padx=10, pady=8)
+            
+            # Remove button
+            def remove_row():
+                row_frame.destroy()
+                mapping_entries.remove(mapping_data)
+            
+            remove_button = ctk.CTkButton(
+                row_frame,
+                text="×",
+                width=30,
+                height=30,
+                command=remove_row,
+                fg_color=self.theme_colors["danger"],
+                hover_color="#c82333",
+                font=("Arial", 14, "bold"),
+                corner_radius=15
+            )
+            remove_button.pack(side="right", padx=10, pady=8)
+            
+            # Store data for this row
+            mapping_data = {
+                "frame": row_frame,
+                "var": mapping_var
+            }
+            
+            mapping_entries.append(mapping_data)
+            
+            return mapping_data
+
+        # Add existing mappings
+        if existing_mappings:
+            for mapping in existing_mappings:
+                add_mapping_row(mapping)
+        else:
+            # Add one empty row by default
+            add_mapping_row()
+
+        # Add another mapping button
+        add_mapping_button = ctk.CTkButton(
+            mappings_container,
+            text="+ Add Another Mapping",
+            command=add_mapping_row,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"],
+            height=35
+        )
+        add_mapping_button.pack(pady=10)
+
+        # Predefined mapping templates
+        templates_frame = ctk.CTkFrame(mappings_card, fg_color=self.theme_colors["background"], corner_radius=4)
+        templates_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        ctk.CTkLabel(
+            templates_frame,
+            text="Quick Templates:",
+            font=("Arial", 13, "bold")
+        ).pack(side="left", padx=10, pady=8)
+
+        def apply_template(template_mappings):
+            """Apply a predefined template"""
+            # Clear existing entries
+            for mapping_data in mapping_entries[:]:
+                mapping_data["frame"].destroy()
+            mapping_entries.clear()
+            
+            # Add template mappings
+            for mapping in template_mappings:
+                add_mapping_row(mapping)
+
+        # Template buttons
+        templates = [
+            ("Street Fighter", ["sf"]),
+            ("Killer Instinct", ["ki"]),
+            ("Mortal Kombat", ["mk"]),
+            ("Tekken", ["tekken"]),
+            ("SNK/Neo Geo", ["neogeo"])
+        ]
+
+        for template_name, template_mappings in templates:
+            template_button = ctk.CTkButton(
+                templates_frame,
+                text=template_name,
+                command=lambda t=template_mappings: apply_template(t),
+                width=100,
+                height=30,
+                fg_color=self.theme_colors["secondary"],
+                hover_color=self.theme_colors["primary"],
+                font=("Arial", 11)
+            )
+            template_button.pack(side="left", padx=5, pady=8)
+        
         # If creating a new game, show the preview section
         if is_new_game:
             # Preview section - show JSON output
@@ -5513,7 +5680,19 @@ class MAMEControlConfig(ctk.CTk):
                     }
                 }
                 
-                # Add clones
+                # ADD THE MAPPINGS PREVIEW CODE HERE - RIGHT AFTER THE alternating LINE:
+                # Add mappings to preview
+                if mapping_entries:
+                    preview_mappings = []
+                    for mapping_data in mapping_entries:
+                        mapping_value = mapping_data["var"].get().strip()
+                        if mapping_value:
+                            preview_mappings.append(mapping_value)
+                    
+                    if preview_mappings:
+                        game_entry[current_rom_name]["mappings"] = preview_mappings
+                
+                # Add clones (this section already exists)
                 for clone_data in clone_entries:
                     clone_rom = clone_data["rom_var"].get().strip()
                     clone_desc = clone_data["desc_var"].get().strip()
@@ -5637,10 +5816,13 @@ class MAMEControlConfig(ctk.CTk):
                         return
                 
                 # Preserve existing data or create new entry
+                # Use this:
+                from collections import OrderedDict
+
                 if current_rom_name in gamedata:
-                    game_entry = gamedata[current_rom_name].copy()
+                    game_entry = OrderedDict(gamedata[current_rom_name])
                 else:
-                    game_entry = {}
+                    game_entry = OrderedDict()
                 
                 # Update basic properties
                 game_entry["description"] = description_var.get().strip() or current_rom_name
@@ -5667,7 +5849,25 @@ class MAMEControlConfig(ctk.CTk):
                     
                     game_entry["clones"] = new_clones
                 
-                # Handle controls
+                # ADD THE MAPPINGS CODE HERE - RIGHT AFTER THE CLONES SECTION:
+                # Handle mappings - ADD THIS SECTION IN save_game()
+                new_mappings = []
+                for mapping_data in mapping_entries:
+                    mapping_value = mapping_data["var"].get().strip()
+                    if mapping_value:
+                        new_mappings.append(mapping_value)
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_mappings = []
+                for mapping in new_mappings:
+                    if mapping.lower() not in seen:
+                        seen.add(mapping.lower())
+                        unique_mappings.append(mapping)
+                
+                game_entry["mappings"] = unique_mappings
+                
+                # Handle controls (this is the next section that already exists)
                 if not control_entries:
                     if "controls" not in game_entry:
                         game_entry["controls"] = {}
@@ -9700,7 +9900,7 @@ class MAMEControlConfig(ctk.CTk):
                     continue
                 
                 # Check if port already exists - match by tag and type (not mask)
-                existing_port = input_elem.find(f".//port[@tag='{port_data['tag']}'][@type='{port_data['type']}']")
+                existing_port = input_elem.find(f".//port[@tag='{port_data['tag']}'][@type='{port_data['type']}'][@mask='{port_data['mask']}']")
                 
                 if existing_port is not None:
                     if update_existing:
