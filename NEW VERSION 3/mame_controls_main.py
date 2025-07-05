@@ -610,9 +610,27 @@ def show_image_only_preview(rom_name, mame_dir, auto_close=False, screen=1):
         app = QApplication(sys.argv)
         app.setApplicationName("MAME Controls - Lightning Preview")
         
-        # Create main window
+        # Create main window with MAME-fighting configuration
         window = QWidget()
         window.setWindowTitle(f"MAME Controls - {rom_name.upper()} (Lightning Mode)")
+        
+        # Try to get the currently active window (might be MAME) and work with it
+        try:
+            active_window = app.activeWindow()
+            if active_window:
+                print(f"🎮 Found active window, setting preview as modal")
+                window.setWindowModality(Qt.ApplicationModal)
+        except:
+            pass
+        
+        # Configure for fullscreen display with MAME-fighting window flags
+        window.setWindowFlags(
+            Qt.WindowStaysOnTopHint | 
+            Qt.FramelessWindowHint | 
+            Qt.Tool |  # This is KEY - Qt.Tool flag helps with MAME compatibility
+            Qt.X11BypassWindowManagerHint  # Try to bypass window manager completely
+        )
+        
         window.setStyleSheet("""
             QWidget {
                 background-color: #1a1a1a;
@@ -638,64 +656,46 @@ def show_image_only_preview(rom_name, mame_dir, auto_close=False, screen=1):
         image_label.setAlignment(Qt.AlignCenter)
         image_label.setScaledContents(False)  # We'll handle scaling manually
         
-        # Add small status label - make it semi-transparent overlay
-        status_label = QLabel(f"⚡ Lightning Mode: {rom_name.upper()} | ESC/Any Key/Gamepad to close | F/F11 for fullscreen")
-        status_label.setAlignment(Qt.AlignCenter)
-        status_label.setStyleSheet("""
-            QLabel {
-                background-color: rgba(0, 0, 0, 150);
-                color: white;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 14px;
-                border-radius: 4px;
-            }
-        """)
-        status_label.setFixedHeight(40)
-        
         # Add to layout
         layout.addWidget(image_label)
-        layout.addWidget(status_label)
         
         window.setLayout(layout)
         
-        # Configure for fullscreen display
-        window.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        # Configure for fullscreen display with MAME-fighting window flags
+        window.setWindowFlags(
+            Qt.WindowStaysOnTopHint | 
+            Qt.FramelessWindowHint | 
+            Qt.Tool  # This is KEY - Qt.Tool flag helps with MAME compatibility
+        )
         
-        # Handle screen positioning and fullscreen
+        # Handle screen positioning and fullscreen with exact geometry matching
+        from PyQt5.QtWidgets import QDesktopWidget
+        desktop = QDesktopWidget()
+        
         if screen > 1:
             try:
-                from PyQt5.QtWidgets import QDesktopWidget
-                desktop = QDesktopWidget()
                 if screen <= desktop.screenCount():
-                    screen_geo = desktop.screenGeometry(screen - 1)
-                    window.setGeometry(screen_geo)
-                    print(f"📺 Fullscreen on screen {screen}")
+                    screen_geometry = desktop.screenGeometry(screen - 1)
+                    # Use setGeometry instead of showFullScreen for exact control
+                    window.setGeometry(screen_geometry)
+                    print(f"📺 Fullscreen on screen {screen} - exact geometry: {screen_geometry.width()}x{screen_geometry.height()}")
                 else:
                     print(f"⚠️  Screen {screen} not available, using default")
-                    window.showFullScreen()
+                    screen_geometry = desktop.screenGeometry(0)
+                    window.setGeometry(screen_geometry)
             except Exception as e:
                 print(f"⚠️  Screen positioning failed: {e}")
-                window.showFullScreen()
+                screen_geometry = desktop.screenGeometry(0)
+                window.setGeometry(screen_geometry)
         else:
-            # Default to fullscreen on primary screen
-            window.showFullScreen()
-            print(f"📺 Fullscreen on primary screen")
+            # Default to primary screen with exact geometry
+            screen_geometry = desktop.screenGeometry(0)
+            window.setGeometry(screen_geometry)
+            print(f"📺 Fullscreen on primary screen - exact geometry: {screen_geometry.width()}x{screen_geometry.height()}")
         
-        # Scale image to fit screen while maintaining aspect ratio
-        screen_size = app.primaryScreen().size()
-        if screen > 1:
-            try:
-                from PyQt5.QtWidgets import QDesktopWidget
-                desktop = QDesktopWidget()
-                if screen <= desktop.screenCount():
-                    screen_size = desktop.screenGeometry(screen - 1).size()
-            except:
-                pass
-        
-        # Scale pixmap to fit screen
+        # Scale image to fit the exact screen geometry
         scaled_pixmap = pixmap.scaled(
-            screen_size, 
+            screen_geometry.size(), 
             Qt.KeepAspectRatio, 
             Qt.SmoothTransformation
         )
@@ -827,15 +827,56 @@ def show_image_only_preview(rom_name, mame_dir, auto_close=False, screen=1):
             # Start monitoring after 3 seconds
             QTimer.singleShot(3000, check_mame_process)
         
-        # Show window in fullscreen
+        # Show window with MAME-compatible display sequence (matching working preview)
         window.show()
-        window.raise_()  # Bring to front
+        
+        # Apply the exact sequence from show_preview_standalone
+        window.setGeometry(screen_geometry)
+        window.showFullScreen()  # Add this - your working code uses both setGeometry AND showFullScreen
         window.activateWindow()
+        window.raise_()
+        
+        # Force immediate processing
+        app.processEvents()
+        
+        # Additional aggressive window focusing to combat MAME
+        def force_window_front():
+            """Aggressively bring window to front and keep it there"""
+            # Re-apply geometry to ensure fullscreen
+            window.setGeometry(screen_geometry)
+            window.showFullScreen()  # Force fullscreen again
+            window.raise_()
+            window.activateWindow()
+            window.setFocus()
+            # Force window to top again
+            app.processEvents()
+        
+        # Immediate first forcing
+        force_window_front()
+        
+        # Set up a timer to periodically bring window to front (for MAME compatibility)
+        focus_timer = QTimer()
+        focus_timer.timeout.connect(force_window_front)
+        focus_timer.start(100)  # More aggressive - every 100ms initially
+        
+        # Reduce frequency after 2 seconds, stop after 5 seconds
+        def reduce_focus_frequency():
+            focus_timer.stop()
+            focus_timer.start(500)  # Reduce to every 500ms
+            print("🎯 Reduced focus timer frequency")
+        
+        def stop_focus_timer():
+            focus_timer.stop()
+            print("🎯 Window focus established")
+        
+        QTimer.singleShot(2000, reduce_focus_frequency)
+        QTimer.singleShot(5000, stop_focus_timer)
         
         # Print performance stats
         file_size = os.path.getsize(image_path)
         print(f"📊 Image loaded: {pixmap.width()}x{pixmap.height()}, {file_size:,} bytes")
         print(f"📺 Displaying fullscreen (scaled: {scaled_pixmap.width()}x{scaled_pixmap.height()})")
+        print(f"🎯 Window set to always-on-top for MAME compatibility")
         print(f"⚡ Lightning preview ready! (Any key/gamepad button to close, F/F11 for fullscreen)")
         
         # Run the application
@@ -849,7 +890,7 @@ def show_image_only_preview(rom_name, mame_dir, auto_close=False, screen=1):
         import traceback
         traceback.print_exc()
         return 1
-
+    
 def validate_cache_file(cache_file: str, rom_name: str) -> bool:
     """Fast cache validation - only check essential structure"""
     try:
