@@ -1,8 +1,8 @@
 -- MAME Controls Menu Plugin with F9 hotkey, Start+RB gamepad support, Precaching and Persistent Config
 local exports = {}
 exports.name = "controls"
-exports.version = "0.6"
-exports.description = "MAME Controls Display with Precaching and Persistent Config"
+exports.version = "0.7"
+exports.description = "MAME Controls Display with Precaching, Persistent Config, and Lightning Mode"
 exports.license = "MIT"
 exports.author = { name = "Custom" }
 
@@ -92,7 +92,8 @@ function exports.startplugin()
         single_assign = nil,     -- Single key/button assignment
         hotkey1 = nil,          -- Hotkey 1 assignment  
         hotkey2 = nil,          -- Hotkey 2 assignment
-        show_on_pause = false   -- Show controls when pausing MAME
+        show_on_pause = false,  -- Show controls when pausing MAME
+        lightning_mode = false  -- NEW: Lightning Mode (faster image-only display) - defaults to Normal Mode
     }
     
     -- Configuration variables (will be loaded from file)
@@ -110,6 +111,7 @@ function exports.startplugin()
             file:write("hotkey1=" .. (config.hotkey1 or "nil") .. "\n")
             file:write("hotkey2=" .. (config.hotkey2 or "nil") .. "\n")
             file:write("show_on_pause=" .. tostring(config.show_on_pause or false) .. "\n")
+            file:write("lightning_mode=" .. tostring(config.lightning_mode or false) .. "\n")
             file:close()
             print("Configuration saved to: " .. config_file_path)
             return true
@@ -139,7 +141,7 @@ function exports.startplugin()
                         
                         -- Don't set if value is "nil"
                         if value ~= "nil" then
-                            if key == "show_on_pause" then
+                            if key == "show_on_pause" or key == "lightning_mode" then
                                 config[key] = (value:lower() == "true")
                             else
                                 config[key] = value
@@ -178,6 +180,7 @@ function exports.startplugin()
     print("Hotkey 1: " .. (config.hotkey1 or "None"))
     print("Hotkey 2: " .. (config.hotkey2 or "None"))
     print("Show on Pause: " .. tostring(config.show_on_pause))
+    print("Lightning Mode: " .. tostring(config.lightning_mode))
     
     -- Precaching function (adapted from working older version)
     local function precache_controls(game_name)
@@ -211,7 +214,7 @@ function exports.startplugin()
         end
     end
 
-    -- Function to show controls (with cooldown protection)
+    -- Function to show controls (with cooldown protection and Lightning Mode support)
     local function show_controls()
         -- Get current time (approximate)
         local current_time = os.clock()
@@ -233,7 +236,7 @@ function exports.startplugin()
 
         -- Only proceed if we have a valid game name
         if game_name and game_name ~= "" and game_name ~= "___empty" then
-            print("Showing controls for: " .. game_name)
+            print("Showing controls for: " .. game_name .. " (Lightning Mode: " .. tostring(config.lightning_mode) .. ")")
             showing_controls = true
             last_show_time = current_time
             
@@ -242,8 +245,20 @@ function exports.startplugin()
                 emu.pause()
             end
             
-            -- Run the controls viewer (updated path and executable)
-            local command = string.format('"preview\\mame controls.exe" --preview-only --game %s --screen 1 --clean-preview', game_name)
+            -- Choose command based on Lightning Mode setting
+            local command
+            if config.lightning_mode then
+                -- Lightning Mode: Fast image-only display
+                command = string.format('"preview\\mame controls.exe" --image-only --game %s', game_name)
+                -- command = string.format('python "preview\\mame_controls_main.py" --image-only --game %s', game_name)
+                print("Using Lightning Mode (fast image-only)")
+            else
+                -- Normal Mode: Full preview with screen selection
+                command = string.format('"preview\\mame controls.exe" --preview-only --game %s --clean-preview --screen 1', game_name)
+                -- command = string.format('python "preview\\mame_controls_main.py" --preview-only --game %s --clean-preview --screen 1', game_name)
+                print("Using Normal Mode (full preview)")
+            end
+            
             print("Running: " .. command)
             os.execute(command)
             
@@ -278,44 +293,55 @@ function exports.startplugin()
         if menu_state == "main" then
             if game_name and game_name ~= "" and game_name ~= "___empty" then
                 menu[1] = {"Show Controls for " .. game_name, "", 0}
-                menu[2] = {"Configure Hotkeys", "", 0}
+                menu[2] = {"Configure Settings", "", 0}
                 menu[3] = {"", "", "off"}  -- Separator
-                menu[4] = {"Current Assignments:", "", "off"}
+                menu[4] = {"Current Settings:", "", "off"}
                 menu[5] = {"  Single Assign: " .. format_key_name(config.single_assign), "", "off"}
                 menu[6] = {"  Hotkey 1: " .. format_key_name(config.hotkey1), "", "off"}
                 menu[7] = {"  Hotkey 2: " .. format_key_name(config.hotkey2), "", "off"}
                 menu[8] = {"  Show on Pause: " .. (config.show_on_pause and "Enabled" or "Disabled"), "", "off"}
-                menu[9] = {"", "", "off"}  -- Separator
-                menu[10] = {"Exit Controls: Any Keyboard or XINPUT Key", "", "off"}
+                menu[9] = {"  Lightning Mode: " .. (config.lightning_mode and "Enabled" or "Disabled"), "", "off"}
+                menu[10] = {"", "", "off"}  -- Separator
+                menu[11] = {"Lightning Mode: Fast image-only display", "", "off"}
+                menu[12] = {"Normal Mode: Full preview with options", "", "off"}
+                menu[13] = {"", "", "off"}  -- Separator
+                menu[14] = {"Exit Controls: Any Keyboard or XINPUT Key", "", "off"}
             else
                 menu[1] = {"Show Controls (No ROM loaded)", "", 0}
-                menu[2] = {"Configure Hotkeys", "", 0}
+                menu[2] = {"Configure Settings", "", 0}
                 menu[3] = {"", "", "off"}  -- Separator
-                menu[4] = {"Current Assignments:", "", "off"}
+                menu[4] = {"Current Settings:", "", "off"}
                 menu[5] = {"  Single Assign: " .. format_key_name(config.single_assign), "", "off"}
                 menu[6] = {"  Hotkey 1: " .. format_key_name(config.hotkey1), "", "off"}
                 menu[7] = {"  Hotkey 2: " .. format_key_name(config.hotkey2), "", "off"}
                 menu[8] = {"  Show on Pause: " .. (config.show_on_pause and "Enabled" or "Disabled"), "", "off"}
-                menu[9] = {"", "", "off"}  -- Separator
-                menu[10] = {"Exit Controls: Any Keyboard or XINPUT Key", "", "off"}
+                menu[9] = {"  Lightning Mode: " .. (config.lightning_mode and "Enabled" or "Disabled"), "", "off"}
+                menu[10] = {"", "", "off"}  -- Separator
+                menu[11] = {"Lightning Mode: Fast image-only display", "", "off"}
+                menu[12] = {"Normal Mode: Full preview with options", "", "off"}
+                menu[13] = {"", "", "off"}  -- Separator
+                menu[14] = {"Exit Controls: Any Keyboard or XINPUT Key", "", "off"}
             end
         elseif menu_state == "config" then
             menu[1] = {"← Back to Main Menu", "", 0}
             menu[2] = {"", "", "off"}  -- Separator
-            menu[3] = {"Single Assign: " .. format_key_name(config.single_assign), "", "off"}
-            menu[4] = {"Hotkey 1: " .. format_key_name(config.hotkey1), "", "off"}
-            menu[5] = {"Hotkey 2: " .. format_key_name(config.hotkey2), "", "off"}
-            menu[6] = {"Show on Pause: " .. (config.show_on_pause and "Enabled" or "Disabled"), "", "off"}
-            menu[7] = {"", "", "off"}  -- Separator
-            menu[8] = {"Change Single Assign", "", 0}
-            menu[9] = {"Change Hotkey 1", "", 0}
-            menu[10] = {"Change Hotkey 2", "", 0}
-            menu[11] = {"Toggle Show on Pause", "", 0}
-            menu[12] = {"", "", "off"}  -- Separator
-            menu[13] = {"Clear Single Assign", "", 0}
-            menu[14] = {"Clear Hotkey 1", "", 0}
-            menu[15] = {"Clear Hotkey 2", "", 0}
-            menu[16] = {"Clear All Assignments", "", 0}
+            menu[3] = {"Current Settings:", "", "off"}
+            menu[4] = {"  Single Assign: " .. format_key_name(config.single_assign), "", "off"}
+            menu[5] = {"  Hotkey 1: " .. format_key_name(config.hotkey1), "", "off"}
+            menu[6] = {"  Hotkey 2: " .. format_key_name(config.hotkey2), "", "off"}
+            menu[7] = {"  Show on Pause: " .. (config.show_on_pause and "Enabled" or "Disabled"), "", "off"}
+            menu[8] = {"  Lightning Mode: " .. (config.lightning_mode and "Enabled" or "Disabled"), "", "off"}
+            menu[9] = {"", "", "off"}  -- Separator
+            menu[10] = {"Change Single Assign", "", 0}
+            menu[11] = {"Change Hotkey 1", "", 0}
+            menu[12] = {"Change Hotkey 2", "", 0}
+            menu[13] = {"Toggle Show on Pause", "", 0}
+            menu[14] = {"Toggle Lightning Mode", "", 0}
+            menu[15] = {"", "", "off"}  -- Separator
+            menu[16] = {"Clear Single Assign", "", 0}
+            menu[17] = {"Clear Hotkey 1", "", 0}
+            menu[18] = {"Clear Hotkey 2", "", 0}
+            menu[19] = {"Clear All Assignments", "", 0}
         elseif menu_state == "select_single" or menu_state == "select_hotkey1" or menu_state == "select_hotkey2" then
             menu[1] = {"← Back", "", 0}
             menu[2] = {"", "", "off"}
@@ -421,7 +447,7 @@ function exports.startplugin()
                         return false
                     end
                 elseif index == 2 then
-                    -- Configure Hotkeys
+                    -- Configure Settings
                     menu_state = "config"
                     return true
                 end
@@ -430,43 +456,54 @@ function exports.startplugin()
                     -- Back to main menu
                     menu_state = "main"
                     return true
-                elseif index == 8 then
+                elseif index == 10 then
                     -- Change Single Assign
                     menu_state = "select_single"
                     return true
-                elseif index == 9 then
+                elseif index == 11 then
                     -- Change Hotkey 1
                     menu_state = "select_hotkey1"
                     return true
-                elseif index == 10 then
+                elseif index == 12 then
                     -- Change Hotkey 2
                     menu_state = "select_hotkey2"
                     return true
-                elseif index == 11 then
+                elseif index == 13 then
                     -- Toggle Show on Pause
                     config.show_on_pause = not config.show_on_pause
                     print("Show on Pause: " .. (config.show_on_pause and "Enabled" or "Disabled"))
                     save_config()
                     return true
-                elseif index == 13 then
+                elseif index == 14 then
+                    -- Toggle Lightning Mode
+                    config.lightning_mode = not config.lightning_mode
+                    print("Lightning Mode: " .. (config.lightning_mode and "Enabled" or "Disabled"))
+                    if config.lightning_mode then
+                        print("  → Using fast image-only display")
+                    else
+                        print("  → Using full preview with options")
+                    end
+                    save_config()
+                    return true
+                elseif index == 16 then
                     -- Clear Single Assign
                     config.single_assign = nil
                     print("Single assignment cleared")
                     save_config()
                     return true
-                elseif index == 14 then
+                elseif index == 17 then
                     -- Clear Hotkey 1
                     config.hotkey1 = nil
                     print("Hotkey 1 cleared")
                     save_config()
                     return true
-                elseif index == 15 then
+                elseif index == 18 then
                     -- Clear Hotkey 2
                     config.hotkey2 = nil
                     print("Hotkey 2 cleared")
                     save_config()
                     return true
-                elseif index == 16 then
+                elseif index == 19 then
                     -- Clear All Assignments
                     config.single_assign = nil
                     config.hotkey1 = nil
@@ -684,7 +721,7 @@ function exports.startplugin()
         print("Timer functionality not available, skipping periodic checks")
     end
     
-    print("Controls plugin loaded with precaching, hotkey support, and persistent configuration (legacy API)")
+    print("Controls plugin loaded with precaching, hotkey support, persistent configuration, and Lightning Mode (legacy API)")
 end
 
 return exports
