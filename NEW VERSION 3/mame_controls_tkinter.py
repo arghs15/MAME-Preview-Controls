@@ -1654,28 +1654,55 @@ class MAMEControlConfig(ctk.CTk):
             raise Exception(f"Unexpected error opening file: {e}")
     
     def restart_application(self):
-        """Refresh the application data without restarting"""
+        """Refresh the application data without restarting - FIXED to properly clear cfg cache"""
         try:
             # Create splash window using existing method
             self.splash_window = self.create_splash_window()
             self.update_splash_message("Refreshing application data...")
             
-            # Clear all caches
-            if hasattr(self, 'rom_data_cache'):
-                self.rom_data_cache.clear()
-            if hasattr(self, 'processed_cache'):
-                self.processed_cache.clear()
-            
             # Update splash message
             self.update_splash_message("Reloading configurations...")
             
-            # Reload default controls
+            # Reload default controls FIRST
             self.default_controls, self.original_default_controls = load_default_config(self.mame_dir)
             print(f"Reloaded {len(self.default_controls)} default controls")
             
-            # Reload custom configs
+            # Reload custom configs SECOND
             self.custom_configs = load_custom_configs(self.mame_dir)
             print(f"Reloaded {len(self.custom_configs)} custom configs")
+            
+            # CRITICAL FIX: Clear ALL caches AFTER reloading configs
+            # This ensures any cached processed data that used old cfg mappings is cleared
+            if hasattr(self, 'rom_data_cache'):
+                cleared_count = len(self.rom_data_cache)
+                self.rom_data_cache.clear()
+                print(f"Cleared rom_data_cache ({cleared_count} entries) after config reload")
+            
+            if hasattr(self, 'processed_cache'):
+                cleared_count = len(self.processed_cache)
+                self.processed_cache.clear()
+                print(f"Cleared processed_cache ({cleared_count} entries) after config reload")
+            
+            # ALSO clear the @lru_cache on get_game_data if it exists
+            if hasattr(self.get_game_data, 'cache_clear'):
+                self.get_game_data.cache_clear()
+                print("Cleared LRU cache on get_game_data method after config reload")
+            
+            # ENHANCED: Clear disk cache files to force complete regeneration
+            if hasattr(self, 'cache_dir') and self.cache_dir:
+                try:
+                    import os
+                    cache_files_removed = 0
+                    for filename in os.listdir(self.cache_dir):
+                        if filename.endswith('_cache.json'):
+                            try:
+                                os.remove(os.path.join(self.cache_dir, filename))
+                                cache_files_removed += 1
+                            except Exception as e:
+                                print(f"Error removing cache file {filename}: {e}")
+                    print(f"Removed {cache_files_removed} disk cache files to force cfg updates")
+                except Exception as e:
+                    print(f"Error clearing disk cache: {e}")
             
             # Update splash message
             self.update_splash_message("Reloading game database...")
@@ -1721,8 +1748,11 @@ class MAMEControlConfig(ctk.CTk):
                         self.game_listbox.see(i)
                         self.current_game = rom_name
                         self.selected_line = i + 1
-                        # Refresh the display
-                        self.after(50, lambda: self.display_game_info(rom_name))
+                        
+                        # CRITICAL: Force fresh processing by NOT using any cached data
+                        # This ensures the updated .cfg file mappings are applied
+                        print(f"Forcing fresh display for {rom_name} with updated cfg mappings")
+                        self.after(100, lambda: self.display_game_info(rom_name))
                         break
             
             # Update stats
@@ -1734,12 +1764,13 @@ class MAMEControlConfig(ctk.CTk):
                 self.splash_window = None
             
             # Show success message
-            self.update_status_message("Application data refreshed successfully")
+            self.update_status_message("Application data refreshed successfully (including cfg files)")
             
             # Show a brief notification
             messagebox.showinfo(
                 "Refresh Complete",
-                "All configuration files and game data have been reloaded.",
+                "All configuration files, CFG files, and game data have been reloaded.\n\n"
+                "Updated .cfg file mappings will now be displayed.",
                 parent=self
             )
             
