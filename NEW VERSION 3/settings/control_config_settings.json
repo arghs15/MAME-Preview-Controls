@@ -1,0 +1,12 @@
+{
+  "preferred_preview_screen": 1,
+  "visible_control_types": [
+    "BUTTON"
+  ],
+  "hide_preview_buttons": false,
+  "show_button_names": true,
+  "input_mode": "xinput",
+  "xinput_only_mode": true,
+  "show_directional_alternatives": true,
+  "show_friendly_names": true
+}

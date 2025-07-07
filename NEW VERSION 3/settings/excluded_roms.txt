@@ -33,7 +33,7 @@ Jet Set Willy
 Manic Miner
 Uridium
 International Karate Plus
-Adventures of Batman n Robin
+#Adventures of Batman n Robin
 Alien Soldier
 Batman Returns
 Biker Mice from Mars

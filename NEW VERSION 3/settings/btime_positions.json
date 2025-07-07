@@ -1,0 +1,26 @@
+{
+  "P1_BUTTON1": [
+    635,
+    464
+  ],
+  "P1_JOYSTICK_DOWN": [
+    1024,
+    380
+  ],
+  "P1_JOYSTICK_LEFT": [
+    1024,
+    500
+  ],
+  "P1_JOYSTICK_RIGHT": [
+    1024,
+    440
+  ],
+  "P1_JOYSTICK_UP": [
+    1024,
+    320
+  ],
+  "NO_BUTTONS_NOTIFICATION": [
+    1373,
+    718
+  ]
+}
