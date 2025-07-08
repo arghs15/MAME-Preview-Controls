@@ -5553,7 +5553,7 @@ class MAMEControlConfig(ctk.CTk):
             
             # Common mappings dropdown for quick selection
             common_mappings = [
-                "sf", "ki", "mk", "tekken", "neogeo"
+                "sf", "ki", "mk", "tekken", "tekkent", "neogeo"
             ]
             
             def on_common_select(selection):
@@ -5646,6 +5646,7 @@ class MAMEControlConfig(ctk.CTk):
             ("Killer Instinct", ["ki"]),
             ("Mortal Kombat", ["mk"]),
             ("Tekken", ["tekken"]),
+            ("Tekken Tag", ["tekkent"]),
             ("SNK/Neo Geo", ["neogeo"])
         ]
 
