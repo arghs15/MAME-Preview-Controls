@@ -6608,6 +6608,73 @@ class MAMEControlConfig(ctk.CTk):
                 conn.close()
             return None
     
+    def has_mapping(self, rom_name, target_mappings):
+        """Check if a ROM (including clones) has any of the target mappings"""
+        
+        # Get the game data which should include inherited mappings for clones
+        game_data = self.get_game_data(rom_name)
+        if game_data and 'mappings' in game_data and game_data['mappings']:
+            has_target = any(mapping in game_data['mappings'] for mapping in target_mappings)
+            if has_target:
+                print(f"ROM {rom_name} has mappings {game_data['mappings']} - matches target {target_mappings}")
+            return has_target
+        
+        return False
+
+    def get_games_for_mapping_with_clones(self, mapping_type):
+        """Get all games (including clones) that have the specified mapping - FIXED VERSION"""
+        games = []
+        
+        if mapping_type == "6button":
+            target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
+        else:
+            target_mappings = [mapping_type]
+        
+        print(f"Searching for games with mapping type: {mapping_type} (target mappings: {target_mappings})")
+        
+        for rom_name in self.available_roms:
+            if self.has_mapping(rom_name, target_mappings):
+                # Get game data to get proper name
+                game_data = self.get_game_data(rom_name)
+                if game_data:
+                    game_name = game_data.get('gamename', rom_name)
+                    is_clone = hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup
+                    games.append((rom_name, game_name, is_clone))
+                    
+                    # Debug output for clones
+                    if is_clone:
+                        parent_rom = self.parent_lookup[rom_name]
+                        print(f"Found clone {rom_name} with inherited mappings from parent {parent_rom}")
+                    else:
+                        print(f"Found parent/direct ROM {rom_name} with mappings")
+        
+        print(f"Total games found for {mapping_type}: {len(games)}")
+        return sorted(games, key=lambda x: x[1])
+
+    def get_all_compatible_games_with_clones(self):
+        """Get all fighting games with their appropriate mappings - FIXED VERSION"""
+        all_games = []
+        game_mapping_assignments = {}
+        
+        # Process each mapping type
+        for preset_id, preset_data in self.mapping_presets.items():
+            if preset_id == "6button":
+                target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
+            else:
+                target_mappings = [preset_id]
+            
+            # Find games for this mapping type (including clones)
+            for rom_name in self.available_roms:
+                if rom_name not in game_mapping_assignments and self.has_mapping(rom_name, target_mappings):
+                    game_data = self.get_game_data(rom_name)
+                    if game_data:
+                        game_name = game_data.get('gamename', rom_name)
+                        is_clone = hasattr(self, 'parent_lookup') and rom_name in self.parent_lookup
+                        all_games.append((rom_name, game_name, is_clone, preset_id))
+                        game_mapping_assignments[rom_name] = preset_id
+        
+        return sorted(all_games, key=lambda x: x[1]), game_mapping_assignments
+    
     def create_game_list_with_edit(self, parent_frame, game_list, title_text):
         """Helper function to create a consistent list with edit button for games"""
         # Frame for the list
@@ -10033,18 +10100,18 @@ class MAMEControlConfig(ctk.CTk):
                 # Simple fallback based on player and button number
                 if mame_control.startswith('P1_'):
                     if 'BUTTON1' in mame_control or 'BUTTON2' in mame_control or 'BUTTON3' in mame_control:
-                        tag = ":IN0"
+                        tag = ":INPUTS"
                     else:
-                        tag = ":IN1"
+                        tag = ":EXTRA"
                 elif mame_control.startswith('P2_'):
                     if 'BUTTON1' in mame_control or 'BUTTON2' in mame_control or 'BUTTON3' in mame_control:
-                        tag = ":IN0"
+                        tag = ":INPUTS"
                     elif 'BUTTON6' in mame_control:
-                        tag = ":IN2"
+                        tag = ":INPUTS"  # P2_BUTTON6 is usually in :INPUTS
                     else:
-                        tag = ":IN1"
+                        tag = ":EXTRA"
                 else:
-                    tag = ":IN0"
+                    tag = ":INPUTS"
                 
                 port_info = {
                     'tag': tag,
@@ -10058,22 +10125,35 @@ class MAMEControlConfig(ctk.CTk):
             elif "ZAXIS" in joycode and mame_version == "new":
                 joycode = joycode.replace("ZAXIS", "SLIDER2")
             
-            # Handle defvalue logic - normally matches mask, but some tags are exceptions
-            defvalue = "0"  # Default to 0
+            # CRITICAL FIX: Correct defvalue logic
+            # For most input controls, defvalue should match the mask value
+            defvalue = port_info['mask']  # Default: defvalue = mask
             
-            # For most standard input tags, defvalue should match the mask
-            if port_info['tag'] in [":IN0", ":IN1", ":IN2", ":IN3", ":IN4", ":IN5"]:
-                defvalue = port_info['mask']  # Copy mask to defvalue
-            # For JVS and other special tags, keep defvalue as 0
-            elif port_info['tag'].startswith(":JVS_"):
-                defvalue = "0"  # Keep as 0 for JVS tags
-            # Add other exception tags as needed
+            # Special cases where defvalue should be 0:
+            special_zero_defvalue_tags = [
+                ":JVS_",     # JVS system tags
+                ":MAHJONG",  # Mahjong inputs
+                ":HANAFUDA", # Hanafuda inputs
+                ":KEYPAD",   # Keypad inputs
+            ]
+            
+            # Check if this tag should have defvalue=0
+            for special_tag in special_zero_defvalue_tags:
+                if port_info['tag'].startswith(special_tag):
+                    defvalue = "0"
+                    break
+            
+            # Additional logic: if mask is "0", defvalue should also be "0"
+            if port_info['mask'] == "0":
+                defvalue = "0"
+            
+            print(f"Port data for {mame_control}: tag={port_info['tag']}, mask={port_info['mask']}, defvalue={defvalue}")
             
             return {
                 'tag': port_info['tag'],
                 'type': port_info['type'],
                 'mask': port_info['mask'],
-                'defvalue': defvalue,  # Now uses proper logic
+                'defvalue': defvalue,  # Now uses correct logic: usually matches mask
                 'newseq': joycode
             }
             
@@ -10433,59 +10513,12 @@ class MAMEControlConfig(ctk.CTk):
         # Function to get ALL games from ALL mappings for "All Compatible Games" option
         def get_all_compatible_games():
             """Get all fighting games with their appropriate mappings"""
-            all_games = []
-            game_mapping_assignments = {}
-            
-            # Process each mapping type
-            for preset_id, preset_data in mapping_presets.items():
-                if preset_id == "6button":
-                    target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
-                else:
-                    target_mappings = [preset_id]
-                
-                # Find games for this mapping type
-                for rom_name, rom_data in self.gamedata_json.items():
-                    if rom_name in self.available_roms and 'mappings' in rom_data:
-                        if any(mapping in rom_data['mappings'] for mapping in target_mappings):
-                            if rom_name not in game_mapping_assignments:
-                                game_name = rom_data.get('description', rom_name)
-                                all_games.append((rom_name, game_name, False, preset_id))
-                                game_mapping_assignments[rom_name] = preset_id
-                                
-                                # Add clones
-                                if 'clones' in rom_data:
-                                    for clone_rom, clone_data in rom_data['clones'].items():
-                                        if clone_rom in self.available_roms and clone_rom not in game_mapping_assignments:
-                                            clone_name = clone_data.get('description', f"{clone_rom} (Clone)")
-                                            all_games.append((clone_rom, clone_name, True, preset_id))
-                                            game_mapping_assignments[clone_rom] = preset_id
-            
-            return sorted(all_games, key=lambda x: x[1]), game_mapping_assignments
+            return self.get_all_compatible_games_with_clones()
         
         # Find games with the selected mapping
         def get_games_for_mapping(mapping_type):
             """Get all games (including clones) that have the specified mapping AND exist in user's ROM folder"""
-            games = []
-            
-            if mapping_type == "6button":
-                target_mappings = ["sf", "ki", "darkstalkers", "marvel", "capcom"]
-            else:
-                target_mappings = [mapping_type]
-            
-            for rom_name, rom_data in self.gamedata_json.items():
-                if rom_name in self.available_roms and 'mappings' in rom_data:
-                    if any(mapping in rom_data['mappings'] for mapping in target_mappings):
-                        game_name = rom_data.get('description', rom_name)
-                        games.append((rom_name, game_name, False))
-                        
-                        # Add clones that the user also owns
-                        if 'clones' in rom_data:
-                            for clone_rom, clone_data in rom_data['clones'].items():
-                                if clone_rom in self.available_roms:
-                                    clone_name = clone_data.get('description', f"{clone_rom} (Clone)")
-                                    games.append((clone_rom, clone_name, True))
-            
-            return sorted(games, key=lambda x: x[1])
+            return self.get_games_for_mapping_with_clones(mapping_type)
         
         # Game list frame
         games_list_frame = ctk.CTkFrame(games_card, fg_color=self.theme_colors["background"], corner_radius=4)
