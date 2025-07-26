@@ -238,7 +238,7 @@ class FightstickMapper(ctk.CTk):
         ).pack(padx=15, pady=15, anchor="w")
 
     def create_presets_card(self):
-        """Create mapping presets card"""
+        """Create mapping presets card with enhanced custom layout support"""
         self.presets_card = ctk.CTkFrame(self.content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
         self.presets_card.pack(fill="x", padx=0, pady=(0, 15))
         
@@ -253,14 +253,14 @@ class FightstickMapper(ctk.CTk):
         self.mapping_presets = {
             "6button": {
                 "name": "6-Button Fighting Games (SF/KI/etc)",
-                "description": "Standard 6-button layout for Street Fighter, Killer Instinct, and similar games",
+                "description": "Standard 6-button layout: LP(X), MP(Y), HP(RB), LK(A), MK(B), HK(RT)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Light Punch -> Button 3
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Medium Punch -> Button 4  
-                    "P1_BUTTON3": "JOYCODE_1_BUTTON6",  # Heavy Punch -> Button 6
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",  # Light Kick -> Button 1
-                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",  # Medium Kick -> Button 2
-                    "P1_BUTTON6": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # Heavy Kick -> Slider
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",           # Light Punch -> X
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Medium Punch -> Y
+                    "P1_BUTTON3": "JOYCODE_1_BUTTON6",           # Heavy Punch -> RB
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",           # Light Kick -> A
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",           # Medium Kick -> B
+                    "P1_BUTTON6": "JOYCODE_1_SLIDER2_NEG_SWITCH", # Heavy Kick -> RT (your working trigger)
                     "P2_BUTTON1": "JOYCODE_2_BUTTON3",
                     "P2_BUTTON2": "JOYCODE_2_BUTTON4",
                     "P2_BUTTON3": "JOYCODE_2_BUTTON6", 
@@ -271,14 +271,14 @@ class FightstickMapper(ctk.CTk):
             },
             "mk": {
                 "name": "Mortal Kombat Layout",
-                "description": "6-button Mortal Kombat layout (HP, LP, BL, RN, HK, LK)",
+                "description": "6-button MK layout: HP(RB), LP(X), BL(Y), RN(B), HK(RT), LK(A)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON6",  # High Punch -> Button 6 (RB)
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Block -> Button 4 (Y)
-                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # High Kick -> Slider (RT)
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON3",  # Low Punch -> Button 3 (X)
-                    "P1_BUTTON5": "JOYCODE_1_BUTTON1",  # Low Kick -> Button 1 (A)
-                    "P1_BUTTON6": "JOYCODE_1_BUTTON2",  # Run -> Button 2 (B)
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON6",           # High Punch -> RB
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Block -> Y
+                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH", # High Kick -> RT
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON3",           # Low Punch -> X
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON1",           # Low Kick -> A
+                    "P1_BUTTON6": "JOYCODE_1_BUTTON2",           # Run -> B
                     "P2_BUTTON1": "JOYCODE_2_BUTTON6",
                     "P2_BUTTON2": "JOYCODE_2_BUTTON4",
                     "P2_BUTTON3": "JOYCODE_2_SLIDER2_NEG_SWITCH",
@@ -288,13 +288,13 @@ class FightstickMapper(ctk.CTk):
                 }
             },
             "tekken": {
-                "name": "Tekken Layout",
-                "description": "4-button Tekken layout (LP, RP, LK, RK)",
+                "name": "Tekken Layout", 
+                "description": "4-button Tekken layout: LP(X), RP(Y), LK(A), RK(B)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 3 (X)
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 4 (Y)
-                    "P1_BUTTON3": "JOYCODE_1_BUTTON1",  # Left Kick -> Button 1 (A)
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON2",  # Right Kick -> Button 2 (B)
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",           # Left Punch -> X
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Right Punch -> Y
+                    "P1_BUTTON3": "JOYCODE_1_BUTTON1",           # Left Kick -> A
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON2",           # Right Kick -> B
                     "P2_BUTTON1": "JOYCODE_2_BUTTON3",
                     "P2_BUTTON2": "JOYCODE_2_BUTTON4",
                     "P2_BUTTON3": "JOYCODE_2_BUTTON1",
@@ -303,13 +303,13 @@ class FightstickMapper(ctk.CTk):
             },
             "tekkent": {
                 "name": "Tekken Tag Layout",
-                "description": "5-button Tekken layout (LP, RP, LK, RK, Tag)",
+                "description": "5-button Tekken Tag layout: LP(X), RP(Y), LK(RB), RK(A), Tag(B)",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # Left Punch -> Button 3 (X)
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # Right Punch -> Button 4 (Y)
-                    "P1_BUTTON3": "JOYCODE_1_BUTTON6",  # Left Kick -> Button 6 (RB)
-                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",  # Right Kick -> Button 1 (A)
-                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",  # Tag -> Button 2 (B)
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",           # Left Punch -> X
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Right Punch -> Y
+                    "P1_BUTTON3": "JOYCODE_1_BUTTON6",           # Left Kick -> RB
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON1",           # Right Kick -> A
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON2",           # Tag -> B
                     "P2_BUTTON1": "JOYCODE_2_BUTTON3",
                     "P2_BUTTON2": "JOYCODE_2_BUTTON4",
                     "P2_BUTTON3": "JOYCODE_2_BUTTON6",
@@ -319,7 +319,7 @@ class FightstickMapper(ctk.CTk):
             }
         }
         
-        # Preset selection
+        # Enhanced preset selection with custom layouts
         preset_frame = ctk.CTkFrame(self.presets_card, fg_color=self.theme_colors["background"], corner_radius=4)
         preset_frame.pack(fill="x", padx=15, pady=10)
         
@@ -329,7 +329,38 @@ class FightstickMapper(ctk.CTk):
             font=("Arial", 13, "bold")
         ).pack(side="left", padx=10, pady=10)
         
-        preset_options = ["All Compatible Games"] + [preset["name"] for preset in self.mapping_presets.values()]
+        # Function to get all preset options including custom layouts
+        def get_all_preset_options():
+            """Get all available presets including custom layouts"""
+            options = ["All Compatible Games"]
+            
+            # Add built-in presets
+            for preset_id, preset_data in self.mapping_presets.items():
+                options.append(preset_data["name"])
+            
+            # Add separator and custom layouts if they exist
+            if self.custom_layouts:
+                options.append("--- Custom Layouts ---")
+                for layout_id, layout_data in self.custom_layouts.items():
+                    options.append(f"Custom: {layout_data['name']}")
+            
+            return options
+        
+        # Create dropdown with all preset options
+        preset_options = get_all_preset_options()
+        preset_descriptions = {
+            "All Compatible Games": "Automatically apply the best mapping to ALL compatible fighting games based on their type"
+        }
+        
+        # Add descriptions for built-in presets
+        for preset_id, preset_data in self.mapping_presets.items():
+            preset_descriptions[preset_data["name"]] = preset_data["description"]
+        
+        # Add descriptions for custom layouts
+        for layout_id, layout_data in self.custom_layouts.items():
+            display_name = f"Custom: {layout_data['name']}"
+            preset_descriptions[display_name] = layout_data.get('description', 'Custom layout')
+        
         self.preset_var = tk.StringVar(value=preset_options[0])
         
         self.preset_dropdown = ctk.CTkComboBox(
@@ -345,16 +376,43 @@ class FightstickMapper(ctk.CTk):
         )
         self.preset_dropdown.pack(side="left", padx=10, pady=10)
         
-        # Description label
+        # Custom layout management buttons
+        layout_buttons_frame = ctk.CTkFrame(preset_frame, fg_color="transparent")
+        layout_buttons_frame.pack(side="left", padx=10, pady=10)
+        
+        ctk.CTkButton(
+            layout_buttons_frame,
+            text="Customize",
+            command=self.customize_current_layout,
+            width=100,
+            height=35,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"]
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            layout_buttons_frame,
+            text="Manage",
+            command=self.manage_custom_layouts,
+            width=90,
+            height=35,
+            fg_color=self.theme_colors["secondary"],
+            hover_color=self.theme_colors["primary"]
+        ).pack(side="left", padx=5)
+        
+        # Description label that updates based on selection
         self.description_label = ctk.CTkLabel(
             self.presets_card,
-            text="Automatically apply the best mapping to ALL compatible fighting games based on their type",
+            text=preset_descriptions[preset_options[0]],
             font=("Arial", 12),
             text_color=self.theme_colors["text_dimmed"],
             wraplength=800,
             justify="left"
         )
         self.description_label.pack(padx=15, pady=(0, 15))
+        
+        # Store preset descriptions for easy access
+        self.preset_descriptions = preset_descriptions
 
     def create_game_selection_card(self):
         """Create game selection card"""
@@ -554,6 +612,651 @@ class FightstickMapper(ctk.CTk):
             hover_color="#c82333",
             font=("Arial", 14)
         ).pack(side="right", padx=5)
+
+    # ====================================================================
+    # CUSTOM LAYOUT MANAGEMENT METHODS (Added from main app)
+    # ====================================================================
+
+    def customize_current_layout(self):
+        """Customize the currently selected layout"""
+        selected = self.preset_var.get()
+        
+        # Skip separator items
+        if selected.startswith("---"):
+            messagebox.showinfo("Invalid Selection", "Please select a valid preset to customize.")
+            return
+        
+        if selected.startswith("Custom: "):
+            # Editing existing custom layout
+            custom_name = selected[8:]  # Remove "Custom: " prefix
+            base_mappings = None
+            base_preset = None
+            
+            for layout_id, layout_data in self.custom_layouts.items():
+                if layout_data['name'] == custom_name:
+                    base_mappings = layout_data['mappings']
+                    base_preset = layout_data['base_preset']
+                    break
+                    
+            if not base_mappings:
+                messagebox.showerror("Error", "Custom layout not found.")
+                return
+                
+        elif selected == "All Compatible Games":
+            # For "All Compatible Games", let user pick a base layout
+            messagebox.showinfo("Select Base Layout", "Please select a specific preset first, then customize it.")
+            return
+        else:
+            # Creating new custom layout from built-in preset
+            base_preset = None
+            for preset_id, preset_data in self.mapping_presets.items():
+                if preset_data["name"] == selected:
+                    base_mappings = preset_data['mappings'].copy()
+                    base_preset = preset_id
+                    break
+            
+            if not base_preset:
+                messagebox.showwarning("Invalid Selection", "Please select a valid preset to customize.")
+                return
+        
+        # Show customization dialog
+        result = self.create_button_remapping_dialog(base_mappings, selected)
+        
+        if not result["cancelled"]:
+            # Get save details
+            save_dialog = self.create_layout_save_dialog(selected.replace("Custom: ", ""))
+            if not save_dialog["cancelled"]:
+                # Save the custom layout
+                saved_path = self.save_custom_layout(
+                    save_dialog["name"],
+                    result["mappings"],
+                    base_preset,
+                    save_dialog["description"]
+                )
+                
+                if saved_path:
+                    # Refresh custom layouts
+                    self.load_custom_layouts()
+                    
+                    # Update dropdown options
+                    self.refresh_preset_dropdown()
+                    self.preset_var.set(f"Custom: {save_dialog['name']}")
+                    
+                    messagebox.showinfo("Layout Saved", f"Custom layout '{save_dialog['name']}' saved successfully!")
+                    
+                    # Refresh the UI
+                    self.update_preset_selection(f"Custom: {save_dialog['name']}")
+
+    def manage_custom_layouts(self):
+        """Show dialog to manage (delete/rename) custom layouts"""
+        if not self.custom_layouts:
+            messagebox.showinfo("No Custom Layouts", "No custom layouts found.")
+            return
+        
+        self.show_layout_manager_dialog()
+        
+        # Refresh after managing
+        self.load_custom_layouts()
+        self.refresh_preset_dropdown()
+        
+        # Reset to first option if current selection was deleted
+        current_selection = self.preset_var.get()
+        current_options = self.preset_dropdown.cget("values")
+        if current_selection not in current_options:
+            self.preset_var.set(current_options[0])
+            self.update_preset_selection(current_options[0])
+
+    def refresh_preset_dropdown(self):
+        """Refresh the preset dropdown with current options including custom layouts"""
+        # Get all preset options including custom layouts
+        options = ["All Compatible Games"]
+        
+        # Add built-in presets
+        for preset_id, preset_data in self.mapping_presets.items():
+            options.append(preset_data["name"])
+        
+        # Add separator and custom layouts if they exist
+        if self.custom_layouts:
+            options.append("--- Custom Layouts ---")
+            for layout_id, layout_data in self.custom_layouts.items():
+                options.append(f"Custom: {layout_data['name']}")
+        
+        # Update dropdown
+        self.preset_dropdown.configure(values=options)
+        
+        # Update descriptions
+        self.preset_descriptions = {
+            "All Compatible Games": "Automatically apply the best mapping to ALL compatible fighting games based on their type"
+        }
+        
+        # Add descriptions for built-in presets
+        for preset_id, preset_data in self.mapping_presets.items():
+            self.preset_descriptions[preset_data["name"]] = preset_data["description"]
+        
+        # Add descriptions for custom layouts
+        for layout_id, layout_data in self.custom_layouts.items():
+            display_name = f"Custom: {layout_data['name']}"
+            self.preset_descriptions[display_name] = layout_data.get('description', 'Custom layout')
+
+    def create_button_remapping_dialog(self, current_mappings, preset_name):
+        """Create a dialog for customizing button mappings before applying to games"""
+        
+        # Create the remapping dialog
+        remap_dialog = ctk.CTkToplevel(self)
+        remap_dialog.title(f"Customize {preset_name} Button Layout")
+        remap_dialog.geometry("900x600")
+        remap_dialog.configure(fg_color=self.theme_colors["background"])
+        remap_dialog.transient(self)
+        remap_dialog.grab_set()
+        
+        # Header
+        header_frame = ctk.CTkFrame(remap_dialog, fg_color=self.theme_colors["primary"], corner_radius=0, height=60)
+        header_frame.pack(fill="x", padx=0, pady=0)
+        header_frame.pack_propagate(False)
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=f"Customize {preset_name} Layout",
+            font=("Arial", 18, "bold"),
+            text_color="#ffffff"
+        ).pack(side="left", padx=20, pady=15)
+        
+        # Main content
+        content_frame = ctk.CTkScrollableFrame(
+            remap_dialog, 
+            fg_color="transparent",
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Description
+        desc_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        desc_card.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            desc_card,
+            text="Customize which physical buttons map to each game action. This is useful if your fightstick has a different button layout.",
+            font=("Arial", 13),
+            wraplength=800,
+            justify="left"
+        ).pack(padx=15, pady=15, anchor="w")
+        
+        available_buttons = [
+            # Standard XInput buttons - these mappings are consistent in MAME
+            ("JOYCODE_1_BUTTON1", "Button 1 (A)"),           # XInput A button
+            ("JOYCODE_1_BUTTON2", "Button 2 (B)"),           # XInput B button  
+            ("JOYCODE_1_BUTTON3", "Button 3 (X)"),           # XInput X button
+            ("JOYCODE_1_BUTTON4", "Button 4 (Y)"),           # XInput Y button
+            ("JOYCODE_1_BUTTON5", "Button 5 (LB)"),          # XInput Left Bumper
+            ("JOYCODE_1_BUTTON6", "Button 6 (RB)"),          # XInput Right Bumper
+            
+            # Analog triggers - both options
+            ("JOYCODE_1_SLIDER1_NEG_SWITCH", "Trigger 1 (LT)"),     # XInput Left Trigger
+            ("JOYCODE_1_SLIDER2_NEG_SWITCH", "Trigger 2 (RT)"),     # XInput Right Trigger (your working one)
+            
+            # Additional buttons if available on controller
+            ("JOYCODE_1_BUTTON7", "Button 7 (Back)"),        # XInput Back/Select button
+            ("JOYCODE_1_BUTTON8", "Button 8 (Start)"),       # XInput Start button
+            ("JOYCODE_1_BUTTON9", "Button 9 (LS)"),          # XInput Left Stick Click
+            ("JOYCODE_1_BUTTON10", "Button 10 (RS)"),        # XInput Right Stick Click
+        ]
+        
+        # Mapping configuration card
+        mapping_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        mapping_card.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            mapping_card,
+            text="Button Mappings",
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        # Create mapping grid
+        mapping_frame = ctk.CTkFrame(mapping_card, fg_color="transparent")
+        mapping_frame.pack(fill="x", padx=15, pady=(0, 15))
+        
+        # Headers
+        header_frame = ctk.CTkFrame(mapping_frame, fg_color=self.theme_colors["primary"], corner_radius=4)
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        ctk.CTkLabel(header_frame, text="Game Action", font=("Arial", 13, "bold"), text_color="white").pack(side="left", padx=20, pady=8)
+        ctk.CTkLabel(header_frame, text="Physical Button", font=("Arial", 13, "bold"), text_color="white").pack(side="right", padx=20, pady=8)
+        
+        # Store the dropdown variables
+        dropdown_vars = {}
+        
+        # Game action names for better display
+        action_names = {
+            "P1_BUTTON1": "Light Punch",
+            "P1_BUTTON2": "Medium Punch", 
+            "P1_BUTTON3": "Heavy Punch",
+            "P1_BUTTON4": "Light Kick",
+            "P1_BUTTON5": "Medium Kick",
+            "P1_BUTTON6": "Heavy Kick",
+            "P2_BUTTON1": "P2 Light Punch",
+            "P2_BUTTON2": "P2 Medium Punch",
+            "P2_BUTTON3": "P2 Heavy Punch", 
+            "P2_BUTTON4": "P2 Light Kick",
+            "P2_BUTTON5": "P2 Medium Kick",
+            "P2_BUTTON6": "P2 Heavy Kick"
+        }
+        
+        # For Mortal Kombat
+        if "mortal" in preset_name.lower() or "mk" in preset_name.lower():
+            action_names.update({
+                "P1_BUTTON1": "High Punch",
+                "P1_BUTTON2": "Block",
+                "P1_BUTTON3": "High Kick", 
+                "P1_BUTTON4": "Low Punch",
+                "P1_BUTTON5": "Low Kick",
+                "P1_BUTTON6": "Run"
+            })
+        
+        # For Tekken
+        if "tekken" in preset_name.lower():
+            action_names.update({
+                "P1_BUTTON1": "Left Punch",
+                "P1_BUTTON2": "Right Punch",
+                "P1_BUTTON3": "Left Kick",
+                "P1_BUTTON4": "Right Kick",
+                "P1_BUTTON5": "Tag" if "tag" in preset_name.lower() else "Special"
+            })
+        
+        # Create dropdowns for each mapping
+        for mame_control, current_joycode in current_mappings.items():
+            if mame_control.startswith('P1_'):  # Only show P1 controls in the UI
+                row_frame = ctk.CTkFrame(mapping_frame, fg_color=self.theme_colors["background"], corner_radius=4)
+                row_frame.pack(fill="x", pady=2)
+                
+                # Action name
+                action_name = action_names.get(mame_control, mame_control)
+                ctk.CTkLabel(
+                    row_frame,
+                    text=action_name,
+                    font=("Arial", 13),
+                    anchor="w"
+                ).pack(side="left", padx=20, pady=8)
+                
+                # Find current selection
+                current_selection = None
+                for button_code, button_name in available_buttons:
+                    if button_code == current_joycode:
+                        current_selection = button_name
+                        break
+                
+                if current_selection is None:
+                    current_selection = current_joycode  # Fallback to raw code
+                
+                # Dropdown for button selection
+                button_var = tk.StringVar(value=current_selection)
+                dropdown_vars[mame_control] = button_var
+                
+                button_values = [name for _, name in available_buttons]
+                button_dropdown = ctk.CTkComboBox(
+                    row_frame,
+                    values=button_values,
+                    variable=button_var,
+                    width=200,
+                    fg_color=self.theme_colors["card_bg"],
+                    button_color=self.theme_colors["primary"],
+                    button_hover_color=self.theme_colors["secondary"],
+                    dropdown_fg_color=self.theme_colors["card_bg"]
+                )
+                button_dropdown.pack(side="right", padx=20, pady=8)
+        
+        # Quick preset buttons
+        presets_frame = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        presets_frame.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            presets_frame,
+            text="Quick Layouts",
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        quick_frame = ctk.CTkFrame(presets_frame, fg_color="transparent")
+        quick_frame.pack(fill="x", padx=15, pady=(0, 15))
+        
+        def apply_standard_layout():
+            """Apply standard 6-button fightstick layout - shows current working mapping"""
+            standard_layout = {
+                "P1_BUTTON1": "Button 3 (X)",           # Light Punch -> X
+                "P1_BUTTON2": "Button 4 (Y)",           # Medium Punch -> Y  
+                "P1_BUTTON3": "Button 6 (RB)",          # Heavy Punch -> Right Bumper
+                "P1_BUTTON4": "Button 1 (A)",           # Light Kick -> A
+                "P1_BUTTON5": "Button 2 (B)",           # Medium Kick -> B
+                "P1_BUTTON6": "Trigger 2 (RT)"          # Heavy Kick -> Right Trigger (this is your working one)
+            }
+            for control, button_name in standard_layout.items():
+                if control in dropdown_vars:
+                    dropdown_vars[control].set(button_name)
+
+        def apply_alternative_layout():
+            """Apply alternative layout using different buttons"""
+            alt_layout = {
+                "P1_BUTTON1": "Button 3 (X)",
+                "P1_BUTTON2": "Button 4 (Y)",
+                "P1_BUTTON3": "Button 5 (LB)",          # Heavy Punch -> Left Bumper instead of RB
+                "P1_BUTTON4": "Button 1 (A)",
+                "P1_BUTTON5": "Button 2 (B)",
+                "P1_BUTTON6": "Button 6 (RB)"           # Heavy Kick -> Right Bumper instead of RT
+            }
+            for control, button_name in alt_layout.items():
+                if control in dropdown_vars:
+                    dropdown_vars[control].set(button_name)
+        
+        ctk.CTkButton(
+            quick_frame,
+            text="Standard Layout",
+            command=apply_standard_layout,
+            width=140,
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["button_hover"]
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            quick_frame,
+            text="Alternative Layout",
+            command=apply_alternative_layout,
+            width=140,
+            fg_color=self.theme_colors["secondary"],
+            hover_color=self.theme_colors["primary"]
+        ).pack(side="left", padx=5)
+        
+        # Bottom buttons
+        buttons_frame = ctk.CTkFrame(remap_dialog, height=70, fg_color=self.theme_colors["card_bg"], corner_radius=0)
+        buttons_frame.pack(fill="x", side="bottom", padx=0, pady=0)
+        buttons_frame.pack_propagate(False)
+        
+        button_container = ctk.CTkFrame(buttons_frame, fg_color="transparent")
+        button_container.pack(fill="both", expand=True, padx=20, pady=15)
+        
+        # Store result
+        result = {"mappings": None, "cancelled": True}
+        
+        def apply_custom_mappings():
+            """Apply the customized mappings"""
+            # Convert dropdown selections back to joycodes
+            new_mappings = {}
+            button_name_to_code = {name: code for code, name in available_buttons}
+            
+            for mame_control, var in dropdown_vars.items():
+                selected_name = var.get()
+                joycode = button_name_to_code.get(selected_name, selected_name)
+                new_mappings[mame_control] = joycode
+                
+                # Also update P2 controls if they exist in original mappings
+                p2_control = mame_control.replace("P1_", "P2_")
+                if p2_control in current_mappings:
+                    p2_joycode = joycode.replace("JOYCODE_1_", "JOYCODE_2_")
+                    new_mappings[p2_control] = p2_joycode
+            
+            result["mappings"] = new_mappings
+            result["cancelled"] = False
+            remap_dialog.destroy()
+        
+        def cancel_remapping():
+            """Cancel the remapping"""
+            result["cancelled"] = True
+            remap_dialog.destroy()
+        
+        # Apply button
+        ctk.CTkButton(
+            button_container,
+            text="Apply Custom Layout",
+            command=apply_custom_mappings,
+            width=180,
+            height=40,
+            fg_color=self.theme_colors["success"],
+            hover_color="#218838",
+            font=("Arial", 14, "bold")
+        ).pack(side="right", padx=5)
+        
+        # Cancel button
+        ctk.CTkButton(
+            button_container,
+            text="Cancel",
+            command=cancel_remapping,
+            width=120,
+            height=40,
+            fg_color=self.theme_colors["danger"],
+            hover_color="#c82333",
+            font=("Arial", 14)
+        ).pack(side="right", padx=5)
+        
+        # Center dialog
+        remap_dialog.update_idletasks()
+        width = remap_dialog.winfo_width()
+        height = remap_dialog.winfo_height()
+        x = (remap_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (remap_dialog.winfo_screenheight() // 2) - (height // 2)
+        remap_dialog.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Wait for dialog to close
+        remap_dialog.wait_window()
+        
+        return result
+
+    def create_layout_save_dialog(self, base_name):
+        """Dialog to get name and description for saving custom layout"""
+        save_dialog = ctk.CTkToplevel(self)
+        save_dialog.title("Save Custom Layout")
+        save_dialog.geometry("400x300")
+        save_dialog.configure(fg_color=self.theme_colors["background"])
+        save_dialog.transient(self)
+        save_dialog.grab_set()
+        
+        # Content
+        ctk.CTkLabel(
+            save_dialog,
+            text="Save Custom Layout",
+            font=("Arial", 16, "bold")
+        ).pack(pady=20)
+        
+        # Name field
+        name_frame = ctk.CTkFrame(save_dialog, fg_color="transparent")
+        name_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(name_frame, text="Layout Name:", font=("Arial", 13)).pack(anchor="w")
+        name_var = tk.StringVar(value=f"My {base_name} Layout")
+        name_entry = ctk.CTkEntry(name_frame, textvariable=name_var, width=300)
+        name_entry.pack(fill="x", pady=5)
+        
+        # Description field
+        desc_frame = ctk.CTkFrame(save_dialog, fg_color="transparent")
+        desc_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(desc_frame, text="Description (optional):", font=("Arial", 13)).pack(anchor="w")
+        desc_var = tk.StringVar(value=f"Custom layout based on {base_name}")
+        desc_entry = ctk.CTkEntry(desc_frame, textvariable=desc_var, width=300)
+        desc_entry.pack(fill="x", pady=5)
+        
+        # Result storage
+        result = {"name": "", "description": "", "cancelled": True}
+        
+        # Buttons
+        button_frame = ctk.CTkFrame(save_dialog, fg_color="transparent")
+        button_frame.pack(pady=20)
+        
+        def save_layout():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Invalid Name", "Please enter a layout name.", parent=save_dialog)
+                return
+            
+            result["name"] = name
+            result["description"] = desc_var.get().strip()
+            result["cancelled"] = False
+            save_dialog.destroy()
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Save Layout",
+            command=save_layout,
+            fg_color=self.theme_colors["success"]
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            command=save_dialog.destroy,
+            fg_color=self.theme_colors["danger"]
+        ).pack(side="left", padx=10)
+        
+        # Center and wait
+        save_dialog.update_idletasks()
+        width = save_dialog.winfo_width()
+        height = save_dialog.winfo_height()
+        x = (save_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (save_dialog.winfo_screenheight() // 2) - (height // 2)
+        save_dialog.geometry(f'{width}x{height}+{x}+{y}')
+        
+        save_dialog.wait_window()
+        return result
+
+    def show_layout_manager_dialog(self):
+        """Dialog to manage existing custom layouts"""
+        manager_dialog = ctk.CTkToplevel(self)
+        manager_dialog.title("Manage Custom Layouts")
+        manager_dialog.geometry("600x400")
+        manager_dialog.configure(fg_color=self.theme_colors["background"])
+        manager_dialog.transient(self)
+        manager_dialog.grab_set()
+        
+        # Header
+        ctk.CTkLabel(
+            manager_dialog,
+            text="Manage Custom Layouts",
+            font=("Arial", 16, "bold")
+        ).pack(pady=20)
+        
+        # Layout list
+        list_frame = ctk.CTkFrame(manager_dialog)
+        list_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Create listbox for layouts
+        layout_listbox = tk.Listbox(
+            list_frame,
+            font=("Arial", 12),
+            height=10,
+            background=self.theme_colors["card_bg"],
+            foreground=self.theme_colors["text"],
+            selectbackground=self.theme_colors["primary"]
+        )
+        layout_listbox.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        # Populate with custom layouts
+        layout_ids = []
+        for layout_id, layout_data in self.custom_layouts.items():
+            created_date = layout_data.get('created_date', 'Unknown date')
+            display_text = f"{layout_data['name']} - {created_date}"
+            layout_listbox.insert(tk.END, display_text)
+            layout_ids.append(layout_id)
+        
+        # Scrollbar
+        scrollbar = ctk.CTkScrollbar(list_frame, orientation="vertical", command=layout_listbox.yview)
+        scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
+        layout_listbox.configure(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = ctk.CTkFrame(manager_dialog, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=20)
+        
+        def delete_selected():
+            selection = layout_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a layout to delete.", parent=manager_dialog)
+                return
+            
+            idx = selection[0]
+            layout_id = layout_ids[idx]
+            layout_name = self.custom_layouts[layout_id]['name']
+            
+            if messagebox.askyesno("Confirm Delete", f"Delete custom layout '{layout_name}'?", parent=manager_dialog):
+                if self.delete_custom_layout(layout_id):
+                    # Refresh the layouts
+                    self.load_custom_layouts()
+                    manager_dialog.destroy()
+                    messagebox.showinfo("Deleted", f"Custom layout '{layout_name}' deleted.")
+                else:
+                    messagebox.showerror("Error", "Failed to delete layout.", parent=manager_dialog)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Delete Selected",
+            command=delete_selected,
+            fg_color=self.theme_colors["danger"],
+            hover_color="#c82333"
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Close",
+            command=manager_dialog.destroy,
+            fg_color=self.theme_colors["primary"]
+        ).pack(side="right", padx=10)
+        
+        # Center dialog
+        manager_dialog.update_idletasks()
+        width = manager_dialog.winfo_width()
+        height = manager_dialog.winfo_height()
+        x = (manager_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (manager_dialog.winfo_screenheight() // 2) - (height // 2)
+        manager_dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+    def save_custom_layout(self, layout_name, mappings, base_preset, description=""):
+        """Save a custom fightstick layout to file"""
+        try:
+            # Ensure directory exists
+            if not self.layouts_dir:
+                return None
+                
+            os.makedirs(self.layouts_dir, exist_ok=True)
+            
+            # Clean filename
+            safe_filename = "".join(c for c in layout_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_filename = safe_filename.replace(' ', '_')
+            
+            layout_data = {
+                "name": layout_name,
+                "description": description,
+                "base_preset": base_preset,
+                "created_date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "mappings": mappings,
+                "version": "1.0"
+            }
+            
+            filepath = os.path.join(self.layouts_dir, f"{safe_filename}.json")
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(layout_data, f, indent=2)
+            
+            print(f"Saved custom layout: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            print(f"Error saving layout: {e}")
+            return None
+
+    def delete_custom_layout(self, layout_id):
+        """Delete a custom layout file"""
+        try:
+            filepath = os.path.join(self.layouts_dir, f"{layout_id}.json")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                print(f"Deleted custom layout: {layout_id}")
+                return True
+            return False
+        except Exception as e:
+            print(f"Error deleting layout: {e}")
+            return False
+
+    # ====================================================================
+    # EXISTING METHODS (Keep all the original methods)
+    # ====================================================================
 
     def select_mame_directory(self):
         """Select MAME directory"""
@@ -796,24 +1499,24 @@ class FightstickMapper(ctk.CTk):
             # Only create if it doesn't exist
             if not os.path.exists(mappings_file):
                 template_content = """# User ROM Mappings
-    # Add your custom ROM mappings here
-    # Format: rom_name = mapping_type
-    # 
-    # Available mapping types:
-    #   sf      = 6-button Street Fighter layout (LP, MP, HP, LK, MK, HK)
-    #   mk      = Mortal Kombat layout (HP, LP, BL, RN, HK, LK)
-    #   tekken  = 4-button Tekken layout (LP, RP, LK, RK)
-    #   tekkent = 5-button Tekken Tag layout (LP, RP, LK, RK, Tag)
-    #
-    # Examples:
-    # mygame = sf
-    # anothergame = mk
-    # tekken8 = tekken
-    #
-    # Lines starting with # are comments and will be ignored
-    # Empty lines are also ignored
+# Add your custom ROM mappings here
+# Format: rom_name = mapping_type
+# 
+# Available mapping types:
+#   sf      = 6-button Street Fighter layout (LP, MP, HP, LK, MK, HK)
+#   mk      = Mortal Kombat layout (HP, LP, BL, RN, HK, LK)
+#   tekken  = 4-button Tekken layout (LP, RP, LK, RK)
+#   tekkent = 5-button Tekken Tag layout (LP, RP, LK, RK, Tag)
+#
+# Examples:
+# mygame = sf
+# anothergame = mk
+# tekken8 = tekken
+#
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
 
-    """
+"""
                 
                 with open(mappings_file, 'w', encoding='utf-8') as f:
                     f.write(template_content)
@@ -890,8 +1593,98 @@ class FightstickMapper(ctk.CTk):
             self.status_text.delete("1.0", tk.END)
             self.status_text.insert("1.0", error_msg)
 
+    def get_display_name_for_rom(self, rom_name):
+        """Get enhanced display name showing clone relationships"""
+        
+        # Get base description
+        if rom_name in self.gamedata_json:
+            base_description = self.gamedata_json[rom_name].get('description', rom_name)
+        else:
+            base_description = rom_name
+        
+        # Check if this ROM is a clone
+        parent_rom = self.find_parent_rom(rom_name)
+        if parent_rom:
+            # Get parent description for nicer display
+            if parent_rom in self.gamedata_json:
+                parent_description = self.gamedata_json[parent_rom].get('description', parent_rom)
+                # Extract just the game name (before first parenthesis)
+                parent_game_name = parent_description.split('(')[0].strip()
+            else:
+                parent_game_name = parent_rom.upper()
+            
+            return f"{base_description} [Clone of {parent_game_name}]"
+        
+        return base_description
+
+    def is_rom_clone(self, rom_name):
+        """Check if a ROM is a clone"""
+        return self.find_parent_rom(rom_name) is not None
+
+    def get_games_for_mapping_enhanced(self, mapping_type):
+        """Enhanced version that includes clone information and better sorting"""
+        games = []
+        
+        # Define which mappings each game type should have
+        mapping_indicators = {
+            "6button": ["sf", "ki", "darkstalkers", "marvel", "capcom"],
+            "mk": ["mk"],
+            "tekken": ["tekken"],
+            "tekkent": ["tekkent"]
+        }
+        
+        target_mappings = mapping_indicators.get(mapping_type, [mapping_type])
+        
+        # Check available ROMs
+        for rom_name in self.available_roms:
+            # Check if ROM has matching mapping in gamedata
+            has_mapping = False
+            game_name = rom_name
+            is_clone = self.is_rom_clone(rom_name)
+            
+            if rom_name in self.gamedata_json:
+                rom_data = self.gamedata_json[rom_name]
+                
+                # Check for mappings
+                rom_mappings = rom_data.get('mappings', [])
+                if any(mapping in rom_mappings for mapping in target_mappings):
+                    has_mapping = True
+            
+            # Add some common fighting games by name if not found in mappings
+            if not has_mapping:
+                rom_lower = rom_name.lower()
+                if mapping_type == "6button" and any(term in rom_lower for term in ["sf", "street", "fighter", "xmen", "marvel", "darkstalkers", "vampire"]):
+                    has_mapping = True
+                elif mapping_type == "mk" and any(term in rom_lower for term in ["mk", "mortal", "kombat"]):
+                    has_mapping = True
+                elif mapping_type == "tekken" and "tekken" in rom_lower and "tag" not in rom_lower:
+                    has_mapping = True
+                elif mapping_type == "tekkent" and "tekken" in rom_lower and "tag" in rom_lower:
+                    has_mapping = True
+            
+            if has_mapping:
+                # Get enhanced display name
+                display_name = self.get_display_name_for_rom(rom_name)
+                games.append((rom_name, display_name, is_clone))
+        
+        # Enhanced sorting: Parents first, then clones, alphabetically within each group
+        def sort_key(game_tuple):
+            rom_name, display_name, is_clone = game_tuple
+            
+            # Primary sort: parents before clones
+            clone_priority = 1 if is_clone else 0
+            
+            # Secondary sort: alphabetical by display name
+            alpha_sort = display_name.lower()
+            
+            return (clone_priority, alpha_sort)
+        
+        return sorted(games, key=sort_key)
+
+    # Update your update_preset_selection method to use enhanced display:
+
     def update_preset_selection(self, choice):
-        """Update game list based on preset selection"""
+        """Update game list based on preset selection with enhanced clone display"""
         self.games_listbox.delete(0, tk.END)
         self.current_games = []
         
@@ -899,15 +1692,44 @@ class FightstickMapper(ctk.CTk):
             self.games_listbox.insert(tk.END, "No MAME directory set or no ROMs found")
             return
         
+        # Update description label
+        self.description_label.configure(text=self.preset_descriptions.get(choice, ""))
+        
+        # Skip separator items
+        if choice.startswith("---"):
+            return
+        
         # Find games based on mapping type
         games_found = []
         
         if choice == "All Compatible Games":
-            # Show all compatible games from all presets
+            # Show all compatible games from all presets with grouping
+            preset_groups = {}
+            
             for preset_id, preset_data in self.mapping_presets.items():
-                preset_games = self.get_games_for_mapping(preset_id)
-                for rom_name, game_name, is_clone in preset_games:
-                    games_found.append((rom_name, game_name, is_clone, preset_id))
+                preset_games = self.get_games_for_mapping_enhanced(preset_id)
+                preset_groups[preset_data["name"]] = preset_games
+                
+                for rom_name, display_name, is_clone in preset_games:
+                    games_found.append((rom_name, display_name, is_clone, preset_id))
+        
+        elif choice.startswith("Custom: "):
+            # Handle custom layout selection
+            custom_name = choice[8:]
+            custom_layout = None
+            
+            for layout_id, layout_data in self.custom_layouts.items():
+                if layout_data['name'] == custom_name:
+                    custom_layout = layout_data
+                    break
+            
+            if custom_layout:
+                # Get the base preset to determine which games to show
+                base_preset = custom_layout['base_preset']
+                if base_preset in self.mapping_presets:
+                    preset_games = self.get_games_for_mapping_enhanced(base_preset)
+                    for rom_name, display_name, is_clone in preset_games:
+                        games_found.append((rom_name, display_name, is_clone, f"custom_{custom_name}"))
         else:
             # Single preset mode
             selected_preset = None
@@ -917,29 +1739,46 @@ class FightstickMapper(ctk.CTk):
                     break
             
             if selected_preset:
-                preset_games = self.get_games_for_mapping(selected_preset)
-                for rom_name, game_name, is_clone in preset_games:
-                    games_found.append((rom_name, game_name, is_clone, selected_preset))
+                preset_games = self.get_games_for_mapping_enhanced(selected_preset)
+                for rom_name, display_name, is_clone in preset_games:
+                    games_found.append((rom_name, display_name, is_clone, selected_preset))
         
-        # Populate listbox
+        # Populate listbox with enhanced display
         if not games_found:
             self.games_listbox.insert(tk.END, "No compatible games found")
         else:
             if choice == "All Compatible Games":
-                # Group by preset type
+                # Group by preset type with enhanced display
                 games_by_type = {}
-                for rom_name, game_name, is_clone, preset_id in games_found:
-                    preset_name = self.mapping_presets[preset_id]["name"]
+                for rom_name, display_name, is_clone, preset_id in games_found:
+                    if preset_id.startswith("custom_"):
+                        preset_name = f"Custom: {preset_id[7:]}"
+                    else:
+                        preset_name = self.mapping_presets[preset_id]["name"]
+                    
                     if preset_name not in games_by_type:
                         games_by_type[preset_name] = []
-                    games_by_type[preset_name].append((rom_name, game_name, is_clone, preset_id))
+                    games_by_type[preset_name].append((rom_name, display_name, is_clone, preset_id))
                 
                 for preset_name, preset_games in games_by_type.items():
-                    self.games_listbox.insert(tk.END, f"--- {preset_name} ({len(preset_games)} games) ---")
-                    for rom_name, game_name, is_clone, preset_id in preset_games:
-                        display_text = f"  {rom_name} - {game_name or rom_name}"
+                    # Count parents and clones
+                    parent_count = sum(1 for _, _, is_clone, _ in preset_games if not is_clone)
+                    clone_count = sum(1 for _, _, is_clone, _ in preset_games if is_clone)
+                    
+                    if clone_count > 0:
+                        header_text = f"--- {preset_name} ({parent_count} games, {clone_count} clones) ---"
+                    else:
+                        header_text = f"--- {preset_name} ({parent_count} games) ---"
+                    
+                    self.games_listbox.insert(tk.END, header_text)
+                    
+                    for rom_name, display_name, is_clone, preset_id in preset_games:
+                        # Indent clones slightly
                         if is_clone:
-                            display_text += " [Clone]"
+                            display_text = f"    {rom_name} - {display_name}"
+                        else:
+                            display_text = f"  {rom_name} - {display_name}"
+                        
                         self.games_listbox.insert(tk.END, display_text)
                 
                 # Select all non-header items
@@ -948,11 +1787,9 @@ class FightstickMapper(ctk.CTk):
                     if not item_text.startswith("---"):
                         self.games_listbox.selection_set(i)
             else:
-                # Single preset display
-                for rom_name, game_name, is_clone, preset_id in games_found:
-                    display_text = f"{rom_name} - {game_name or rom_name}"
-                    if is_clone:
-                        display_text += " [Clone]"
+                # Single preset display - simple and clean
+                for rom_name, display_name, is_clone, preset_id in games_found:
+                    display_text = f"{rom_name} - {display_name}"
                     self.games_listbox.insert(tk.END, display_text)
                 
                 self.games_listbox.select_set(0, tk.END)
@@ -1022,7 +1859,7 @@ class FightstickMapper(ctk.CTk):
         self.games_listbox.select_clear(0, tk.END)
 
     def apply_fightstick_mappings(self):
-        """Apply fightstick mappings to selected games"""
+        """Apply fightstick mappings to selected games with enhanced custom layout support"""
         if not self.mame_dir:
             messagebox.showerror("Error", "Please set MAME directory first")
             return
@@ -1047,13 +1884,41 @@ class FightstickMapper(ctk.CTk):
                     listbox_index += 1
                 
                 if listbox_index in selected_indices:
+                    if preset_id.startswith("custom_"):
+                        preset_name = f"Custom: {preset_id[7:]}"
+                    else:
+                        preset_name = self.mapping_presets[preset_id]["name"]
+                    
                     games_to_process.append({
                         'rom_name': rom_name,
                         'preset_id': preset_id,
-                        'preset_name': self.mapping_presets[preset_id]["name"]
+                        'preset_name': preset_name
                     })
                 
                 listbox_index += 1
+        elif selected_display_name.startswith("Custom: "):
+            # Custom layout mode
+            custom_name = selected_display_name[8:]
+            custom_layout = None
+            
+            for layout_id, layout_data in self.custom_layouts.items():
+                if layout_data['name'] == custom_name:
+                    custom_layout = layout_data
+                    break
+            
+            if not custom_layout:
+                messagebox.showerror("Error", "Custom layout not found.")
+                return
+            
+            # Get selected games
+            for index in selected_indices:
+                if index < len(self.current_games):
+                    rom_name = self.current_games[index][0]
+                    games_to_process.append({
+                        'rom_name': rom_name,
+                        'preset_id': f"custom_{custom_name}",
+                        'preset_name': f"Custom: {custom_name}"
+                    })
         else:
             # Single preset mode
             selected_preset = None
@@ -1098,7 +1963,24 @@ class FightstickMapper(ctk.CTk):
                 preset_id = game_info['preset_id']
                 preset_name = game_info['preset_name']
                 
-                button_mappings = self.mapping_presets[preset_id]['mappings']
+                # Get the mappings for this specific preset
+                if preset_id.startswith("custom_"):
+                    # Use custom layout mappings
+                    custom_name = preset_id[7:]  # Remove "custom_" prefix
+                    custom_layout = None
+                    
+                    for layout_id, layout_data in self.custom_layouts.items():
+                        if layout_data['name'] == custom_name:
+                            custom_layout = layout_data
+                            break
+                    
+                    if custom_layout:
+                        button_mappings = custom_layout['mappings']
+                    else:
+                        raise Exception(f"Custom layout '{custom_name}' not found")
+                else:
+                    # Use built-in preset mappings
+                    button_mappings = self.mapping_presets[preset_id]['mappings']
                 
                 result = self.configure_game_fightstick_mapping(
                     rom_name,
@@ -1131,9 +2013,166 @@ class FightstickMapper(ctk.CTk):
         completion_msg = f"Processed {processed_count} games successfully.\nErrors: {error_count}"
         messagebox.showinfo("Configuration Complete", completion_msg)
 
+    def find_parent_rom(self, clone_rom_name):
+        """Find the parent ROM for a clone by checking gamedata.json structure"""
+        
+        # Method 1: Check if clone has explicit parent/cloneof field
+        if clone_rom_name in self.gamedata_json:
+            rom_data = self.gamedata_json[clone_rom_name]
+            if 'parent' in rom_data:
+                return rom_data['parent']
+            if 'cloneof' in rom_data:
+                return rom_data['cloneof']
+        
+        # Method 2: Search through all ROMs to find where this clone is listed
+        for potential_parent, parent_data in self.gamedata_json.items():
+            if 'clones' in parent_data and isinstance(parent_data['clones'], dict):
+                if clone_rom_name in parent_data['clones']:
+                    print(f"  Found {clone_rom_name} as clone of {potential_parent}")
+                    return potential_parent
+        
+        # Method 3: Fallback to common patterns if not found in structure
+        common_parents = {
+            'sf2rb': 'sf2ce',      # Rainbow Edition -> Champion Edition
+            'sf2rb2': 'sf2ce',     
+            'sf2rb3': 'sf2ce',     
+            'sf2red': 'sf2ce',     
+            'sf2reda': 'sf2ce',    
+            'sf2ce': 'sf2',        # Champion Edition -> Original
+            'sf2hf': 'sf2',        # Hyper Fighting -> Original
+            'sf2t': 'sf2',         # Turbo -> Original
+        }
+        
+        parent = common_parents.get(clone_rom_name, None)
+        if parent:
+            print(f"  Using fallback parent mapping: {clone_rom_name} -> {parent}")
+        
+        return parent
+
+    def get_control_data_with_parent_fallback(self, rom_name, mame_control):
+        """Get control data for a ROM, falling back to parent if it's a clone"""
+        
+        print(f"  Looking for {mame_control} control data for {rom_name}")
+        
+        # First try the ROM itself
+        if rom_name in self.gamedata_json:
+            rom_data = self.gamedata_json[rom_name]
+            if 'controls' in rom_data and rom_data['controls']:
+                if mame_control in rom_data['controls']:
+                    control_data = rom_data['controls'][mame_control]
+                    if isinstance(control_data, dict) and 'tag' in control_data and 'mask' in control_data:
+                        print(f"  ✓ Found control data in {rom_name}: {control_data}")
+                        return control_data, rom_name
+            else:
+                print(f"  {rom_name} has no controls section")
+        else:
+            print(f"  {rom_name} not found in gamedata")
+        
+        # If not found, try the parent ROM
+        parent_rom = self.find_parent_rom(rom_name)
+        if parent_rom:
+            print(f"  {rom_name} is clone of {parent_rom}, checking parent...")
+            if parent_rom in self.gamedata_json:
+                parent_data = self.gamedata_json[parent_rom]
+                if 'controls' in parent_data and parent_data['controls']:
+                    if mame_control in parent_data['controls']:
+                        control_data = parent_data['controls'][mame_control]
+                        if isinstance(control_data, dict) and 'tag' in control_data and 'mask' in control_data:
+                            print(f"  ✓ Found control data in parent {parent_rom}: {control_data}")
+                            return control_data, parent_rom
+                    else:
+                        print(f"  {mame_control} not found in parent {parent_rom}")
+                else:
+                    print(f"  Parent {parent_rom} has no controls section")
+            
+            # If parent doesn't have it, try parent's parent (recursively)
+            grandparent_data, source_rom = self.get_control_data_with_parent_fallback(parent_rom, mame_control)
+            if grandparent_data:
+                print(f"  ✓ Found control data in grandparent chain: {source_rom}")
+                return grandparent_data, source_rom
+        else:
+            print(f"  No parent found for {rom_name}")
+        
+        print(f"  ✗ No control data found for {mame_control} in {rom_name} or its parents")
+        return None, None
+
+    # Enhanced debug method to check specific ROM relationships:
+    def debug_specific_roms(self, roms_to_check=None):
+        """Debug specific ROMs to understand their control inheritance"""
+        if roms_to_check is None:
+            roms_to_check = ['sf2', 'sf2ce', 'sf2rb', 'sf2hf']
+        
+        print(f"\n=== DEBUGGING SPECIFIC ROMS: {roms_to_check} ===")
+        
+        for rom in roms_to_check:
+            print(f"\n--- {rom} ---")
+            
+            # Check if ROM exists in gamedata
+            if rom in self.gamedata_json:
+                rom_data = self.gamedata_json[rom]
+                print(f"✓ Found in gamedata")
+                
+                # Check for parent info
+                parent = rom_data.get('parent', rom_data.get('cloneof', None))
+                if parent:
+                    print(f"  Explicit parent: {parent}")
+                
+                # Check if it has controls
+                if 'controls' in rom_data and rom_data['controls']:
+                    control_count = len(rom_data['controls'])
+                    print(f"  Has controls: {control_count} entries")
+                    
+                    # Check for P1_BUTTON6 specifically
+                    if 'P1_BUTTON6' in rom_data['controls']:
+                        p1b6 = rom_data['controls']['P1_BUTTON6']
+                        print(f"  P1_BUTTON6: tag={p1b6.get('tag')}, mask={p1b6.get('mask')}")
+                    else:
+                        print(f"  P1_BUTTON6: NOT FOUND")
+                else:
+                    print(f"  No controls section")
+                
+                # Check if it has clones
+                if 'clones' in rom_data:
+                    clone_count = len(rom_data['clones'])
+                    clone_names = list(rom_data['clones'].keys())[:5]  # First 5 clones
+                    print(f"  Has clones: {clone_count} ({clone_names}...)")
+            else:
+                print(f"✗ NOT found in gamedata")
+            
+            # Test parent lookup
+            parent = self.find_parent_rom(rom)
+            print(f"  Parent lookup result: {parent}")
+            
+            # Test control inheritance for P1_BUTTON6
+            control_data, source = self.get_control_data_with_parent_fallback(rom, 'P1_BUTTON6')
+            if control_data:
+                print(f"  P1_BUTTON6 inheritance: {control_data} (from {source})")
+            else:
+                print(f"  P1_BUTTON6 inheritance: FAILED")
+        
+        print("="*60)
+    
     def configure_game_fightstick_mapping(self, rom_name, button_mappings, backup_cfg, create_missing, update_existing, mame_version):
         """Configure a single game's CFG file with fightstick button mappings"""
+        if rom_name == "sf2rb":
+            print(f"\n=== DEBUGGING SF2RB PARENT LOOKUP ===")
+            parent = self.find_parent_rom("sf2rb")
+            print(f"Parent found: {parent}")
+            
+            if parent == "sf2ce":
+                control_data, source = self.get_control_data_with_parent_fallback("sf2rb", "P1_BUTTON1")
+                print(f"P1_BUTTON1 data: {control_data} from {source}")
+                
+                control_data, source = self.get_control_data_with_parent_fallback("sf2rb", "P1_BUTTON6")  
+                print(f"P1_BUTTON6 data: {control_data} from {source}")
+            else:
+                print(f"ERROR: Parent lookup failed!")
+        
         try:
+            # Add debugging for specific ROMs
+            if rom_name in ['sf2', 'sf2ce', 'sf2rb']:
+                print(f"\n=== DEBUGGING {rom_name} CONFIGURATION ===")
+                self.debug_specific_roms([rom_name])
             # Construct CFG file path
             cfg_dir = os.path.join(self.mame_dir, "cfg")
             cfg_path = os.path.join(cfg_dir, f"{rom_name}.cfg")
@@ -1234,26 +2273,29 @@ class FightstickMapper(ctk.CTk):
                 'modified_count': 0
             }
 
+    # Fix the mame_control_to_port_data method - remove the broken defvalue logic:
     def mame_control_to_port_data(self, mame_control, joycode, mame_version="new", rom_name=None):
-        """Convert MAME control name and joycode to port data for CFG file using gamedata"""
+        """Convert MAME control name and joycode to port data for CFG file using gamedata with clone support"""
         try:
-            # Get the port info from gamedata for this specific ROM first
+            print(f"Converting {mame_control} -> {joycode} (MAME {mame_version}) for ROM: {rom_name}")
+            
+            # Get the port info using parent fallback for clones
             port_info = None
+            source_rom = None
             
-            if rom_name and rom_name in self.gamedata_json:
-                rom_data = self.gamedata_json[rom_name]
-                if 'controls' in rom_data and rom_data['controls']:
-                    if mame_control in rom_data['controls']:
-                        control_data = rom_data['controls'][mame_control]
-                        if isinstance(control_data, dict) and 'tag' in control_data and 'mask' in control_data:
-                            port_info = {
-                                'tag': control_data['tag'],
-                                'type': mame_control,
-                                'mask': control_data['mask']
-                            }
+            if rom_name:
+                control_data, source_rom = self.get_control_data_with_parent_fallback(rom_name, mame_control)
+                if control_data:
+                    port_info = {
+                        'tag': control_data['tag'],
+                        'type': mame_control,
+                        'mask': control_data['mask']
+                    }
+                    print(f"  ✓ Using clone inheritance from {source_rom}: {port_info}")
             
-            # If not found in specific ROM, look through gamedata to find any game with this control
+            # ONLY search through all gamedata if clone inheritance completely failed
             if not port_info:
+                print(f"  Clone inheritance failed, searching all gamedata...")
                 for rom_name_search, rom_data in self.gamedata_json.items():
                     if 'controls' in rom_data and rom_data['controls']:
                         if mame_control in rom_data['controls']:
@@ -1264,63 +2306,86 @@ class FightstickMapper(ctk.CTk):
                                     'type': mame_control,
                                     'mask': control_data['mask']
                                 }
+                                print(f"  Found fallback control data in {rom_name_search}: {port_info}")
                                 break
             
-            # If we still couldn't find it in gamedata, fall back to basic structure
+            # Enhanced fallback for missing controls (only if everything else failed)
             if not port_info:
-                print(f"Warning: Could not find port info for {mame_control} in gamedata, using fallback")
+                print(f"  Using enhanced fallback for {mame_control}")
                 
-                # Simple fallback based on player and button number
+                # Determine tag based on control type and button number
                 if mame_control.startswith('P1_'):
                     if 'BUTTON1' in mame_control or 'BUTTON2' in mame_control or 'BUTTON3' in mame_control:
-                        tag = ":INPUTS"
+                        tag = ":IN1"
+                    elif 'BUTTON4' in mame_control or 'BUTTON5' in mame_control or 'BUTTON6' in mame_control:
+                        tag = ":IN2"
                     else:
                         tag = ":EXTRA"
                 elif mame_control.startswith('P2_'):
                     if 'BUTTON1' in mame_control or 'BUTTON2' in mame_control or 'BUTTON3' in mame_control:
-                        tag = ":INPUTS"
-                    elif 'BUTTON6' in mame_control:
-                        tag = ":INPUTS"  # P2_BUTTON6 is usually in :INPUTS
+                        tag = ":IN1"
+                    elif 'BUTTON4' in mame_control or 'BUTTON5' in mame_control or 'BUTTON6' in mame_control:
+                        tag = ":IN2"
                     else:
                         tag = ":EXTRA"
                 else:
                     tag = ":INPUTS"
                 
+                # Generate reasonable mask values based on SF2 structure
+                button_masks = {
+                    'P1_BUTTON1': '16',    
+                    'P1_BUTTON2': '32',
+                    'P1_BUTTON3': '64',
+                    'P1_BUTTON4': '1',
+                    'P1_BUTTON5': '2',
+                    'P1_BUTTON6': '4',     
+                    'P2_BUTTON1': '4096',  
+                    'P2_BUTTON2': '8192',
+                    'P2_BUTTON3': '16384',
+                    'P2_BUTTON4': '16',
+                    'P2_BUTTON5': '32',
+                    'P2_BUTTON6': '64',    
+                }
+                
+                mask = button_masks.get(mame_control, "1")
+                
                 port_info = {
                     'tag': tag,
                     'type': mame_control,
-                    'mask': "1"  # Default mask
+                    'mask': mask
                 }
+                print(f"  Generated enhanced fallback: {port_info}")
             
             # Handle MAME version differences for analog controls
-            if "SLIDER2" in joycode and mame_version == "old":
+            original_joycode = joycode
+            if mame_version == "old":
                 joycode = joycode.replace("SLIDER2", "ZAXIS")
-            elif "ZAXIS" in joycode and mame_version == "new":
+                joycode = joycode.replace("SLIDER1", "ZAXIS_UP")
+            elif mame_version == "new":
                 joycode = joycode.replace("ZAXIS", "SLIDER2")
+                joycode = joycode.replace("ZAXIS_UP", "SLIDER1")
             
-            # CRITICAL FIX: Correct defvalue logic
-            # For most input controls, defvalue should match the mask value
-            defvalue = port_info['mask']  # Default: defvalue = mask
+            if joycode != original_joycode:
+                print(f"  Converted joycode: {original_joycode} -> {joycode}")
             
-            # Special cases where defvalue should be 0:
+            # Simple defvalue logic - use the mask value
+            defvalue = port_info['mask']
+            
+            # Only set defvalue=0 for very specific cases
             special_zero_defvalue_tags = [
-                ":JVS_",     # JVS system tags
-                ":MAHJONG",  # Mahjong inputs
-                ":HANAFUDA", # Hanafuda inputs
-                ":KEYPAD",   # Keypad inputs
+                ":JVS_", ":MAHJONG", ":HANAFUDA", ":KEYPAD",
             ]
             
-            # Check if this tag should have defvalue=0
             for special_tag in special_zero_defvalue_tags:
                 if port_info['tag'].startswith(special_tag):
                     defvalue = "0"
+                    print(f"  Special tag {special_tag} detected, setting defvalue=0")
                     break
             
-            # Additional logic: if mask is "0", defvalue should also be "0"
             if port_info['mask'] == "0":
                 defvalue = "0"
             
-            return {
+            result = {
                 'tag': port_info['tag'],
                 'type': port_info['type'],
                 'mask': port_info['mask'],
@@ -1328,8 +2393,14 @@ class FightstickMapper(ctk.CTk):
                 'newseq': joycode
             }
             
+            print(f"  Final result: {result}")
+            print(f"  Source: {source_rom or 'fallback'}")
+            return result
+            
         except Exception as e:
-            print(f"Error converting {mame_control} to port data: {e}")
+            print(f"  ERROR converting {mame_control} to port data: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def add_formatted_port_to_input(self, input_elem, port_data):
