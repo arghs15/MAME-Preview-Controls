@@ -41535,6 +41535,9 @@
     "buttons": "6",
     "sticks": "1",
     "alternating": false,
+    "mappings": [
+      "sf"
+    ],
     "clones": {
       "hsf2j2": {
         "description": "Hyper Street Fighter II: The Anniversary Edition (Japan 031222)"
@@ -41555,83 +41558,111 @@
     "controls": {
       "P1_BUTTON1": {
         "name": "Weak Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "16"
       },
       "P1_BUTTON2": {
         "name": "Medium Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "32"
       },
       "P1_BUTTON3": {
         "name": "Strong Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "64"
       },
       "P1_BUTTON4": {
         "name": "Weak Kick",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN1",
+        "mask": "1"
       },
       "P1_BUTTON5": {
         "name": "Medium Kick",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN1",
+        "mask": "2"
       },
       "P1_BUTTON6": {
         "name": "Strong Kick",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN1",
+        "mask": "4"
       },
       "P2_BUTTON1": {
         "name": "Weak Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "4096"
       },
       "P2_BUTTON2": {
         "name": "Medium Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "8192"
       },
       "P2_BUTTON3": {
         "name": "Strong Punch",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "16384"
       },
       "P2_BUTTON4": {
         "name": "Weak Kick",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN1",
+        "mask": "16"
       },
       "P2_BUTTON5": {
         "name": "Medium Kick",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN1",
+        "mask": "32"
       },
       "P2_BUTTON6": {
         "name": "Strong Kick",
-        "tag": "",
-        "mask": "0"
-      },
-      "P2_JOYSTICK_DOWN": {
-        "name": "Down",
-        "tag": "",
-        "mask": "0"
-      },
-      "P2_JOYSTICK_LEFT": {
-        "name": "Left",
-        "tag": "",
-        "mask": "0"
-      },
-      "P2_JOYSTICK_RIGHT": {
-        "name": "Right",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN2",
+        "mask": "16384"
       },
       "P2_JOYSTICK_UP": {
-        "name": "Up",
-        "tag": "",
-        "mask": "0"
+        "tag": ":IN0",
+        "mask": "2048"
+      },
+      "P2_JOYSTICK_RIGHT": {
+        "tag": ":IN0",
+        "mask": "256"
+      },
+      "P2_JOYSTICK_DOWN": {
+        "tag": ":IN0",
+        "mask": "1024"
+      },
+      "P1_JOYSTICK_RIGHT": {
+        "tag": ":IN0",
+        "mask": "1"
+      },
+      "P1_JOYSTICK_DOWN": {
+        "tag": ":IN0",
+        "mask": "4"
+      },
+      "P1_JOYSTICK_UP": {
+        "tag": ":IN0",
+        "mask": "8"
+      },
+      "P2_JOYSTICK_LEFT": {
+        "tag": ":IN0",
+        "mask": "512"
+      },
+      "P1_JOYSTICK_LEFT": {
+        "tag": ":IN0",
+        "mask": "2"
+      },
+      "COIN2": {
+        "tag": ":IN2",
+        "mask": "8192"
+      },
+      "COIN1": {
+        "tag": ":IN2",
+        "mask": "4096"
+      },
+      "START2": {
+        "tag": ":IN2",
+        "mask": "512"
+      },
+      "START1": {
+        "tag": ":IN2",
+        "mask": "256"
       }
     }
   },
@@ -44283,6 +44314,11 @@
         "tag": ":IN2",
         "mask": "2"
       },
+      "P1_BUTTON6": {
+        "name": "Block 2",
+        "tag": ":IN2",
+        "mask": "4"
+      },
       "P2_JOYSTICK_UP": {
         "tag": ":IN0",
         "mask": "256",
@@ -44296,7 +44332,7 @@
       "P2_BUTTON3": {
         "tag": ":IN0",
         "mask": "16384",
-        "name": "X Button"
+        "name": "High Kick"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
@@ -44331,12 +44367,12 @@
       "P2_BUTTON1": {
         "tag": ":IN0",
         "mask": "4096",
-        "name": "A Button"
+        "name": "High Punch"
       },
       "P2_BUTTON2": {
         "tag": ":IN0",
         "mask": "8192",
-        "name": "B Button"
+        "name": "Block"
       },
       "COIN3": {
         "tag": ":IN1",
@@ -44366,17 +44402,17 @@
       "P2_BUTTON5": {
         "tag": ":IN2",
         "mask": "32",
-        "name": "LB Button"
+        "name": "Low Kick"
       },
       "P2_BUTTON6": {
         "tag": ":IN2",
         "mask": "64",
-        "name": "RB Button"
+        "name": "Block 2"
       },
       "P2_BUTTON4": {
         "tag": ":IN2",
         "mask": "16",
-        "name": "Y Button"
+        "name": "Low Punch"
       }
     },
     "alternating": false
@@ -56906,6 +56942,11 @@
         "tag": ":IN1",
         "mask": "8192"
       },
+      "P1_BUTTON6": {
+        "name": "Block 2",
+        "tag": ":IN1",
+        "mask": "32768"
+      },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
         "mask": "1",
@@ -56939,17 +56980,17 @@
       "P2_BUTTON3": {
         "tag": ":IN0",
         "mask": "16384",
-        "name": "X Button"
+        "name": "High Kick"
       },
       "P2_BUTTON2": {
         "tag": ":IN0",
         "mask": "8192",
-        "name": "B Button"
+        "name": "Block"
       },
       "P2_BUTTON1": {
         "tag": ":IN0",
         "mask": "4096",
-        "name": "A Button"
+        "name": "High Punch"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN0",
@@ -56964,7 +57005,7 @@
       "P2_BUTTON5": {
         "tag": ":IN1",
         "mask": "1024",
-        "name": "LB Button"
+        "name": "Low Kick"
       },
       "COIN4": {
         "tag": ":IN1",
@@ -56985,7 +57026,7 @@
       "P2_BUTTON4": {
         "tag": ":IN1",
         "mask": "512",
-        "name": "Y Button"
+        "name": "Low Punch"
       },
       "START1": {
         "name": "Start",
@@ -56995,7 +57036,7 @@
       "P2_BUTTON6": {
         "tag": ":IN1",
         "mask": "2048",
-        "name": "RB Button"
+        "name": "Block 2"
       },
       "COIN1": {
         "tag": ":IN1",
@@ -64143,7 +64184,7 @@
     "buttons": "5",
     "sticks": "1",
     "mappings": [
-      "tekken"
+      "tekkent"
     ],
     "clones": {
       "tektagtc1a": {
@@ -64288,7 +64329,8 @@
         "name": "B Button"
       }
     },
-    "alternating": false
+    "alternating": false,
+    "console": false
   },
   "snakjack": {
     "description": "Snacks'n Jaxson",
