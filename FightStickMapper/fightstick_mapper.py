@@ -269,9 +269,27 @@ class FightstickMapper(ctk.CTk):
                     "P2_BUTTON6": "JOYCODE_2_SLIDER2_NEG_SWITCH"
                 }
             },
-            "mk": {
-                "name": "Mortal Kombat Layout",
-                "description": "6-button MK layout: HP(RB), LP(X), BL(Y), RN(B), HK(RT), LK(A)",
+            "mk_early": {
+                "name": "Mortal Kombat Early (MK1/MK2)",
+                "description": "5-button MK1/MK2 layout: HP(RB), BL(Y), HK(RT), LP(X), LK(A), BL2(B)",
+                "mappings": {
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON6",           # High Punch -> RB
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Block -> Y  
+                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH", # High Kick -> RT
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON3",           # Low Punch -> X
+                    "P1_BUTTON5": "JOYCODE_1_BUTTON1",           # Low Kick -> A
+                    "P1_BUTTON6": "JOYCODE_1_BUTTON2",           # Block 2 -> B (prevents RB conflict)
+                    "P2_BUTTON1": "JOYCODE_2_BUTTON6",           # P2 High Punch -> RB
+                    "P2_BUTTON2": "JOYCODE_2_BUTTON4",           # P2 Block -> Y
+                    "P2_BUTTON3": "JOYCODE_2_SLIDER2_NEG_SWITCH", # P2 High Kick -> RT
+                    "P2_BUTTON4": "JOYCODE_2_BUTTON3",           # P2 Low Punch -> X
+                    "P2_BUTTON5": "JOYCODE_2_BUTTON1",           # P2 Low Kick -> A
+                    "P2_BUTTON6": "JOYCODE_2_BUTTON2",           # P2 Block 2 -> B
+                }
+            },
+            "mk_late": {
+                "name": "Mortal Kombat Late (MK3/UMK3/MKT)",
+                "description": "6-button MK3+ layout: HP(RB), LP(X), BL(Y), RN(B), HK(RT), LK(A) - Run instead of Block",
                 "mappings": {
                     "P1_BUTTON1": "JOYCODE_1_BUTTON6",           # High Punch -> RB
                     "P1_BUTTON2": "JOYCODE_1_BUTTON4",           # Block -> Y
@@ -843,15 +861,26 @@ class FightstickMapper(ctk.CTk):
             "P2_BUTTON6": "P2 Heavy Kick"
         }
         
-        # For Mortal Kombat
-        if "mortal" in preset_name.lower() or "mk" in preset_name.lower():
+        # For Mortal Kombat Early (MK1/MK2)
+        if "mortal kombat early" in preset_name.lower() or "mk1" in preset_name.lower() or "mk2" in preset_name.lower():
+            action_names.update({
+                "P1_BUTTON1": "High Punch",
+                "P1_BUTTON2": "Block", 
+                "P1_BUTTON3": "High Kick",
+                "P1_BUTTON4": "Low Punch",  
+                "P1_BUTTON5": "Low Kick",
+                "P1_BUTTON6": "Block 2"     # Added back to prevent RB conflict in newer MAME
+            })
+
+        # For Mortal Kombat Late (MK3+) 
+        elif "mortal kombat late" in preset_name.lower() or "mk3" in preset_name.lower():
             action_names.update({
                 "P1_BUTTON1": "High Punch",
                 "P1_BUTTON2": "Block",
                 "P1_BUTTON3": "High Kick", 
                 "P1_BUTTON4": "Low Punch",
                 "P1_BUTTON5": "Low Kick",
-                "P1_BUTTON6": "Run"
+                "P1_BUTTON6": "Run"         # Run for late MK
             })
         
         # For Tekken
@@ -1628,7 +1657,8 @@ class FightstickMapper(ctk.CTk):
         # Define which mappings each game type should have
         mapping_indicators = {
             "6button": ["sf", "ki", "darkstalkers", "marvel", "capcom"],
-            "mk": ["mk"],
+            "mk_early": ["mk1", "mk2"],  # Early MK games with Block
+            "mk_late": ["mk3", "mk4"],   # Later MK games with Run  
             "tekken": ["tekken"],
             "tekkent": ["tekkent"]
         }
@@ -1655,8 +1685,15 @@ class FightstickMapper(ctk.CTk):
                 rom_lower = rom_name.lower()
                 if mapping_type == "6button" and any(term in rom_lower for term in ["sf", "street", "fighter", "xmen", "marvel", "darkstalkers", "vampire"]):
                     has_mapping = True
-                elif mapping_type == "mk" and any(term in rom_lower for term in ["mk", "mortal", "kombat"]):
-                    has_mapping = True
+                elif mapping_type == "mk_early" and any(term in rom_lower for term in ["mk", "mortal", "kombat"]):
+                    # Check if it's specifically MK1 or MK2
+                    if any(mk_early in rom_lower for mk_early in ["mk1", "mk2", "mortalkombat1", "mortalkombat2"]) or \
+                    (("mk" in rom_lower or "mortal" in rom_lower) and not any(mk_late in rom_lower for mk_late in ["mk3", "mk4", "ultimate", "trilogy"])):
+                        has_mapping = True
+                elif mapping_type == "mk_late" and any(term in rom_lower for term in ["mk", "mortal", "kombat"]):
+                    # Check if it's MK3 or later
+                    if any(mk_late in rom_lower for mk_late in ["mk3", "mk4", "ultimate", "trilogy", "umk3", "mkt"]):
+                        has_mapping = True
                 elif mapping_type == "tekken" and "tekken" in rom_lower and "tag" not in rom_lower:
                     has_mapping = True
                 elif mapping_type == "tekkent" and "tekken" in rom_lower and "tag" in rom_lower:
