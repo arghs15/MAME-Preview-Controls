@@ -336,6 +336,12 @@ Basic Usage:
 Preview Commands:
   python mame_controls_main.py --preview-only --game pacman
     └─ Show preview window for pacman (uses cache/database/JSON)
+
+python mame_controls_main.py --preview-only --game pacman --image
+    └─ Try to show pre-saved image for pacman, fall back to preview generation if not found
+  
+  python mame_controls_main.py --preview-only --game pacman --clean-preview --image
+    └─ Hybrid mode: use image if found, otherwise generate clean preview
   
   python mame_controls_main.py --preview-only --game pacman --use-db
     └─ Show preview for pacman using database only (builds cache first)
@@ -471,6 +477,11 @@ COMMON WORKFLOWS:
         help='Hide control buttons in preview (overrides user settings) [ignored in --image-only mode]'
     )
     preview_group.add_argument(
+    '--image', 
+    action='store_true',
+    help='Try to load pre-saved image first, fall back to preview generation if not found [only works with --preview-only]'
+    )
+    preview_group.add_argument(
         '--auto-close', 
         action='store_true',
         help='Automatically close preview when MAME process exits [works with both --preview-only and --image-only]'
@@ -539,6 +550,9 @@ def validate_arguments(args):
     # Check for options that only work with certain modes
     if args.clean_preview and not args.preview_only:
         errors.append("--clean-preview only works with --preview-only mode")
+    
+    if args.image and not args.preview_only:
+        errors.append("--image only works with --preview-only mode")
     
     if args.auto_close and not (args.preview_only or args.image_only):
         errors.append("--auto-close works with --preview-only or --image-only modes")
@@ -1248,10 +1262,45 @@ def main():
                 screen=args.screen
             )
         
-        # Check for preview-only mode - OPTIMIZED VERSION
+        # Check for preview-only mode - ENHANCED WITH HYBRID IMAGE SUPPORT
         if args.game and args.preview_only:
-            print(f"🎯 Fast preview mode for ROM: {args.game}")
+            print(f"🎯 Preview mode for ROM: {args.game}")
             
+            # HYBRID MODE: Try image first if --image flag is set
+            if args.image:
+                print(f"🔄 Hybrid mode: Trying image first, fallback to preview generation")
+                
+                # Check for pre-saved image
+                preview_dir = os.path.join(mame_dir, "preview")
+                screenshots_dir = os.path.join(preview_dir, "screenshots")
+                
+                # Try multiple image extensions
+                extensions = ['.png', '.jpg', '.jpeg', '.bmp']
+                image_path = None
+                
+                for ext in extensions:
+                    potential_path = os.path.join(screenshots_dir, f"{args.game}{ext}")
+                    if os.path.exists(potential_path):
+                        image_path = potential_path
+                        break
+                
+                if image_path:
+                    print(f"✅ Found pre-saved image: {os.path.basename(image_path)}")
+                    print(f"⚡ Using lightning mode instead of preview generation")
+                    
+                    # Use the existing image-only function
+                    return show_image_only_preview(
+                        rom_name=args.game,
+                        mame_dir=mame_dir,
+                        auto_close=args.auto_close,
+                        screen=args.screen
+                    )
+                else:
+                    print(f"📷 No pre-saved image found for '{args.game}'")
+                    print(f"🔄 Falling back to preview generation...")
+                    # Continue with normal preview generation below
+            
+            # NORMAL PREVIEW GENERATION (existing code)
             # PERFORMANCE FIX 1: Quick cache check only
             preview_dir = os.path.join(mame_dir, "preview")
             cache_dir = os.path.join(preview_dir, "cache")
