@@ -4422,9 +4422,9 @@ class MAMEControlConfig(ctk.CTk):
                 ('LT', 'LT t'),
                 ('RB', 'RB t'),  # This should be populated if P1_BUTTON3 maps to RB
                 ('RT', 'RT t'),
-                ('start', 'start t'),
-                ('select', 'select t'),
-                ('xbox', 'xbox t')
+                #('start', 'start t'),
+                #('select', 'select t'),
+                #('xbox', 'xbox t')
             ]
             
             # Build the .conf file content
