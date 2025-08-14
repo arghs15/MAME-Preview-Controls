@@ -1201,13 +1201,11 @@ class MAMEControlConfig(ctk.CTk):
         # Set up directory structure
         self.preview_dir = os.path.join(self.mame_dir, "preview")
         self.settings_dir = os.path.join(self.preview_dir, "settings")
-        self.info_dir = os.path.join(self.preview_dir, "info")  # FIXED: Direct in preview folder
         self.cache_dir = os.path.join(self.preview_dir, "cache")
 
         # Create directories if they don't exist
         os.makedirs(self.preview_dir, exist_ok=True)
         os.makedirs(self.settings_dir, exist_ok=True)
-        os.makedirs(self.info_dir, exist_ok=True)  # FIXED: Create info dir in preview
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Define standard paths for key files
@@ -1216,8 +1214,7 @@ class MAMEControlConfig(ctk.CTk):
         self.settings_path = os.path.join(self.settings_dir, "control_config_settings.json")
         
         return (os.path.exists(self.preview_dir) and 
-                os.path.exists(self.settings_dir) and 
-                os.path.exists(self.info_dir))
+                os.path.exists(self.settings_dir))
     
     # Add this inside class MAMEControlConfig in BOTH files:
     def find_file_in_standard_locations(self, filename, subdirs=None, copy_to_settings=False):
@@ -2364,7 +2361,6 @@ class MAMEControlConfig(ctk.CTk):
         
         # Add Tools buttons with activation
         tool_commands = [
-            {"text": "Generate Config Files", "command": self.generate_all_configs},
             {"text": "Batch Export Images", "command": self.batch_export_images},
             {"text": "Analyze Controls", "command": self.analyze_controls},
             {"text": "Clear Cache", "command": self.clear_cache},
@@ -4037,99 +4033,6 @@ class MAMEControlConfig(ctk.CTk):
                 print(f"Error displaying game: {str(e)}")
                 import traceback
                 traceback.print_exc()
-    #######################################################################
-    #CONFIF TO CREATE INFO FILES FOR RETROFE
-    #- INFO FOLDER ENEDS TO BE IN PREVIEW\SETTINGS\INFO WITH A DEFAULT TEMPLATE
-    ##########################################################################
-    
-    
-    def create_info_directory(self):
-        """Create info directory in the new folder structure"""
-        # Use the predefined info_dir
-        if not os.path.exists(self.info_dir):
-            os.makedirs(self.info_dir)
-        return self.info_dir
-    
-    def generate_all_configs(self):
-        """Generate config files for all available ROMs from gamedata.json"""
-        info_dir = self.create_info_directory()
-        print(f"Created/Found info directory at: {info_dir}")
-        
-        # First verify we have the template
-        template = self.load_default_template()
-        if not template:
-            messagebox.showerror("Error", "Could not find default.conf template in info directory!")
-            return
-        print("Successfully loaded template")
-        
-        count = 0
-        errors = []
-        skipped = 0
-        skipped_roms = []  # NEW: Track which ROMs were skipped
-        
-        # Process all ROMs with control data
-        roms_to_process = list(self.available_roms)
-        
-        total_roms = len(roms_to_process)
-        print(f"Found {total_roms} ROMs to process")
-        
-        # Process each ROM
-        for rom_name in roms_to_process:
-            try:
-                # Get game data
-                game_data = self.get_game_data(rom_name)
-                
-                if game_data:
-                    config_content = self.generate_game_config(game_data)
-                    if config_content:
-                        config_path = os.path.join(info_dir, f"{rom_name}.conf")
-                        with open(config_path, 'w', encoding='utf-8') as f:
-                            f.write(config_content)
-                        count += 1
-                        if count % 50 == 0:  # Progress update every 50 files
-                            print(f"Generated {count}/{total_roms} config files...")
-                    else:
-                        print(f"Skipping {rom_name}: No config content generated")
-                        skipped += 1
-                        skipped_roms.append(f"{rom_name} (no mappable controls)")  # NEW: Add reason
-                else:
-                    print(f"Skipping {rom_name}: No control data found")
-                    skipped += 1
-                    skipped_roms.append(f"{rom_name} (no control data)")  # NEW: Add reason
-            except Exception as e:
-                error_msg = f"Error with {rom_name}: {str(e)}"
-                print(error_msg)
-                errors.append(error_msg)
-        
-        # Enhanced final report with ROM names
-        report = f"Generated {count} config files in {info_dir}\n"
-        
-        # NEW: Include skipped ROM details
-        if skipped > 0:
-            report += f"\nSkipped {skipped} ROMs:\n"
-            # Show up to 10 skipped ROMs, then summarize the rest
-            if len(skipped_roms) <= 10:
-                for rom in skipped_roms:
-                    report += f"  • {rom}\n"
-            else:
-                # Show first 8, then summary
-                for rom in skipped_roms[:8]:
-                    report += f"  • {rom}\n"
-                report += f"  • ... and {len(skipped_roms) - 8} more ROMs\n"
-        
-        # Error section (existing)
-        if errors:
-            report += f"\nEncountered {len(errors)} errors:\n"
-            if len(errors) <= 5:
-                for error in errors:
-                    report += f"  • {error}\n"
-            else:
-                for error in errors[:3]:
-                    report += f"  • {error}\n"
-                report += f"  • ... and {len(errors) - 3} more errors\n"
-        
-        print(report)
-        messagebox.showinfo("Config Generation Report", report)
     
     def generate_control_reference(self):
         """Show dialog to generate control references for current ROM or all ROMs"""
@@ -4770,181 +4673,6 @@ class MAMEControlConfig(ctk.CTk):
         
         # Exclude specialized controls like dials, trackballs, etc.
         return False
-
-    def load_default_template(self):
-        """Load the default.conf template with updated path handling"""
-        # Look in the info directory first
-        template_path = os.path.join(self.info_dir, "default.conf")
-        
-        if os.path.exists(template_path):
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            except Exception as e:
-                print(f"Error loading template: {e}")
-        
-        # Try to find in other locations
-        found_path = self.find_file_in_standard_locations(
-            "default.conf",
-            subdirs=[["info"], ["preview", "info"], ["settings", "info"]],  # Check preview/info first
-            copy_to_settings=False
-        )
-        
-        if found_path:
-            try:
-                with open(found_path, 'r', encoding='utf-8') as f:
-                    template_content = f.read()
-                
-                # Copy to info directory for future use
-                try:
-                    os.makedirs(self.info_dir, exist_ok=True)
-                    with open(template_path, 'w', encoding='utf-8') as f:
-                        f.write(template_content)
-                    print(f"Migrated template to: {template_path}")
-                except Exception as e:
-                    print(f"Error migrating template: {e}")
-                
-                return template_content
-            except Exception as e:
-                print(f"Error reading template: {e}")
-        
-        # Last resort: create default template
-        print("Creating default template content")
-        default_content = self._get_default_template_content()
-        
-        # Try to save for future use
-        try:
-            os.makedirs(self.info_dir, exist_ok=True)
-            with open(template_path, 'w', encoding='utf-8') as f:
-                f.write(default_content)
-            print(f"Created new default template at: {template_path}")
-        except Exception as e:
-            print(f"Could not save default template: {e}")
-        
-        return default_content
-
-    def _get_default_template_content(self):
-        """Get default template content"""
-        # Create each line separately to avoid any indentation issues
-        lines = [
-            "controller D-pad = ",
-            "controller D-pad t = ",
-            "controller L-stick = ",
-            "controller L-stick t = ",
-            "controller R-stick = ",
-            "controller R-stick t = ",
-            "controller A = ",
-            "controller A t = ",
-            "controller B = ",
-            "controller B t = ",
-            "controller X = ",
-            "controller X t = ",
-            "controller Y = ",
-            "controller Y t = ",
-            "controller LB = ",
-            "controller LB t = ",
-            "controller LT = ",
-            "controller LT t = ",
-            "controller RB = ",
-            "controller RB t = ",
-            "controller RT = ",
-            "controller RT t = ",
-            "controller start = ",
-            "controller start t = ",
-            "controller select = ",
-            "controller select t = ",
-            "controller xbox = ",
-            "controller xbox t = "
-        ]
-        return "\n".join(lines)
-
-    def generate_game_config(self, game_data: dict) -> str:
-        """Generate config file content for a specific game"""
-        template = self.load_default_template()
-        if not template:
-            return None
-            
-        # Split template into lines while preserving exact spacing
-        template_lines = template.splitlines()
-        output_lines = []
-        
-        # Create a dictionary to track which controls are used by this game
-        used_controls = {}
-        for player in game_data.get('players', []):
-            for label in player.get('labels', []):
-                control_name = label['name']
-                action = label['value']
-                
-                # Map control to config field
-                config_field, _ = self.map_control_to_xinput_config(control_name)
-                if config_field:
-                    used_controls[config_field.strip()] = action
-        
-        # Process each line
-        for line in template_lines:
-            # Keep comments and empty lines as-is
-            if line.strip().startswith('#') or not line.strip():
-                output_lines.append(line)
-                continue
-                
-            # Process lines with equals sign
-            if '=' in line:
-                # Split at equals to preserve the exact tab alignment
-                parts = line.split('=', 1)
-                field_part = parts[0]  # This maintains all whitespace/tabs
-                field_name = field_part.strip()
-                
-                # Special case for default values that should always be set
-                if field_name == "controller start t":
-                    output_lines.append(f"{field_part}= Start")
-                    continue
-                elif field_name == "controller select t":
-                    output_lines.append(f"{field_part}= Coin")
-                    continue
-                #elif field_name == "controller xbox t":
-                    #output_lines.append(f"{field_part}= Exit")
-                    #continue
-                
-                # If it's a tooltip field (ends with 't')
-                if field_name.endswith('t'):
-                    # Check if this control is used by the game
-                    if field_name in used_controls:
-                        # Replace the value part with the game-specific action
-                        new_line = f"{field_part}= {used_controls[field_name]}"
-                        output_lines.append(new_line)
-                    else:
-                        # Keep the field but with empty value
-                        output_lines.append(f"{field_part}= ")
-                else:
-                    # For non-tooltip fields, keep the field with empty value
-                    output_lines.append(f"{field_part}= ")
-            else:
-                # For lines without '=', keep them exactly as is
-                output_lines.append(line)
-        
-        return '\n'.join(output_lines)
-    
-    def map_control_to_xinput_config(self, control_name: str) -> Tuple[str, str]:
-        """Map MAME control to Xbox controller config field"""
-        mapping_dict = {
-            'P1_BUTTON1': ('controller A t', 'A Button'),      # A
-            'P1_BUTTON2': ('controller B t', 'B Button'),      # B
-            'P1_BUTTON3': ('controller X t', 'X Button'),      # X
-            'P1_BUTTON4': ('controller Y t', 'Y Button'),      # Y
-            'P1_BUTTON5': ('controller LB t', 'Left Bumper'),  # LB
-            'P1_BUTTON6': ('controller RB t', 'Right Bumper'), # RB
-            'P1_BUTTON7': ('controller LT t', 'Left Trigger'), # LT
-            'P1_BUTTON8': ('controller RT t', 'Right Trigger'),# RT
-            'P1_BUTTON9': ('controller LSB t', 'L3'),          # Left Stick Button
-            'P1_BUTTON10': ('controller RSB t', 'R3'),         # Right Stick Button
-            'P1_BUTTON11': ('controller Start t', 'Start'),          # Left Stick Button
-            'P1_BUTTON12': ('controller Select t', 'Select'),         # Right Stick Button
-            'P1_JOYSTICK_UP': ('controller L-stick t', 'Left Stick Up'),
-            'P1_JOYSTICK_DOWN': ('controller L-stick t', 'Left Stick Down'),
-            'P1_JOYSTICK_LEFT': ('controller L-stick t', 'Left Stick Left'),
-            'P1_JOYSTICK_RIGHT': ('controller L-stick t', 'Left Stick Right'),
-        }
-        return mapping_dict.get(control_name, (None, None))
     
     def analyze_controls(self):
         """Comprehensive analysis of ROM controls with improved visual styling and clone count"""
