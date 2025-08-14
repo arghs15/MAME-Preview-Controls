@@ -64245,7 +64245,7 @@
         "name": "Down"
       },
       "P1_BUTTON3": {
-        "name": "Left Kick",
+        "name": "Tag",
         "tag": ":JVS_PLAYER1",
         "mask": "32768"
       },
@@ -64255,7 +64255,7 @@
         "mask": "2"
       },
       "P1_BUTTON5": {
-        "name": "Tag",
+        "name": "Right Kick",
         "tag": ":JVS_PLAYER1",
         "mask": "8192"
       },
@@ -64265,7 +64265,7 @@
         "name": "Left"
       },
       "P1_BUTTON4": {
-        "name": "Right Kick",
+        "name": "Left Kick",
         "tag": ":JVS_PLAYER1",
         "mask": "16384"
       },
