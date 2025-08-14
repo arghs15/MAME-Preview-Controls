@@ -4131,6 +4131,646 @@ class MAMEControlConfig(ctk.CTk):
         print(report)
         messagebox.showinfo("Config Generation Report", report)
     
+    def generate_control_reference(self):
+        """Show dialog to generate control references for current ROM or all ROMs"""
+        # Create dialog for batch control reference generation
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Generate Control References")
+        dialog.geometry("600x500")
+        dialog.configure(fg_color=self.theme_colors["background"])
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = ctk.CTkFrame(dialog, fg_color=self.theme_colors["primary"], corner_radius=0, height=60)
+        header_frame.pack(fill="x", padx=0, pady=0)
+        header_frame.pack_propagate(False)
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="Generate Control References",
+            font=("Arial", 18, "bold"),
+            text_color="#ffffff"
+        ).pack(side="left", padx=20, pady=15)
+        
+        # Main content
+        content_frame = ctk.CTkScrollableFrame(
+            dialog, 
+            fg_color="transparent",
+            scrollbar_button_color=self.theme_colors["primary"],
+            scrollbar_button_hover_color=self.theme_colors["secondary"]
+        )
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Description
+        desc_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        desc_card.pack(fill="x", padx=0, pady=(0, 15))
+        
+        description_text = (
+            "Generate text files containing controller input mappings and game actions.\n\n"
+            "Files will be saved to: preview/control_references/\n"
+            "Format: 'X Button = Light Punch' for easy reference."
+        )
+        
+        ctk.CTkLabel(
+            desc_card,
+            text=description_text,
+            font=("Arial", 13),
+            justify="left",
+            wraplength=550
+        ).pack(padx=15, pady=15, anchor="w")
+        
+        # Selection options
+        options_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        options_card.pack(fill="x", padx=0, pady=(0, 15))
+        
+        ctk.CTkLabel(
+            options_card,
+            text="Generation Options",
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=15, pady=(15, 10))
+        
+        # Radio button selection
+        selection_mode_var = tk.StringVar(value="current" if self.current_game else "all")
+        
+        mode_frame = ctk.CTkFrame(options_card, fg_color="transparent")
+        mode_frame.pack(fill="x", padx=15, pady=(0, 15))
+        
+        # Current ROM option (only if a ROM is selected)
+        if self.current_game:
+            current_radio = ctk.CTkRadioButton(
+                mode_frame,
+                text=f"Current ROM Only ({self.current_game})",
+                variable=selection_mode_var,
+                value="current",
+                fg_color=self.theme_colors["primary"],
+                hover_color=self.theme_colors["secondary"]
+            )
+            current_radio.pack(anchor="w", pady=5)
+        
+        # All ROMs option
+        all_radio = ctk.CTkRadioButton(
+            mode_frame,
+            text="All ROMs with Control Data",
+            variable=selection_mode_var,
+            value="all",
+            fg_color=self.theme_colors["primary"],
+            hover_color=self.theme_colors["secondary"]
+        )
+        all_radio.pack(anchor="w", pady=5)
+        
+        # Count available ROMs
+        roms_with_controls = []
+        for rom in self.available_roms:
+            game_data = self.get_game_data(rom)
+            if game_data and game_data.get('players'):
+                roms_with_controls.append(rom)
+        
+        # Statistics
+        stats_text = f"Available: {len(roms_with_controls)} ROMs with control data"
+        if len(roms_with_controls) > 20:
+            stats_text += f"\n⚠️ This will generate {len(roms_with_controls)} files"
+        
+        ctk.CTkLabel(
+            options_card,
+            text=stats_text,
+            font=("Arial", 12),
+            text_color=self.theme_colors["text_dimmed"]
+        ).pack(anchor="w", padx=15, pady=(0, 15))
+        
+        # Progress area (initially hidden)
+        progress_card = ctk.CTkFrame(content_frame, fg_color=self.theme_colors["card_bg"], corner_radius=6)
+        
+        progress_label = ctk.CTkLabel(
+            progress_card,
+            text="Generation Progress",
+            font=("Arial", 16, "bold"),
+            anchor="w"
+        )
+        
+        progress_bar = ctk.CTkProgressBar(
+            progress_card,
+            fg_color=self.theme_colors["background"],
+            progress_color=self.theme_colors["primary"],
+            height=15
+        )
+        
+        status_label = ctk.CTkLabel(
+            progress_card,
+            text="Ready to generate...",
+            font=("Arial", 12)
+        )
+        
+        # Buttons frame
+        buttons_frame = ctk.CTkFrame(dialog, height=70, fg_color=self.theme_colors["card_bg"], corner_radius=0)
+        buttons_frame.pack(fill="x", side="bottom", padx=0, pady=0)
+        buttons_frame.pack_propagate(False)
+        
+        button_container = ctk.CTkFrame(buttons_frame, fg_color="transparent")
+        button_container.pack(fill="both", expand=True, padx=20, pady=15)
+        
+        def start_generation():
+            """Start the control reference generation process"""
+            try:
+                mode = selection_mode_var.get()
+                
+                # Determine ROMs to process
+                if mode == "current" and self.current_game:
+                    roms_to_process = [self.current_game]
+                else:
+                    roms_to_process = roms_with_controls
+                
+                if not roms_to_process:
+                    messagebox.showwarning("No ROMs", "No ROMs available for processing.", parent=dialog)
+                    return
+                
+                # Show confirmation for large batches
+                if len(roms_to_process) > 10:
+                    if not messagebox.askyesno(
+                        "Confirm Generation",
+                        f"Generate control references for {len(roms_to_process)} ROMs?\n\n"
+                        f"This will create {len(roms_to_process)} text files.",
+                        parent=dialog
+                    ):
+                        return
+                
+                # Show progress area
+                progress_card.pack(fill="x", padx=0, pady=(0, 15))
+                progress_label.pack(anchor="w", padx=15, pady=(15, 10))
+                progress_bar.pack(fill="x", padx=15, pady=5)
+                status_label.pack(padx=15, pady=(5, 15))
+                
+                # Update UI
+                dialog.update_idletasks()
+                
+                # Create output directory
+                reference_dir = os.path.join(self.preview_dir, "control_references")
+                os.makedirs(reference_dir, exist_ok=True)
+                
+                # Process ROMs
+                processed = 0
+                failed = 0
+                total = len(roms_to_process)
+                
+                for i, rom_name in enumerate(roms_to_process):
+                    try:
+                        # Update progress
+                        progress = (i + 0.5) / total
+                        progress_bar.set(progress)
+                        status_label.configure(text=f"Processing {i+1}/{total}: {rom_name}")
+                        dialog.update_idletasks()
+                        
+                        # Generate reference for this ROM
+                        success = self.generate_single_control_reference(rom_name, reference_dir)
+                        
+                        if success:
+                            processed += 1
+                        else:
+                            failed += 1
+                        
+                        # Update progress
+                        progress = (i + 1) / total
+                        progress_bar.set(progress)
+                        
+                    except Exception as e:
+                        print(f"Error processing {rom_name}: {e}")
+                        failed += 1
+                
+                # Final status
+                if failed > 0:
+                    final_message = f"Generated {processed} control references\nFailed: {failed}"
+                    status_label.configure(text=final_message)
+                    messagebox.showwarning(
+                        "Generation Complete",
+                        f"Generated {processed} control references\nFailed: {failed}\n\nFiles saved to: {reference_dir}",
+                        parent=dialog
+                    )
+                else:
+                    final_message = f"Successfully generated {processed} control references"
+                    status_label.configure(text=final_message)
+                    
+                    # Ask to open folder
+                    result = messagebox.askyesno(
+                        "Generation Complete",
+                        f"Successfully generated {processed} control references!\n\n"
+                        f"Files saved to:\n{reference_dir}\n\n"
+                        f"Would you like to open the folder?",
+                        parent=dialog
+                    )
+                    
+                    if result:
+                        # Open the folder
+                        import subprocess
+                        import platform
+                        
+                        system = platform.system()
+                        try:
+                            if system == "Windows":
+                                subprocess.run(['explorer', reference_dir], check=True)
+                            elif system == "Darwin":  # macOS
+                                subprocess.run(['open', reference_dir], check=True)
+                            elif system == "Linux":
+                                subprocess.run(['xdg-open', reference_dir], check=True)
+                        except Exception as e:
+                            print(f"Could not open folder: {e}")
+                
+                # Update status message
+                self.update_status_message(f"Generated {processed} control references")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to generate references: {str(e)}", parent=dialog)
+                import traceback
+                traceback.print_exc()
+        
+        # Generate button
+        generate_button = ctk.CTkButton(
+            button_container,
+            text="Generate References",
+            command=start_generation,
+            width=150,
+            height=40,
+            fg_color=self.theme_colors["success"],
+            hover_color="#218838",
+            font=("Arial", 14, "bold")
+        )
+        generate_button.pack(side="right", padx=5)
+        
+        # Close button
+        ctk.CTkButton(
+            button_container,
+            text="Close",
+            command=dialog.destroy,
+            width=120,
+            height=40,
+            fg_color=self.theme_colors["danger"],
+            hover_color="#c82333",
+            font=("Arial", 14)
+        ).pack(side="right", padx=5)
+        
+        # Center dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+    def generate_single_control_reference(self, rom_name, output_dir):
+        """Generate a template-style .conf file for a single ROM with DEBUG output"""
+        try:
+            print(f"\n=== GENERATING REFERENCE FOR {rom_name} ===")
+            
+            # Get the game data (same processing as display)
+            game_data = self.get_game_data(rom_name)
+            if not game_data or not game_data.get('players'):
+                print(f"ERROR: No game data for {rom_name}")
+                return False
+            
+            # Apply custom mappings if they exist
+            cfg_controls = {}
+            if rom_name in self.custom_configs:
+                cfg_controls = parse_cfg_controls(self.custom_configs[rom_name], self.input_mode)
+                cfg_controls = {
+                    control: convert_mapping(mapping, self.input_mode)
+                    for control, mapping in cfg_controls.items()
+                }
+                
+                # Update game_data with custom mappings
+                game_data = update_game_data_with_custom_mappings(
+                    game_data, 
+                    cfg_controls, 
+                    getattr(self, 'default_controls', {}),
+                    getattr(self, 'original_default_controls', {}),
+                    self.input_mode,
+                    True  # Always use friendly names for reference files
+                )
+                print(f"Applied custom mappings from ROM CFG")
+            
+            # Apply XInput filtering if enabled
+            if hasattr(self, 'xinput_only_mode') and self.xinput_only_mode:
+                game_data = filter_xinput_controls(game_data)
+            
+            # DEBUG: Show all controls being processed
+            print(f"Processing controls for {rom_name}:")
+            for player in game_data.get('players', []):
+                if player.get('number') == 1:  # Only P1 for now
+                    for label in player.get('labels', []):
+                        control_name = label['name']
+                        action = label['value']
+                        display_name = label.get('display_name', label.get('target_button', action))
+                        print(f"  {control_name}: action='{action}', display='{display_name}'")
+            
+            # Map MAME controls to template fields
+            template_mapping = {}
+            
+            # Process Player 1 controls only (most common case)
+            for player in game_data.get('players', []):
+                if player.get('number') == 1:  # Only P1 for now
+                    for label in player.get('labels', []):
+                        control_name = label['name']
+                        action = label['value']
+                        display_name = label.get('display_name', label.get('target_button', action))
+                        
+                        # Debug output for all button mappings
+                        print(f"DEBUG: Mapping {control_name} (display='{display_name}', action='{action}')")
+                        
+                        # Map MAME control to template field
+                        template_field = self.map_mame_control_to_template_field(control_name, display_name)
+                        print(f"DEBUG: {control_name} -> template_field: {template_field}")
+                        
+                        if template_field:
+                            # For directional controls, use generic "Movement" text
+                            if template_field in ['D-pad', 'L-stick', 'R-stick']:
+                                action_text = "Movement"
+                                button_name = template_field  # Keep original case
+                            else:
+                                action_text = action
+                                button_name = template_field.lower()  # "a", "b", "x", etc.
+                            
+                            template_mapping[template_field] = {
+                                'button_name': button_name,
+                                'action_text': action_text
+                            }
+                            print(f"DEBUG: Added to template_mapping: {template_field} = {button_name} / {action_text}")
+                        else:
+                            print(f"DEBUG: Failed to map {control_name} with display '{display_name}'")
+                    break
+            
+            print(f"DEBUG: Final template_mapping for {rom_name}: {template_mapping}")
+            
+            if not template_mapping:
+                print(f"ERROR: No template mappings generated for {rom_name}")
+                return False
+            
+            # Load header from default.conf template
+            header_lines = self.load_default_conf_header(output_dir)
+            
+            # Define the complete template structure in order
+            template_structure = [
+                ('D-pad', 'D-pad t'),
+                ('L-stick', 'L-stick t'),
+                ('R-stick', 'R-stick t'),
+                ('A', 'A t'),
+                ('B', 'B t'),
+                ('X', 'X t'),
+                ('Y', 'Y t'),
+                ('LB', 'LB t'),
+                ('LT', 'LT t'),
+                ('RB', 'RB t'),  # This should be populated if P1_BUTTON3 maps to RB
+                ('RT', 'RT t'),
+                ('start', 'start t'),
+                ('select', 'select t'),
+                ('xbox', 'xbox t')
+            ]
+            
+            # Build the .conf file content
+            conf_lines = []
+            
+            # Add header from default.conf if available
+            if header_lines:
+                conf_lines.extend(header_lines)
+            
+            # Add control mappings
+            for button_field, text_field in template_structure:
+                if button_field in template_mapping:
+                    # Add button name line with "arcade" prefix
+                    button_name = template_mapping[button_field]['button_name']
+                    conf_lines.append(f"arcade {button_field} = {button_name}")
+                    
+                    # Add action text line with "arcade" prefix
+                    action_text = template_mapping[button_field]['action_text']
+                    conf_lines.append(f"arcade {text_field} = {action_text}")
+                    
+                    print(f"DEBUG: Added to conf: arcade {button_field} = {button_name}")
+                    print(f"DEBUG: Added to conf: arcade {text_field} = {action_text}")
+                else:
+                    # Add empty lines for unused buttons with "arcade" prefix
+                    conf_lines.append(f"arcade {button_field} = ")
+                    conf_lines.append(f"arcade {text_field} = ")
+                    print(f"DEBUG: Empty mapping for {button_field}")
+            
+            # Save as .conf file
+            filename = f"{rom_name}.conf"
+            file_path = os.path.join(output_dir, filename)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(conf_lines))
+            
+            print(f"SUCCESS: Generated reference file: {file_path}")
+            return True
+            
+        except Exception as e:
+            print(f"ERROR: Failed to generate reference for {rom_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def load_default_conf_header(self, output_dir):
+        """Load header content from default.conf template file"""
+        try:
+            # Look for default.conf in the output directory
+            default_conf_path = os.path.join(output_dir, "default.conf")
+            
+            if os.path.exists(default_conf_path):
+                with open(default_conf_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Parse the content to extract only the header part
+                lines = content.splitlines()
+                header_lines = []
+                
+                for line in lines:
+                    stripped_line = line.strip()
+                    
+                    # Stop when we hit the control template section
+                    if any(stripped_line.startswith(field) for field in 
+                        ['D-pad =', 'L-stick =', 'R-stick =', 'A =', 'B =', 'X =', 'Y =', 
+                        'LB =', 'LT =', 'RB =', 'RT =', 'start =', 'select =', 'xbox =']):
+                        break
+                    
+                    # Include this line in the header
+                    header_lines.append(line)
+                
+                # Remove trailing empty lines from header
+                while header_lines and not header_lines[-1].strip():
+                    header_lines.pop()
+                
+                return header_lines
+            else:
+                # Create a default template if none exists
+                self.create_default_conf_template(default_conf_path)
+                return self.load_default_conf_header(output_dir)
+                
+        except Exception as e:
+            print(f"Error loading default.conf header: {e}")
+            return []
+
+    def create_default_conf_template(self, template_path):
+        """Create a default.conf template file with standard header"""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(template_path), exist_ok=True)
+            
+            # Default template content
+            template_content = """game platform type   = arcade
+    game platform        = arcade
+    game ratio           = 4 3
+    game resolution      = 320 x 224
+    game controller      = xbox
+    D-pad = 
+    D-pad t = 
+    L-stick = 
+    L-stick t =
+    R-stick = 
+    R-stick t = 
+    A = 
+    A t =
+    B = 
+    B t =
+    X = 
+    X t =
+    Y = 
+    Y t =
+    LB = 
+    LB t =
+    LT = 
+    LT t = 
+    RB = 
+    RB t =
+    RT = 
+    RT t = 
+    start = 
+    start t =
+    select = 
+    select t =
+    xbox = 
+    xbox t ="""
+            
+            with open(template_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            
+            print(f"Created default.conf template at: {template_path}")
+            
+        except Exception as e:
+            print(f"Error creating default.conf template: {e}")
+
+    def map_mame_control_to_template_field(self, mame_control, display_name):
+        """Map a MAME control to the appropriate template field - FIXED VERSION"""
+        
+        # Handle directional controls first
+        if any(direction in mame_control for direction in ['JOYSTICK_', 'JOYSTICKLEFT_', 'DPAD_']):
+            if 'JOYSTICKRIGHT_' in mame_control:
+                return 'R-stick'
+            elif any(stick in mame_control for stick in ['JOYSTICK_', 'JOYSTICKLEFT_']):
+                return 'L-stick'
+            elif 'DPAD_' in mame_control:
+                return 'D-pad'
+        
+        # Handle button controls
+        if 'BUTTON' in mame_control:
+            # CRITICAL FIX: Check display_name first, then fall back to MAME control mapping
+            display_lower = display_name.lower()
+            
+            # CRITICAL FIX: Check longer patterns first to avoid substring conflicts
+            # Check RB before B, LB before B, RT before T, LT before T, etc.
+            if ('rb button' in display_lower or 'right bumper' in display_lower or 
+                display_name == 'RB Button' or 'p1 rb button' in display_lower or 
+                'p2 rb button' in display_lower or ' rb ' in display_lower):
+                return 'RB'
+            elif ('lb button' in display_lower or 'left bumper' in display_lower or 
+                display_name == 'LB Button' or 'p1 lb button' in display_lower or
+                'p2 lb button' in display_lower or ' lb ' in display_lower):
+                return 'LB'
+            elif ('rt button' in display_lower or 'right trigger' in display_lower or 
+                'rt analog' in display_lower or display_name == 'RT Button' or
+                'p1 rt button' in display_lower or 'p2 rt button' in display_lower or 
+                ' rt ' in display_lower):
+                return 'RT'
+            elif ('lt button' in display_lower or 'left trigger' in display_lower or 
+                'lt analog' in display_lower or display_name == 'LT Button' or
+                'p1 lt button' in display_lower or 'p2 lt button' in display_lower or
+                ' lt ' in display_lower):
+                return 'LT'
+            elif ('a button' in display_lower or display_name == 'A Button' or 
+                'p1 a button' in display_lower or 'p2 a button' in display_lower):
+                return 'A'
+            elif ('b button' in display_lower or display_name == 'B Button' or 
+                'p1 b button' in display_lower or 'p2 b button' in display_lower):
+                return 'B'
+            elif ('x button' in display_lower or display_name == 'X Button' or 
+                'p1 x button' in display_lower or 'p2 x button' in display_lower):
+                return 'X'
+            elif ('y button' in display_lower or display_name == 'Y Button' or 
+                'p1 y button' in display_lower or 'p2 y button' in display_lower):
+                return 'Y'
+            elif 'start' in display_lower:
+                return 'start'
+            elif 'select' in display_lower or 'back' in display_lower:
+                return 'select'
+            elif 'xbox' in display_lower or 'guide' in display_lower:
+                return 'xbox'
+            else:
+                # CRITICAL FIX: More comprehensive fallback mapping
+                # Debug output to help troubleshoot
+                print(f"DEBUG: Mapping fallback for {mame_control} with display '{display_name}'")
+                
+                # Enhanced fallback: map by button number based on actual CFG usage
+                if 'P1_BUTTON1' in mame_control:
+                    print(f"DEBUG: P1_BUTTON1 -> X")
+                    return 'X'  # Based on CFG: P1_BUTTON1 -> XINPUT_1_X
+                elif 'P1_BUTTON2' in mame_control:
+                    print(f"DEBUG: P1_BUTTON2 -> Y")
+                    return 'Y'  # Based on CFG: P1_BUTTON2 -> XINPUT_1_Y
+                elif 'P1_BUTTON3' in mame_control:
+                    print(f"DEBUG: P1_BUTTON3 -> RB (Heavy Punch case)")
+                    return 'RB'  # Based on CFG: P1_BUTTON3 -> XINPUT_1_SHOULDER_R
+                elif 'P1_BUTTON4' in mame_control:
+                    print(f"DEBUG: P1_BUTTON4 -> A")
+                    return 'A'  # Based on CFG: P1_BUTTON4 -> XINPUT_1_A
+                elif 'P1_BUTTON5' in mame_control:
+                    print(f"DEBUG: P1_BUTTON5 -> B")
+                    return 'B'  # Based on CFG: P1_BUTTON5 -> XINPUT_1_B
+                elif 'P1_BUTTON6' in mame_control:
+                    print(f"DEBUG: P1_BUTTON6 -> RT")
+                    return 'RT'  # Based on CFG: P1_BUTTON6 -> XINPUT_1_TRIGGER_R
+                elif 'P1_BUTTON7' in mame_control:
+                    return 'LT'
+                elif 'P1_BUTTON8' in mame_control:
+                    return 'LB'
+        
+        # Handle special controls
+        if 'START' in mame_control:
+            return 'start'
+        elif 'SELECT' in mame_control or 'COIN' in mame_control:
+            return 'select'
+        
+        # Debug output to help troubleshoot
+        print(f"DEBUG: Unmapped control - MAME: {mame_control}, Display: {display_name}")
+        
+        return None
+
+    def is_button_or_directional_control(self, control_name):
+        """Check if a control is a button or directional control that should be included"""
+        # Include buttons
+        if 'BUTTON' in control_name:
+            return True
+        
+        # Include directional controls (joystick, d-pad)
+        directional_types = [
+            'JOYSTICK_UP', 'JOYSTICK_DOWN', 'JOYSTICK_LEFT', 'JOYSTICK_RIGHT',
+            'JOYSTICKLEFT_UP', 'JOYSTICKLEFT_DOWN', 'JOYSTICKLEFT_LEFT', 'JOYSTICKLEFT_RIGHT',
+            'JOYSTICKRIGHT_UP', 'JOYSTICKRIGHT_DOWN', 'JOYSTICKRIGHT_LEFT', 'JOYSTICKRIGHT_RIGHT',
+            'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT'
+        ]
+        
+        for direction in directional_types:
+            if direction in control_name:
+                return True
+        
+        # Exclude specialized controls like dials, trackballs, etc.
+        return False
+
     def load_default_template(self):
         """Load the default.conf template with updated path handling"""
         # Look in the info directory first
@@ -7575,17 +8215,36 @@ class MAMEControlConfig(ctk.CTk):
                 font=("Arial", 16, "bold"),
                 anchor="w"
             ).pack(side="left", anchor="w")
-            
+
+            # Button container for multiple buttons
+            button_container = ctk.CTkFrame(title_frame, fg_color="transparent")
+            button_container.pack(side="right")
+
+            # Generate Reference button
+            ref_button = ctk.CTkButton(
+                button_container,
+                text="Generate Reference",
+                command=self.generate_control_reference,
+                width=140,
+                height=30,
+                fg_color=self.theme_colors["secondary"],
+                hover_color=self.theme_colors["primary"],
+                font=("Arial", 12)
+            )
+            ref_button.pack(side="left", padx=5)
+
+            # Edit Controls button
             edit_button = ctk.CTkButton(
-                title_frame,
+                button_container,
                 text="Edit Controls",
                 command=self.edit_current_game_controls,
                 width=120,
                 height=30,
                 fg_color=self.theme_colors["primary"],
-                hover_color=self.theme_colors["button_hover"]
+                hover_color=self.theme_colors["button_hover"],
+                font=("Arial", 12)
             )
-            edit_button.pack(side="right", padx=5)
+            edit_button.pack(side="left", padx=5)
             
             # === CONTROLS DISPLAY ===
             if not processed_controls:
