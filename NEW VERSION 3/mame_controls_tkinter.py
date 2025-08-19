@@ -9903,7 +9903,8 @@ class MAMEControlConfig(ctk.CTk):
             ("JOYCODE_1_BUTTON6", "Button 6 (RB)"),
             ("JOYCODE_1_BUTTON7", "Button 7 (LT)"),
             ("JOYCODE_1_BUTTON8", "Button 8 (RT)"),
-            ("JOYCODE_1_SLIDER2_NEG_SWITCH", "Slider/Trigger (RT Analog)"),
+            ("JOYCODE_1_SLIDER1_NEG_SWITCH", "Left Trigger (LT Analog)"),  # ADD THIS LINE
+            ("JOYCODE_1_SLIDER2_NEG_SWITCH", "Right Trigger (RT Analog)"), # UPDATE THIS LINE
             ("JOYCODE_1_SLIDER2_POS_SWITCH", "Slider/Trigger (LT Analog)"),
         ]
         
@@ -9967,6 +9968,19 @@ class MAMEControlConfig(ctk.CTk):
                 "P1_BUTTON3": "Left Kick",
                 "P1_BUTTON4": "Right Kick",
                 "P1_BUTTON5": "Tag" if "tag" in preset_name.lower() else "Special"
+            })
+        
+        # For Neo Geo games
+        if "neo" in preset_name.lower() or "neogeo" in preset_name.lower():
+            action_names.update({
+                "P1_BUTTON1": "A Button",
+                "P1_BUTTON2": "B Button", 
+                "P1_BUTTON3": "C Button",
+                "P1_BUTTON4": "D Button",
+                "P2_BUTTON1": "P2 A Button",
+                "P2_BUTTON2": "P2 B Button",
+                "P2_BUTTON3": "P2 C Button",
+                "P2_BUTTON4": "P2 D Button"
             })
         
         # Create dropdowns for each mapping
@@ -10688,6 +10702,20 @@ class MAMEControlConfig(ctk.CTk):
                     "P2_BUTTON3": "JOYCODE_2_BUTTON6",
                     "P2_BUTTON4": "JOYCODE_2_BUTTON1",
                     "P2_BUTTON5": "JOYCODE_2_BUTTON2",
+                }
+            },
+            "neogeo": {
+                "name": "Neo Geo Layout", 
+                "description": "4-button Neo Geo layout (A, B, C, D buttons) for SNK arcade games",
+                "mappings": {
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON1",  # A Button -> Button 1 (A)
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON2",  # B Button -> Button 2 (B)
+                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # C Button -> RT (Slider2)
+                    "P1_BUTTON4": "JOYCODE_1_SLIDER1_NEG_SWITCH",  # D Button -> LT (Slider1)
+                    "P2_BUTTON1": "JOYCODE_2_BUTTON4",
+                    "P2_BUTTON2": "JOYCODE_2_BUTTON5",
+                    "P2_BUTTON3": "JOYCODE_2_SLIDER2_NEG_SWITCH", 
+                    "P2_BUTTON4": "JOYCODE_2_SLIDER1_NEG_SWITCH",
                 }
             }
         }
