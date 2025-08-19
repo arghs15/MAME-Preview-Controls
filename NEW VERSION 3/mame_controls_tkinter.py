@@ -10708,10 +10708,10 @@ class MAMEControlConfig(ctk.CTk):
                 "name": "Neo Geo Layout", 
                 "description": "4-button Neo Geo layout (A, B, C, D buttons) for SNK arcade games",
                 "mappings": {
-                    "P1_BUTTON1": "JOYCODE_1_BUTTON1",  # A Button -> Button 1 (A)
-                    "P1_BUTTON2": "JOYCODE_1_BUTTON2",  # B Button -> Button 2 (B)
-                    "P1_BUTTON3": "JOYCODE_1_SLIDER2_NEG_SWITCH",  # C Button -> RT (Slider2)
-                    "P1_BUTTON4": "JOYCODE_1_SLIDER1_NEG_SWITCH",  # D Button -> LT (Slider1)
+                    "P1_BUTTON1": "JOYCODE_1_BUTTON3",  # A Button -> Button 3 (X)
+                    "P1_BUTTON2": "JOYCODE_1_BUTTON4",  # B Button -> Button 4 (Y)
+                    "P1_BUTTON3": "JOYCODE_1_BUTTON1",  # C Button -> Button 1 (A)
+                    "P1_BUTTON4": "JOYCODE_1_BUTTON2",  # D Button -> Button 2 (B)
                     "P2_BUTTON1": "JOYCODE_2_BUTTON4",
                     "P2_BUTTON2": "JOYCODE_2_BUTTON5",
                     "P2_BUTTON3": "JOYCODE_2_SLIDER2_NEG_SWITCH", 
