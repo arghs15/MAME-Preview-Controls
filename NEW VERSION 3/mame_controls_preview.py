@@ -2463,7 +2463,10 @@ class PreviewWindow(QMainWindow):
 
     # Add method to find bezel path
     def find_bezel_path(self, rom_name):
-        """Find bezel image path for a ROM name with updated paths"""
+        """Find bezel image path for a ROM name with updated paths that work regardless of MAME folder name"""
+        # Get the parent directory of where the exe runs
+        parent_dir = get_mame_parent_dir()
+        
         # Define possible locations for bezels
         possible_paths = [
             # Priority 1: First look in preview/bezels directory
@@ -2475,12 +2478,16 @@ class PreviewWindow(QMainWindow):
             os.path.join(self.preview_dir, "artwork", rom_name, "bezel.png"),
             os.path.join(self.preview_dir, "artwork", rom_name, f"{rom_name}_bezel.png"),
             
-            # Priority 3: Traditional artwork locations in MAME directory
-            os.path.join(self.mame_dir, "artwork", rom_name, "Bezel.png"),
-            os.path.join(self.mame_dir, "artwork", rom_name, "bezel.png"),
-            os.path.join(self.mame_dir, "artwork", rom_name, f"{rom_name}_bezel.png"),
-            os.path.join(self.mame_dir, "bezels", f"{rom_name}.png"),
-            os.path.join(self.mame_dir, "bezels", f"{rom_name}_bezel.png"),
+            # Priority 3: Look in parent directory's artwork folder (works regardless of MAME folder name)
+            os.path.join(parent_dir, "artwork", rom_name, "Bezel.png"),
+            os.path.join(parent_dir, "artwork", rom_name, "bezel.png"),
+            os.path.join(parent_dir, "artwork", rom_name, f"{rom_name}_bezel.png"),
+            os.path.join(parent_dir, "bezels", f"{rom_name}.png"),
+            os.path.join(parent_dir, "bezels", f"{rom_name}_bezel.png"),
+            
+            # Priority 4: Check common artwork subdirectories in parent folder
+            os.path.join(parent_dir, "artwork", "bezels", f"{rom_name}.png"),
+            os.path.join(parent_dir, "artwork", "bezels", f"{rom_name}_bezel.png"),
         ]
         
         # Check each possible path
@@ -4693,20 +4700,27 @@ class PreviewWindow(QMainWindow):
             painter.end()
     
     def find_logo_path(self, rom_name):
-        """Find logo path for a ROM name with updated paths"""
+        """Find logo path for a ROM name with updated paths that work regardless of MAME folder name"""
+        # Get the parent directory of where the exe runs
+        parent_dir = get_mame_parent_dir()
+        
         # Define possible locations for logos
         possible_paths = [
             # Priority 1: First look in preview/logos directory
             os.path.join(self.preview_dir, "logos", f"{rom_name}.png"),
             os.path.join(self.preview_dir, "logos", f"{rom_name}.jpg"),
             
-            # Priority 2: Check in collections path
-            os.path.join(self.mame_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo", f"{rom_name}.png"),
-            os.path.join(self.mame_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo", f"{rom_name}.jpg"),
+            # Priority 2: Check in collections path (if it exists)
+            os.path.join(parent_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo", f"{rom_name}.png"),
+            os.path.join(parent_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo", f"{rom_name}.jpg"),
             
-            # Priority 3: Check in artwork/logos directory
-            os.path.join(self.mame_dir, "artwork", "logos", f"{rom_name}.png"),
-            os.path.join(self.mame_dir, "artwork", "logos", f"{rom_name}.jpg"),
+            # Priority 3: Check in parent directory's artwork/logos
+            os.path.join(parent_dir, "artwork", "logos", f"{rom_name}.png"),
+            os.path.join(parent_dir, "artwork", "logos", f"{rom_name}.jpg"),
+            
+            # Priority 4: Check for logos in parent directory's common locations
+            os.path.join(parent_dir, "logos", f"{rom_name}.png"),
+            os.path.join(parent_dir, "logos", f"{rom_name}.jpg"),
         ]
         
         # Check each possible path
@@ -4718,8 +4732,9 @@ class PreviewWindow(QMainWindow):
         # If not found by exact name, try case-insensitive search in priority directories
         logo_dirs = [
             os.path.join(self.preview_dir, "logos"),
-            os.path.join(self.mame_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo"),
-            os.path.join(self.mame_dir, "artwork", "logos")
+            os.path.join(parent_dir, "..", "..", "collections", "Arcades", "medium_artwork", "logo"),
+            os.path.join(parent_dir, "artwork", "logos"),
+            os.path.join(parent_dir, "logos")
         ]
         
         for logo_dir in logo_dirs:
