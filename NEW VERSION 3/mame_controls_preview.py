@@ -3042,9 +3042,8 @@ class PreviewWindow(QMainWindow):
         
         return self._show_specialized_group(specialized_controls_group_2, "Group 2 (Action/Input)")
 
-    # Fix 3: Update _show_specialized_group to not delete No Buttons notification
     def _show_specialized_group(self, controls_dict, group_name, hide_no_buttons=True):
-        """Common method to show a group of specialized controls"""
+        """Common method to show a group of specialized controls with proper selection support"""
         try:
             print(f"\n--- Showing {group_name} ---")
             
@@ -3063,10 +3062,21 @@ class PreviewWindow(QMainWindow):
             if "NO_BUTTONS_NOTIFICATION" in self.control_labels:
                 no_buttons_data = self.control_labels["NO_BUTTONS_NOTIFICATION"].copy()
                 if hide_no_buttons:
-                    # Hide it but don't delete it
                     no_buttons_data['label'].setVisible(False)
                     self.no_buttons_visible = False
                     print("DEBUG: Hiding No Buttons notification in specialized view")
+
+            # IMPORTANT: Clear selected controls when switching views
+            if hasattr(self, 'selected_controls'):
+                self.selected_controls.clear()
+                print("Cleared selected controls for specialized view")
+            
+            # Reset selection state
+            if hasattr(self, 'all_selected'):
+                self.all_selected = False
+                # Update button text if it exists
+                if hasattr(self, 'select_all_button'):
+                    self.select_all_button.setText("Select All")
 
             # Clear other controls but preserve No Buttons notification
             for control_name in list(self.control_labels.keys()):
@@ -3087,10 +3097,8 @@ class PreviewWindow(QMainWindow):
             
             print("Cleared all existing controls except No Buttons notification")
             
-            # Load saved positions
+            # Load saved positions and settings
             saved_positions = self.load_saved_positions()
-            
-            # Extract text settings and style information
             font_family = self.text_settings.get("font_family", "Arial")
             font_size = self.text_settings.get("font_size", 28)
             bold_strength = self.text_settings.get("bold_strength", 2) > 0
@@ -3217,6 +3225,31 @@ class PreviewWindow(QMainWindow):
                 # Apply position
                 label.move(x, y)
                 
+                # CRITICAL FIX: Set up proper mouse event handlers that respect selection mode
+                if not getattr(self, 'clean_mode', False):
+                    # Create lambda functions that properly capture the label reference
+                    def make_mouse_handlers(lbl):
+                        return (
+                            lambda event, l=lbl: self.on_label_press(event, l),
+                            lambda event, l=lbl: self.on_label_move(event, l),
+                            lambda event, l=lbl: self.on_label_release(event, l)
+                        )
+                    
+                    press_handler, move_handler, release_handler = make_mouse_handlers(label)
+                    label.mousePressEvent = press_handler
+                    label.mouseMoveEvent = move_handler
+                    label.mouseReleaseEvent = release_handler
+                    
+                    # Ensure draggable flag is set
+                    label.draggable = True
+                    label.setCursor(Qt.OpenHandCursor)
+                else:
+                    # In clean mode, disable interaction
+                    label.mousePressEvent = lambda event: None
+                    label.mouseMoveEvent = lambda event: None
+                    label.mouseReleaseEvent = lambda event: None
+                    label.draggable = False
+                
                 # Store in control_labels
                 self.control_labels[control_name] = {
                     'label': label,
@@ -3236,7 +3269,7 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
             
             print(f"Created and displayed {len(controls_dict)} controls in {group_name}")
-        
+
             # Only hide No Buttons notification if requested
             if hide_no_buttons and hasattr(self, 'no_buttons_label') and self.no_buttons_label:
                 self.no_buttons_label.setVisible(False)
@@ -3638,7 +3671,7 @@ class PreviewWindow(QMainWindow):
             return False
     
     def show_all_xinput_controls(self):
-        """Show all standard controls for global positioning with fixed prefixes"""
+        """Show all standard controls for global positioning with fixed prefixes and proper selection support"""
         
         # Standard controls for positioning - P1 ONLY
         standard_controls = {
@@ -3696,6 +3729,18 @@ class PreviewWindow(QMainWindow):
                         'original_pos': control_data.get('original_pos', QPoint(0, 0))
                     }
                 print(f"Backed up {len(self.original_controls_backup)} original controls")
+            
+            # IMPORTANT: Clear selected controls when switching views
+            if hasattr(self, 'selected_controls'):
+                self.selected_controls.clear()
+                print("Cleared selected controls for XInput view")
+            
+            # Reset selection state
+            if hasattr(self, 'all_selected'):
+                self.all_selected = False
+                # Update button text if it exists
+                if hasattr(self, 'select_all_button'):
+                    self.select_all_button.setText("Select All")
             
             # Clear ALL existing controls first AND hide No Buttons notification
             for control_name in list(self.control_labels.keys()):
@@ -3937,6 +3982,31 @@ class PreviewWindow(QMainWindow):
                 # Apply position
                 label.move(x, y)
                 
+                # CRITICAL FIX: Set up proper mouse event handlers that respect selection mode
+                if not getattr(self, 'clean_mode', False):
+                    # Create lambda functions that properly capture the label reference
+                    def make_mouse_handlers(lbl):
+                        return (
+                            lambda event, l=lbl: self.on_label_press(event, l),
+                            lambda event, l=lbl: self.on_label_move(event, l),
+                            lambda event, l=lbl: self.on_label_release(event, l)
+                        )
+                    
+                    press_handler, move_handler, release_handler = make_mouse_handlers(label)
+                    label.mousePressEvent = press_handler
+                    label.mouseMoveEvent = move_handler
+                    label.mouseReleaseEvent = release_handler
+                    
+                    # Ensure draggable flag is set
+                    label.draggable = True
+                    label.setCursor(Qt.OpenHandCursor)
+                else:
+                    # In clean mode, disable interaction
+                    label.mousePressEvent = lambda event: None
+                    label.mouseMoveEvent = lambda event: None
+                    label.mouseReleaseEvent = lambda event: None
+                    label.draggable = False
+                
                 # Store in control_labels with original position
                 self.control_labels[control_name] = {
                     'label': label,
@@ -3969,7 +4039,7 @@ class PreviewWindow(QMainWindow):
             self.canvas.update()
             
             print(f"Created and displayed {len(standard_controls)} standard controls with fixed P1 prefixes")
-    
+
             # Hide No Buttons notification in specialized views (except Show All Controls)
             if hasattr(self, 'no_buttons_label') and self.no_buttons_label:
                 self.no_buttons_label.setVisible(False)
