@@ -1996,6 +1996,17 @@ class PreviewWindow(QMainWindow):
         self.toggle_texts_button.setToolTip("Show/hide control text labels\nHides all text except directional controls")
         self.bottom_row.addWidget(self.toggle_texts_button)'''
 
+        # Add Select All button to the bottom row (after existing buttons)
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self.toggle_select_all)
+        self.select_all_button.setStyleSheet(button_style)
+        self.select_all_button.setToolTip("Select all text controls to move them together")
+        self.bottom_row.addWidget(self.select_all_button)
+
+        # Initialize selection state
+        self.all_selected = False
+        self.selected_controls = set()
+
         # Create the joystick button with better initial text
         self.directional_mode_button = QPushButton("Hide Directional")
         self.directional_mode_button.clicked.connect(self.cycle_directional_mode)
@@ -5759,20 +5770,113 @@ class PreviewWindow(QMainWindow):
             traceback.print_exc()
             return False
           
+    def toggle_select_all(self):
+        """Toggle selection of all text controls"""
+        self.all_selected = not self.all_selected
+        
+        if self.all_selected:
+            self.select_all_controls()
+            self.select_all_button.setText("Unselect All")
+            self.show_toast_notification("All controls selected - drag any control to move all")
+        else:
+            self.unselect_all_controls()
+            self.select_all_button.setText("Select All")
+            self.show_toast_notification("All controls unselected")
+
+    def select_all_controls(self):
+        """Select all visible text controls"""
+        self.selected_controls.clear()
+        
+        for control_name, control_data in self.control_labels.items():
+            if 'label' in control_data and control_data['label'] and control_data['label'].isVisible():
+                label = control_data['label']
+                self.add_selection_border(label)
+                self.selected_controls.add(control_name)
+        
+        print(f"Selected {len(self.selected_controls)} controls")
+
+    def unselect_all_controls(self):
+        """Unselect all text controls"""
+        for control_name in list(self.selected_controls):
+            if control_name in self.control_labels:
+                control_data = self.control_labels[control_name]
+                if 'label' in control_data and control_data['label']:
+                    self.remove_selection_border(control_data['label'])
+        
+        self.selected_controls.clear()
+        print("Unselected all controls")
+
+    def add_selection_border(self, label):
+        """Add cyan border to show selection"""
+        current_style = label.styleSheet()
+        if "border:" not in current_style:
+            new_style = current_style + "; border: 2px solid #00FFFF;"
+        else:
+            import re
+            new_style = re.sub(r'border:[^;]*;', 'border: 2px solid #00FFFF;', current_style)
+        label.setStyleSheet(new_style)
+
+    def remove_selection_border(self, label):
+        """Remove selection border"""
+        current_style = label.styleSheet()
+        import re
+        new_style = re.sub(r'border:[^;]*;', 'border: none;', current_style)
+        label.setStyleSheet(new_style)
+    
+    
     def on_label_press(self, event, label):
-        """Handle mouse press on label"""
+        """Handle mouse press on label - keep your original logic"""
         from PyQt5.QtCore import Qt
         
         if event.button() == Qt.LeftButton:
-            # Make sure draggable flag is set
+            # Store original positions for group movement (only if group mode is active)
+            if hasattr(self, 'all_selected') and self.all_selected:
+                # Store global drag start for stable delta calc
+                label.drag_start_global = event.globalPos()
+                for control_name in getattr(self, 'selected_controls', set()):
+                    if control_name in self.control_labels:
+                        control_data = self.control_labels[control_name]
+                        if 'label' in control_data and control_data['label']:
+                            other_label = control_data['label']
+                            other_label.group_start_pos = other_label.pos()
+
+            
+            # YOUR ORIGINAL CODE - don't change this:
             label.dragging = True
             label.drag_start_pos = event.pos()
             label.setCursor(Qt.ClosedHandCursor)
             event.accept()
 
-    # 4. Update on_label_move method to remove shadow parameter and handling
     def on_label_move(self, event, label, orig_func=None):
-        """Handle label movement without shadow updates"""
+        """Handle label movement - improved group movement, keep original individual movement"""
+        
+        # GROUP SELECTION CHECK FIRST - improved version
+        if hasattr(self, 'all_selected') and self.all_selected and hasattr(label, 'dragging') and label.dragging:
+            # Calculate movement delta using the same logic as individual movement
+            delta = event.globalPos() - label.drag_start_global
+            
+            # Move all selected controls by the same delta
+            for control_name in getattr(self, 'selected_controls', set()):
+                if control_name in self.control_labels:
+                    control_data = self.control_labels[control_name]
+                    if 'label' in control_data and control_data['label']:
+                        other_label = control_data['label']
+                        if hasattr(other_label, 'group_start_pos'):
+                            new_pos = other_label.group_start_pos + delta
+                            other_label.move(new_pos)
+            
+            # Show group movement indicator
+            if hasattr(label, 'group_start_pos') and hasattr(self, 'show_position_indicator'):
+                try:
+                    main_new_pos = label.group_start_pos + delta
+                    self.show_position_indicator(main_new_pos.x(), main_new_pos.y(), f"Moving {len(self.selected_controls)} controls")
+                except:
+                    pass
+            
+            event.accept()
+            return  # Exit early - don't run individual movement code
+        
+        # YOUR ORIGINAL INDIVIDUAL MOVEMENT CODE - don't change any of this:
         # If we should use the original function, do that
         if orig_func is not None:
             # Call the original mouseMoveEvent method for the label
@@ -5950,7 +6054,6 @@ class PreviewWindow(QMainWindow):
         # Let event propagate
         event.accept()
 
-    # Fix 4: Update the mouse event handlers for No Buttons notification
     def on_label_release(self, event, label):
         """Handle mouse release to end dragging"""
         from PyQt5.QtCore import Qt
@@ -5959,9 +6062,15 @@ class PreviewWindow(QMainWindow):
             label.dragging = False
             label.setCursor(Qt.OpenHandCursor)
             
-            # SAVE POSITION if this is the No Buttons notification
-            if hasattr(self, 'no_buttons_label') and label is self.no_buttons_label:
-                self.save_no_buttons_position_to_file()
+            # Clean up group positions after group movement
+            if hasattr(self, 'all_selected') and self.all_selected:
+                for control_name in getattr(self, 'selected_controls', set()):
+                    if control_name in self.control_labels:
+                        control_data = self.control_labels[control_name]
+                        if 'label' in control_data and control_data['label']:
+                            other_label = control_data['label']
+                            if hasattr(other_label, 'group_start_pos'):
+                                delattr(other_label, 'group_start_pos')
             
             # Hide guidance elements
             if hasattr(self, 'hide_alignment_guides'):
