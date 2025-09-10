@@ -5951,113 +5951,140 @@
       },
       "sfex2u1": {
         "description": "Street Fighter EX2 (USA 980312)"
+      },
+      "sfex2p": {
+        "description": "Street Fighter EX2 Plus"
       }
     },
     "controls": {
-      "P1_JOYSTICK_DOWN": {
-        "tag": ":P1",
-        "mask": "2"
-      },
-      "P1_JOYSTICK_LEFT": {
-        "tag": ":P1",
-        "mask": "4"
-      },
-      "P1_BUTTON1": {
-        "name": "Weak Punch",
-        "tag": ":P1",
-        "mask": "16"
-      },
-      "P1_BUTTON2": {
-        "name": "Medium Punch",
-        "tag": ":P1",
-        "mask": "32"
-      },
-      "P1_BUTTON3": {
-        "name": "Strong Punch",
-        "tag": ":P1",
-        "mask": "64"
-      },
-      "P1_JOYSTICK_UP": {
-        "tag": ":P1",
-        "mask": "1"
-      },
-      "P1_JOYSTICK_RIGHT": {
-        "tag": ":P1",
-        "mask": "8"
-      },
-      "P2_JOYSTICK_LEFT": {
-        "tag": ":P2",
-        "mask": "4"
-      },
-      "P2_JOYSTICK_DOWN": {
-        "tag": ":P2",
-        "mask": "2"
-      },
-      "P2_BUTTON1": {
-        "tag": ":P2",
-        "mask": "16"
-      },
-      "P2_BUTTON3": {
-        "tag": ":P2",
-        "mask": "64"
-      },
-      "P2_BUTTON2": {
-        "tag": ":P2",
-        "mask": "32"
-      },
-      "P2_JOYSTICK_RIGHT": {
-        "tag": ":P2",
-        "mask": "8"
-      },
-      "P2_JOYSTICK_UP": {
-        "tag": ":P2",
-        "mask": "1"
-      },
-      "P1_BUTTON5": {
-        "name": "Medium Kick",
-        "tag": ":P3",
-        "mask": "32"
-      },
-      "P1_BUTTON6": {
-        "name": "Strong Kick",
-        "tag": ":P3",
-        "mask": "64"
-      },
-      "P1_BUTTON4": {
-        "name": "Weak Kick",
-        "tag": ":P3",
-        "mask": "16"
-      },
-      "P2_BUTTON6": {
-        "tag": ":P4",
-        "mask": "64"
-      },
-      "P2_BUTTON4": {
-        "tag": ":P4",
-        "mask": "16"
-      },
-      "P2_BUTTON5": {
-        "tag": ":P4",
-        "mask": "32"
-      },
-      "START1": {
-        "name": "Start",
-        "tag": ":SYSTEM",
-        "mask": "1"
-      },
-      "COIN2": {
-        "tag": ":SYSTEM",
-        "mask": "32"
-      },
-      "COIN1": {
-        "tag": ":SYSTEM",
-        "mask": "16"
-      },
-      "START2": {
-        "tag": ":SYSTEM",
-        "mask": "2"
-      }
-    }
+	  "P1_JOYSTICK_DOWN": {
+		"tag": ":P1",
+		"mask": "2",
+		"name": "Down"
+	  },
+	  "P1_JOYSTICK_LEFT": {
+		"tag": ":P1",
+		"mask": "4",
+		"name": "Left"
+	  },
+	  "P1_BUTTON1": {
+		"name": "Weak Punch",
+		"tag": ":P1",
+		"mask": "16"
+	  },
+	  "P1_BUTTON2": {
+		"name": "Medium Punch",
+		"tag": ":P1",
+		"mask": "32"
+	  },
+	  "P1_BUTTON3": {
+		"name": "Strong Punch",
+		"tag": ":P1",
+		"mask": "64"
+	  },
+	  "P1_JOYSTICK_UP": {
+		"tag": ":P1",
+		"mask": "1",
+		"name": "Up"
+	  },
+	  "P1_JOYSTICK_RIGHT": {
+		"tag": ":P1",
+		"mask": "8",
+		"name": "Right"
+	  },
+	  "P2_JOYSTICK_LEFT": {
+		"tag": ":P2",
+		"mask": "4"
+	  },
+	  "P2_JOYSTICK_DOWN": {
+		"tag": ":P2",
+		"mask": "2"
+	  },
+	  "P2_BUTTON1": {
+		"tag": ":P2",
+		"mask": "16"
+	  },
+	  "P2_BUTTON2": {
+		"tag": ":P2",
+		"mask": "32"
+	  },
+	  "P2_BUTTON3": {
+		"tag": ":P2",
+		"mask": "64"
+	  },
+	  "P2_JOYSTICK_RIGHT": {
+		"tag": ":P2",
+		"mask": "8"
+	  },
+	  "P2_JOYSTICK_UP": {
+		"tag": ":P2",
+		"mask": "1"
+	  },
+	  "P1_BUTTON4": {
+		"name": "Weak Kick",
+		"tag": ":P3",
+		"mask": "16"
+	  },
+	  "P1_BUTTON5": {
+		"name": "Medium Kick",
+		"tag": ":P3",
+		"mask": "32"
+	  },
+	  "P1_BUTTON6": {
+		"name": "Strong Kick",
+		"tag": ":P3",
+		"mask": "64"
+	  },
+	  "P2_BUTTON4": {
+		"tag": ":P4",
+		"mask": "16"
+	  },
+	  "P2_BUTTON5": {
+		"tag": ":P4",
+		"mask": "32"
+	  },
+	  "P2_BUTTON6": {
+		"tag": ":P4",
+		"mask": "64"
+	  },
+	  "P1_KICK1": {
+		"name": "Weak Kick (Alt)",
+		"tag": ":KICK1",
+		"mask": "1"
+	  },
+	  "P1_KICK2": {
+		"name": "Medium Kick (Alt)",
+		"tag": ":KICK1",
+		"mask": "2"
+	  },
+	  "P1_KICK3": {
+		"name": "Strong Kick (Alt)",
+		"tag": ":KICK1",
+		"mask": "4"
+	  },
+	  "START1": {
+		"name": "Start",
+		"tag": ":SYSTEM",
+		"mask": "1"
+	  },
+	  "COIN1": {
+		"tag": ":SYSTEM",
+		"mask": "16"
+	  },
+	  "COIN2": {
+		"tag": ":SYSTEM",
+		"mask": "32"
+	  },
+	  "START2": {
+		"tag": ":SYSTEM",
+		"mask": "2"
+	  }
+	},
+    "alternating": false,
+    "console": false,
+    "mappings": [
+      "sf"
+    ]
   },
   "tempest": {
     "description": "Tempest (rev 3, Revised Hardware)",
@@ -44314,6 +44341,11 @@
         "tag": ":IN2",
         "mask": "2"
       },
+      "P1_BUTTON6": {
+        "name": "Block 2",
+        "tag": ":IN2",
+        "mask": "4"
+      },
       "P2_JOYSTICK_UP": {
         "tag": ":IN0",
         "mask": "256",
@@ -44327,7 +44359,7 @@
       "P2_BUTTON3": {
         "tag": ":IN0",
         "mask": "16384",
-        "name": "X Button"
+        "name": "High Kick"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
@@ -44362,12 +44394,12 @@
       "P2_BUTTON1": {
         "tag": ":IN0",
         "mask": "4096",
-        "name": "A Button"
+        "name": "High Punch"
       },
       "P2_BUTTON2": {
         "tag": ":IN0",
         "mask": "8192",
-        "name": "B Button"
+        "name": "Block"
       },
       "COIN3": {
         "tag": ":IN1",
@@ -44397,17 +44429,17 @@
       "P2_BUTTON5": {
         "tag": ":IN2",
         "mask": "32",
-        "name": "LB Button"
+        "name": "Low Kick"
       },
       "P2_BUTTON6": {
         "tag": ":IN2",
         "mask": "64",
-        "name": "RB Button"
+        "name": "Block 2"
       },
       "P2_BUTTON4": {
         "tag": ":IN2",
         "mask": "16",
-        "name": "Y Button"
+        "name": "Low Punch"
       }
     },
     "alternating": false
@@ -56937,6 +56969,11 @@
         "tag": ":IN1",
         "mask": "8192"
       },
+      "P1_BUTTON6": {
+        "name": "Block 2",
+        "tag": ":IN1",
+        "mask": "32768"
+      },
       "P1_JOYSTICK_UP": {
         "tag": ":IN0",
         "mask": "1",
@@ -56970,17 +57007,17 @@
       "P2_BUTTON3": {
         "tag": ":IN0",
         "mask": "16384",
-        "name": "X Button"
+        "name": "High Kick"
       },
       "P2_BUTTON2": {
         "tag": ":IN0",
         "mask": "8192",
-        "name": "B Button"
+        "name": "Block"
       },
       "P2_BUTTON1": {
         "tag": ":IN0",
         "mask": "4096",
-        "name": "A Button"
+        "name": "High Punch"
       },
       "P2_JOYSTICK_LEFT": {
         "tag": ":IN0",
@@ -56995,7 +57032,7 @@
       "P2_BUTTON5": {
         "tag": ":IN1",
         "mask": "1024",
-        "name": "LB Button"
+        "name": "Low Kick"
       },
       "COIN4": {
         "tag": ":IN1",
@@ -57016,7 +57053,7 @@
       "P2_BUTTON4": {
         "tag": ":IN1",
         "mask": "512",
-        "name": "Y Button"
+        "name": "Low Punch"
       },
       "START1": {
         "name": "Start",
@@ -57026,7 +57063,7 @@
       "P2_BUTTON6": {
         "tag": ":IN1",
         "mask": "2048",
-        "name": "RB Button"
+        "name": "Block 2"
       },
       "COIN1": {
         "tag": ":IN1",
@@ -64174,7 +64211,7 @@
     "buttons": "5",
     "sticks": "1",
     "mappings": [
-      "tekken"
+      "tekkent"
     ],
     "clones": {
       "tektagtc1a": {
@@ -64235,7 +64272,7 @@
         "name": "Down"
       },
       "P1_BUTTON3": {
-        "name": "Left Kick",
+        "name": "Tag",
         "tag": ":JVS_PLAYER1",
         "mask": "32768"
       },
@@ -64245,7 +64282,7 @@
         "mask": "2"
       },
       "P1_BUTTON5": {
-        "name": "Tag",
+        "name": "Right Kick",
         "tag": ":JVS_PLAYER1",
         "mask": "8192"
       },
@@ -64255,7 +64292,7 @@
         "name": "Left"
       },
       "P1_BUTTON4": {
-        "name": "Right Kick",
+        "name": "Left Kick",
         "tag": ":JVS_PLAYER1",
         "mask": "16384"
       },
@@ -64319,7 +64356,8 @@
         "name": "B Button"
       }
     },
-    "alternating": false
+    "alternating": false,
+    "console": false
   },
   "snakjack": {
     "description": "Snacks'n Jaxson",
@@ -112699,6 +112737,9 @@
       },
       "sfexu": {
         "description": "Street Fighter EX (USA 961219)"
+      },
+      "sfexp": {
+        "description": "Street Fighter EX Plus"
       }
     },
     "controls": {
@@ -112709,7 +112750,8 @@
       },
       "P1_JOYSTICK_DOWN": {
         "tag": ":P1",
-        "mask": "2"
+        "mask": "2",
+        "name": "Down"
       },
       "P1_BUTTON3": {
         "name": "Strong Punch",
@@ -112718,11 +112760,13 @@
       },
       "P1_JOYSTICK_LEFT": {
         "tag": ":P1",
-        "mask": "4"
+        "mask": "4",
+        "name": "Left"
       },
       "P1_JOYSTICK_UP": {
         "tag": ":P1",
-        "mask": "1"
+        "mask": "1",
+        "name": "Up"
       },
       "P1_BUTTON1": {
         "name": "Weak Punch",
@@ -112731,7 +112775,8 @@
       },
       "P1_JOYSTICK_RIGHT": {
         "tag": ":P1",
-        "mask": "8"
+        "mask": "8",
+        "name": "Right"
       },
       "P2_JOYSTICK_DOWN": {
         "tag": ":P2",
@@ -112805,7 +112850,12 @@
         "tag": ":SYSTEM",
         "mask": "1"
       }
-    }
+    },
+    "alternating": false,
+    "console": false,
+    "mappings": [
+      "sf"
+    ]
   },
   "vsav": {
     "description": "Vampire Savior: The Lord of Vampire (Europe 970519)",
@@ -155575,27 +155625,6 @@
       "P2_BUTTON6": {
         "tag": ":P2.1",
         "mask": "1"
-      }
-    }
-  },
-  "Adventures of Batman n Robin": {
-    "description": "Adventures of Batman n Robin",
-    "playercount": "2",
-    "buttons": "2",
-    "sticks": "1",
-    "alternating": false,
-    "console": true,
-    "clones": {},
-    "controls": {
-      "P1_BUTTON1": {
-        "name": "Attack",
-        "tag": "",
-        "mask": "0"
-      },
-      "P1_BUTTON2": {
-        "name": "Jump",
-        "tag": "",
-        "mask": "0"
       }
     }
   }
