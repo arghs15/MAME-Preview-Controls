@@ -10562,6 +10562,299 @@ class MAMEControlConfig(ctk.CTk):
             print(f"Error converting {mame_control} to port data: {e}")
             return None
     
+    def get_rom_specific_mappings(self, rom_name, base_mappings):
+        """Get ROM-specific mappings including special handling for SFEX games"""
+        
+        # Start with base mappings
+        final_mappings = base_mappings.copy()
+        
+        # Check if this is an SFEX game (including clones)
+        sfex_games = ['sfex', 'sfexp', 'sfex2', 'sfex2a', 'sfex2h', 'sfex2j', 'sfex2u', 'sfex2u1', 'sfex2p', 'sfexplus']
+        
+        if rom_name in sfex_games:
+            print(f"Applying SFEX-specific mappings for {rom_name}")
+            
+            # For SFEX games, we need to handle the DUPLICATE button entries
+            # The same P1_BUTTON4/5/6 controls appear on BOTH :P3 and :KICK1 tags
+            # We need to map BOTH sets to the same physical buttons
+            
+            # The original base mappings already handle :P3 tag buttons
+            # We need to add mappings for the :KICK1 tag buttons
+            
+            # Get game data to check what controls actually exist
+            game_data = self.get_game_data(rom_name)
+            if game_data:
+                # Look for controls that use the :KICK1 tag
+                kick1_controls = []
+                for player in game_data.get('players', []):
+                    for label in player.get('labels', []):
+                        control_name = label['name']
+                        # Find controls that are mapped to :KICK1 tag
+                        if ('KICK1' in control_name or 
+                            (control_name in ['P1_BUTTON4', 'P1_BUTTON5', 'P1_BUTTON6'] and 
+                            'kick1_tag' in str(label))):  # This is a heuristic
+                            kick1_controls.append(control_name)
+                
+                # Alternative approach: look directly at the gamedata JSON structure
+                if rom_name in self.gamedata_json:
+                    rom_data = self.gamedata_json[rom_name]
+                    if 'controls' in rom_data:
+                        for control_name, control_data in rom_data['controls'].items():
+                            if isinstance(control_data, dict) and control_data.get('tag') == ':KICK1':
+                                kick1_controls.append(control_name)
+                                print(f"Found :KICK1 control: {control_name}")
+            
+            # Based on the CFG analysis, these are the :KICK1 controls we need to map
+            # They have the same button numbers but different tag and masks
+            sfex_kick1_mappings = {}
+            
+            # Map the :KICK1 tag versions to the same physical buttons as the main kicks
+            if 'P1_BUTTON4' in base_mappings:  # Light Kick
+                # We need to create a special identifier for the :KICK1 version
+                # Since they have same control name but different tag/mask, we need to track this
+                sfex_kick1_mappings["P1_BUTTON4_KICK1"] = base_mappings["P1_BUTTON4"]
+            if 'P1_BUTTON5' in base_mappings:  # Medium Kick  
+                sfex_kick1_mappings["P1_BUTTON5_KICK1"] = base_mappings["P1_BUTTON5"]
+            if 'P1_BUTTON6' in base_mappings:  # Heavy Kick
+                sfex_kick1_mappings["P1_BUTTON6_KICK1"] = base_mappings["P1_BUTTON6"]
+                
+            # Add P2 versions if they exist
+            if 'P2_BUTTON4' in base_mappings:
+                sfex_kick1_mappings["P2_BUTTON4_KICK1"] = base_mappings["P2_BUTTON4"]
+            if 'P2_BUTTON5' in base_mappings:
+                sfex_kick1_mappings["P2_BUTTON5_KICK1"] = base_mappings["P2_BUTTON5"]
+            if 'P2_BUTTON6' in base_mappings:
+                sfex_kick1_mappings["P2_BUTTON6_KICK1"] = base_mappings["P2_BUTTON6"]
+            
+            # Merge with base mappings
+            final_mappings.update(sfex_kick1_mappings)
+            
+            print(f"Added {len(sfex_kick1_mappings)} SFEX :KICK1 button mappings")
+        
+        return final_mappings
+
+    def enhanced_configure_game_fightstick_mapping(self, rom_name, base_button_mappings, backup_cfg=True, create_missing=True, update_existing=True, mame_version="new"):
+        """Enhanced version that handles ROM-specific mappings like SFEX extra buttons"""
+        
+        # Get ROM-specific mappings (includes SFEX handling)
+        button_mappings = self.get_rom_specific_mappings(rom_name, base_button_mappings)
+        
+        # Use enhanced port data conversion for SFEX games
+        try:
+            import xml.etree.ElementTree as ET
+            import shutil
+            from datetime import datetime
+            
+            # Construct CFG file path
+            cfg_dir = os.path.join(self.mame_dir, "cfg")
+            cfg_path = os.path.join(cfg_dir, f"{rom_name}.cfg")
+            
+            # Create cfg directory if it doesn't exist
+            os.makedirs(cfg_dir, exist_ok=True)
+            
+            # Backup existing CFG if it exists and backup is enabled
+            if backup_cfg and os.path.exists(cfg_path):
+                # Create backup in fightstick directory
+                if not hasattr(self, 'fightstick_dir'):
+                    self.initialize_fightstick_directory()
+                
+                backup_dir = os.path.join(self.fightstick_dir, "backups")
+                os.makedirs(backup_dir, exist_ok=True)
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_filename = f"{rom_name}.{timestamp}.cfg"
+                backup_path = os.path.join(backup_dir, backup_filename)
+                
+                shutil.copy2(cfg_path, backup_path)
+                print(f"Backed up existing CFG to: {backup_path}")
+            
+            # Load or create CFG structure
+            if os.path.exists(cfg_path):
+                try:
+                    tree = ET.parse(cfg_path)
+                    root = tree.getroot()
+                except ET.ParseError as e:
+                    print(f"Warning: Corrupted CFG file {cfg_path}, creating new one: {e}")
+                    root = self.create_new_cfg_structure(rom_name)
+                    tree = ET.ElementTree(root)
+            else:
+                root = self.create_new_cfg_structure(rom_name)
+                tree = ET.ElementTree(root)
+            
+            # Find or create system element
+            system_elem = root.find(f".//system[@name='{rom_name}']")
+            if system_elem is None:
+                system_elem = ET.SubElement(root, "system", name=rom_name)
+            
+            # Find or create input element
+            input_elem = system_elem.find("input")
+            if input_elem is None:
+                input_elem = ET.SubElement(system_elem, "input")
+            
+            # Track which buttons were modified
+            modified_buttons = []
+            created_buttons = []
+            
+            # Process each button mapping
+            for mame_control, joycode in button_mappings.items():
+                # Skip if no joycode specified
+                if not joycode:
+                    continue
+                
+                # Use enhanced port data conversion for SFEX games
+                port_data = self.enhanced_mame_control_to_port_data(mame_control, joycode, mame_version, rom_name)
+                if not port_data:
+                    print(f"Warning: Could not convert {mame_control} to port data")
+                    continue
+                
+                # Check if port already exists - match by tag, type AND mask
+                existing_port = input_elem.find(f".//port[@tag='{port_data['tag']}'][@type='{port_data['type']}'][@mask='{port_data['mask']}']")
+                
+                if existing_port is not None:
+                    if update_existing:
+                        # Update existing port
+                        newseq = existing_port.find("newseq[@type='standard']")
+                        if newseq is not None:
+                            old_value = newseq.text
+                            newseq.text = port_data['newseq']
+                            modified_buttons.append(f"{mame_control}: {old_value} -> {port_data['newseq']}")
+                        else:
+                            # Add newseq to existing port
+                            newseq = ET.SubElement(existing_port, "newseq")
+                            newseq.set("type", "standard")
+                            newseq.text = port_data['newseq']
+                            created_buttons.append(f"{mame_control}: Added newseq {port_data['newseq']}")
+                        
+                        # Update defvalue if it exists
+                        existing_port.set("defvalue", port_data['defvalue'])
+                    else:
+                        print(f"Skipping existing button {mame_control} (update_existing=False)")
+                else:
+                    if create_missing:
+                        # Create new port
+                        self.add_formatted_port_to_input(input_elem, port_data)
+                        created_buttons.append(f"{mame_control}: Created with {port_data['newseq']}")
+                    else:
+                        print(f"Skipping missing button {mame_control} (create_missing=False)")
+            
+            # Save the modified CFG file
+            self.save_formatted_cfg(tree, cfg_path)
+            
+            # Prepare result message
+            changes = []
+            if created_buttons:
+                changes.append(f"Created {len(created_buttons)} buttons")
+            if modified_buttons:
+                changes.append(f"Modified {len(modified_buttons)} buttons")
+            
+            if changes:
+                message = f"CFG updated: {', '.join(changes)}"
+            else:
+                message = "No changes made (all buttons already configured)"
+            
+            return {
+                'success': True,
+                'message': message,
+                'created_count': len(created_buttons),
+                'modified_count': len(modified_buttons),
+                'cfg_path': cfg_path
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'message': f"Error configuring {rom_name}: {str(e)}",
+                'created_count': 0,
+                'modified_count': 0
+            }
+
+    def enhanced_mame_control_to_port_data(self, mame_control, joycode, mame_version="new", rom_name=None):
+        """Enhanced version that handles SFEX special cases with dual port tags"""
+        
+        # Handle SFEX special cases first
+        if rom_name and rom_name in ['sfex', 'sfexp', 'sfex2', 'sfex2a', 'sfex2h', 'sfex2j', 'sfex2u', 'sfex2u1', 'sfex2p', 'sfexplus']:
+            
+            # Handle the special :KICK1 mappings 
+            if mame_control.endswith('_KICK1'):
+                # Remove the _KICK1 suffix to get the base control name
+                base_control = mame_control.replace('_KICK1', '')
+                
+                # Map to :KICK1 tag with the special masks from the CFG
+                if base_control == 'P1_BUTTON4':
+                    return {
+                        'tag': ':KICK1',
+                        'type': 'P1_BUTTON4', 
+                        'mask': '1',
+                        'defvalue': '1',
+                        'newseq': joycode
+                    }
+                elif base_control == 'P1_BUTTON5':
+                    return {
+                        'tag': ':KICK1',
+                        'type': 'P1_BUTTON5',
+                        'mask': '2', 
+                        'defvalue': '2',
+                        'newseq': joycode
+                    }
+                elif base_control == 'P1_BUTTON6':
+                    return {
+                        'tag': ':KICK1',
+                        'type': 'P1_BUTTON6',
+                        'mask': '4',
+                        'defvalue': '4', 
+                        'newseq': joycode
+                    }
+                elif base_control == 'P2_BUTTON4':
+                    return {
+                        'tag': ':KICK1',  # Assuming P2 also uses :KICK1 tag
+                        'type': 'P2_BUTTON4',
+                        'mask': '8',  # Next available mask
+                        'defvalue': '8',
+                        'newseq': joycode
+                    }
+                elif base_control == 'P2_BUTTON5':
+                    return {
+                        'tag': ':KICK1',
+                        'type': 'P2_BUTTON5', 
+                        'mask': '16',
+                        'defvalue': '16',
+                        'newseq': joycode
+                    }
+                elif base_control == 'P2_BUTTON6':
+                    return {
+                        'tag': ':KICK1',
+                        'type': 'P2_BUTTON6',
+                        'mask': '32', 
+                        'defvalue': '32',
+                        'newseq': joycode
+                    }
+        
+        # For all other cases, use the original function
+        return self.mame_control_to_port_data(mame_control, joycode, mame_version, rom_name)
+    
+    def identify_special_games(self, rom_name):
+        """Identify games that need special button mapping handling"""
+        
+        special_games = {
+            'sfex_series': {
+                'games': ['sfex', 'sfex2', 'sfex2a', 'sfex2h', 'sfex2j', 'sfex2u', 'sfex2u1', 'sfex2p', 'sfexplus'],
+                'extra_buttons': ['P1_KICK1', 'P1_KICK2', 'P1_KICK3'],
+                'description': 'Street Fighter EX series with extra kick buttons'
+            }
+        }
+        
+        for series_name, series_data in special_games.items():
+            if rom_name in series_data['games']:
+                return {
+                    'series': series_name,
+                    'extra_buttons': series_data['extra_buttons'],
+                    'description': series_data['description']
+                }
+        
+        return None
+    
     def create_fightstick_mapping_tool(self):
         """Create a tool for configuring fightstick button mappings for fighting games with custom layout support"""
         
@@ -11349,9 +11642,9 @@ class MAMEControlConfig(ctk.CTk):
                             button_mappings = mapping_presets[preset_id]['mappings']
                         
                         # CRITICAL FIX: Use main_app instead of self
-                        result = main_app.configure_game_fightstick_mapping(
+                        result = main_app.enhanced_configure_game_fightstick_mapping(
                             rom_name, 
-                            button_mappings,
+                            button_mappings,  # These are now BASE mappings - function will add ROM-specific ones
                             backup_cfg_var.get(),
                             create_missing_var.get(),
                             update_existing_var.get(),
